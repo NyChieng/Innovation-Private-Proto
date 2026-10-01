@@ -10,6 +10,7 @@ import { seed } from './seed.js';
 import { createApi } from './api.js';
 import { resolvePort } from './port.js';
 import { lanAddresses } from './net.js';
+import { tlsOptions, caDer, CA_PATH } from './certs.js';
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const argv = process.argv.slice(2);
@@ -30,37 +31,32 @@ app.use('/api', createApi());
 
 /* ------------------------------------------------------------------ */
 
-async function tlsOptions() {
-  const dir = path.join(root, '.certs');
-  const keyPath = path.join(dir, 'key.pem');
-  const certPath = path.join(dir, 'cert.pem');
-  if (fs.existsSync(keyPath) && fs.existsSync(certPath)) {
-    return { key: fs.readFileSync(keyPath), cert: fs.readFileSync(certPath) };
-  }
-  fs.mkdirSync(dir, { recursive: true });
-  const { generate } = await import('selfsigned').then((m) => ({ generate: m.default.generate }));
-  const altNames = [
-    { type: 2, value: 'localhost' },
-    ...lanAddresses().map((a) => ({ type: 7, ip: a.address })),
-    { type: 7, ip: '127.0.0.1' },
-  ];
-  const pems = generate([{ name: 'commonName', value: 'FloraScan Prototype' }], {
-    days: 365, keySize: 2048, algorithm: 'sha256',
-    extensions: [{ name: 'subjectAltName', altNames }],
-  });
-  fs.writeFileSync(keyPath, pems.private);
-  fs.writeFileSync(certPath, pems.cert);
-  return { key: pems.private, cert: pems.cert };
-}
-
 const port = await resolvePort();
 const scheme = useHttps ? 'https' : 'http';
 app.set('protoPort', port);
 app.set('protoScheme', scheme);
 
+// Signed by a local CA kept in .certs/ (see server/certs.js).
+const tls = useHttps ? tlsOptions(path.join(root, '.certs'), lanAddresses().map((a) => a.address)) : null;
 const server = useHttps
-  ? https.createServer(await tlsOptions(), app)
+  ? https.createServer({ key: tls.key, cert: tls.cert }, app)
   : http.createServer(app);
+
+// The CA's public certificate, for a phone to install and trust. Never the key.
+app.set('protoCaPath', tls ? CA_PATH : null);
+if (tls) {
+  const der = caDer(tls.ca);
+  app.get(CA_PATH, (req, res) => {
+    res.set({
+      'Content-Type': 'application/x-x509-ca-cert',
+      // Inline, so iOS hands it to its profile installer by MIME type
+      // rather than saving it to Files.
+      'Content-Disposition': 'inline; filename="florascan-ca.crt"',
+      'Cache-Control': 'no-store',
+    });
+    res.send(der);
+  });
+}
 
 /*
  * The app is mounted after the server exists so that Vite's hot-reload
@@ -124,12 +120,16 @@ function footer(line) {
     line('\x1b[33mPlain HTTP: the phone camera, GPS and Add to Home Screen will not work.\x1b[0m');
     line('\x1b[2mDrop the --http flag to serve over HTTPS instead.\x1b[0m');
   } else {
-    line('\x1b[2mSelf-signed certificate - every browser warns once, then remembers:\x1b[0m');
+    if (tls.reissued) line(`\x1b[2mServer certificate issued (${tls.reissued}).\x1b[0m`);
+    line('\x1b[2mLocal certificate - every browser warns once, then remembers:\x1b[0m');
     line('\x1b[2m  Chrome / Android   Advanced  >  Proceed to ...\x1b[0m');
     line('\x1b[2m  Safari / iOS       Show Details  >  visit this website\x1b[0m');
     line('\x1b[2mAccept it once and the camera, GPS and home-screen install all work.\x1b[0m');
+    line('\x1b[2mFor the iPhone home-screen icon, trust the certificate: see /connect.\x1b[0m');
   }
-  line(`\x1b[2mPort ${port} is saved in proto.config.json - "npm run port" picks a new one.\x1b[0m`);
+  line(process.env.PORT
+    ? `\x1b[2mPort ${port} comes from the PORT variable and is not saved.\x1b[0m`
+    : `\x1b[2mPort ${port} is saved in proto.config.json - "npm run port" picks a new one.\x1b[0m`);
   console.log('');
 }
 

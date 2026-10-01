@@ -61,8 +61,8 @@ function Gallery({ photos, alt }) {
         {current.credit && <span className="credit-overlay">{current.credit}</span>}
       </button>
 
-      <div className="row row-between row-wrap" style={{ gap: 8, marginTop: 7, alignItems: 'flex-start' }}>
-        {current.caption && <div className="tiny mute grow">{current.caption}</div>}
+      <div className="gallery-meta">
+        {current.caption && <div className="tiny mute gallery-caption">{current.caption}</div>}
         <Credit photo={current} />
       </div>
 
@@ -299,7 +299,7 @@ export default function PlantInfo({ byToken }) {
                         <a
                           href={`https://www.google.com/maps?q=${plant.latitude},${plant.longitude}`}
                           target="_blank" rel="noreferrer"
-                          className="tiny" style={{ marginLeft: 8 }}
+                          className="tiny nowrap" style={{ marginLeft: 8 }}
                         >
                           Open map <I.External style={{ width: 11, height: 11, display: 'inline' }} />
                         </a>

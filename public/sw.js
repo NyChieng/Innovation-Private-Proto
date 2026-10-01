@@ -11,7 +11,7 @@
  * plant record is always labelled as such by the page that reads it.
  */
 
-const VERSION = 'florascan-v1';
+const VERSION = 'florascan-v2'; // bump when cached shell files change (v2: new icons)
 const SHELL = `${VERSION}-shell`;
 const RUNTIME = `${VERSION}-runtime`;
 
@@ -60,6 +60,9 @@ self.addEventListener('fetch', (event) => {
       || url.searchParams.has('t') || url.pathname === '/sw.js') {
     return;
   }
+  // The certificate download is a navigation too; left to the handler below
+  // it would be cached as the app shell.
+  if (url.pathname === '/florascan-ca.crt') return;
 
   // Navigation: network first so the app updates, cache as the fallback.
   if (request.mode === 'navigate') {

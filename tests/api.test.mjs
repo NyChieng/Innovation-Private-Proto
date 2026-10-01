@@ -815,7 +815,52 @@ section('26. Installable web app');
 }
 
 /* ------------------------------------------------------------------ */
-section('27. Tidying up after the run');
+section('27. A phone can trust the local certificate');
+if (!ORIGIN.startsWith('https:')) {
+  console.log('  (skipped: the server is on plain HTTP)');
+} else {
+  const { X509Certificate } = await import('node:crypto');
+  const tls = await import('node:tls');
+  const https = await import('node:https');
+
+  const conn = await get('/connect');
+  eq('the connect screen is told where the certificate is', conn.body.ca_url, '/florascan-ca.crt');
+
+  const res = await fetch(ORIGIN + '/florascan-ca.crt');
+  eq('the CA certificate downloads', res.status, 200);
+  eq('...with the type iOS installs as a profile', res.headers.get('content-type'), 'application/x-x509-ca-cert');
+  const der = Buffer.from(await res.arrayBuffer());
+  check('...and never the private key', !der.toString('latin1').includes('PRIVATE KEY'));
+
+  let ca = null;
+  try { ca = new X509Certificate(der); } catch { /* reported below */ }
+  check('it is a certificate authority', !!ca?.ca, ca ? ca.subject : 'not a certificate');
+
+  const port = new URL(ORIGIN).port;
+  const peer = await new Promise((resolve, reject) => {
+    const s = tls.connect({ host: 'localhost', port, rejectUnauthorized: false, servername: 'localhost' }, () => {
+      resolve(new X509Certificate(s.getPeerCertificate().raw)); s.end();
+    });
+    s.on('error', reject);
+  });
+  check('the server certificate is signed by it', !!ca && peer.checkIssued(ca) && peer.verify(ca.publicKey));
+  check('...is for TLS servers', (peer.keyUsage || []).includes('1.3.6.1.5.5.7.3.1'), String(peer.keyUsage));
+  const days = (new Date(peer.validTo) - new Date(peer.validFrom)) / 86400000;
+  check('...and lives under the 825 days iOS allows', days <= 825, Math.round(days) + ' days');
+
+  // What the phone does: reach the LAN address and verify strictly against the CA alone.
+  const lanHost = new URL(conn.body.url).hostname;
+  const strict = (host) => new Promise((resolve) => {
+    https.get({ host, port, path: '/api/bootstrap', ca: ca?.toString(), rejectUnauthorized: true, agent: false }, (r) => {
+      r.resume(); resolve(r.statusCode);
+    }).on('error', (e) => resolve(e.code || e.message));
+  });
+  eq(`a client trusting only the CA reaches ${lanHost}`, await strict(lanHost), 200);
+  eq('...and localhost', await strict('localhost'), 200);
+}
+
+/* ------------------------------------------------------------------ */
+section('28. Tidying up after the run');
 {
   // These suites create records to exercise the workflow. Left behind, they
   // sit at the top of the public register and make a demo look broken, so

@@ -6,6 +6,64 @@ import { InstallCard, PlatformGuides } from '../components/InstallPrompt.jsx';
 import * as I from '../lib/icons.jsx';
 
 /**
+ * Installing the local CA on a phone. Accepting the browser warning only
+ * covers the page: iOS fetches the home-screen icon separately, refuses the
+ * untrusted certificate, and falls back to a plain letter tile.
+ */
+function TrustCard({ caUrl }) {
+  const standalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  return (
+    <div className="card" id="trust">
+      <div className="card-head">
+        <I.Shield style={{ width: 18, height: 18, flex: 'none', color: 'var(--accent)' }} />
+        <h3 className="grow">Trust this server on your phone</h3>
+        <span className="tiny faint nowrap">Once per phone</span>
+      </div>
+      <div className="card-body">
+        <p className="small mute">
+          Without this, an iPhone puts a plain <strong>&ldquo;F&rdquo;</strong> on the home screen instead of the
+          FloraScan icon, because iOS will not fetch the icon from a server it does not trust. It also removes the
+          certificate warning. It keeps working when this computer&rsquo;s address changes.
+        </p>
+
+        <div className="grid" style={{ gap: 18, marginTop: 14, gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))' }}>
+          <div>
+            <strong style={{ fontSize: '0.92rem' }}>iPhone and iPad</strong>
+            <ol className="install-steps" style={{ marginTop: 8 }}>
+              <li><I.Download /><span>In <strong>Safari</strong>, tap <strong>Download certificate</strong>, then <strong>Allow</strong></span></li>
+              <li><I.Settings /><span>Open <strong>Settings</strong> &rarr; <strong>Profile Downloaded</strong> &rarr; <strong>Install</strong></span></li>
+              <li><I.Shield /><span><strong>General</strong> &rarr; <strong>About</strong> &rarr; <strong>Certificate Trust Settings</strong>, and switch on <strong>FloraScan local CA</strong></span></li>
+              <li><I.Refresh /><span>Delete the old home-screen icon and add FloraScan again</span></li>
+            </ol>
+          </div>
+          <div>
+            <strong style={{ fontSize: '0.92rem' }}>Android</strong>
+            <ol className="install-steps" style={{ marginTop: 8 }}>
+              <li><I.Download /><span>Tap <strong>Download certificate</strong></span></li>
+              <li><I.Settings /><span><strong>Settings</strong> &rarr; <strong>Security</strong> &rarr; <strong>Install a certificate</strong> &rarr; <strong>CA certificate</strong> (the menu names vary by phone)</span></li>
+            </ol>
+          </div>
+        </div>
+
+        <div className="row row-wrap" style={{ gap: 10, marginTop: 14 }}>
+          <a className="btn btn-primary" href={caUrl}><I.Download /> Download certificate</a>
+          {standalone && (
+            <span className="tiny" style={{ color: 'var(--warn-fg)' }}>
+              Open this page in Safari first: the installed app cannot download profiles.
+            </span>
+          )}
+        </div>
+      </div>
+      <div className="card-foot tiny mute">
+        The certificate can only vouch for <span className="mono">localhost</span> and private network addresses
+        (<span className="mono">10.x</span>, <span className="mono">172.16&ndash;31.x</span>, <span className="mono">192.168.x</span>),
+        never a public website. Remove it when you are done with the prototype: on iPhone, <strong>General</strong> &rarr; <strong>VPN &amp; Device Management</strong>.
+      </div>
+    </div>
+  );
+}
+
+/**
  * "Open this on my phone."
  * Shows the LAN address of the running dev server as a QR code, so a phone on
  * the same Wi-Fi or hotspot can jump straight in without typing an IP.
@@ -59,6 +117,12 @@ export default function Connect() {
         <div style={{ marginBottom: 20 }}>
           <InstallCard />
         </div>
+
+        {info.ca_url && (
+          <div style={{ marginBottom: 20 }}>
+            <TrustCard caUrl={info.ca_url} />
+          </div>
+        )}
 
         <div style={{ marginBottom: 20 }}>
           <PlatformGuides />

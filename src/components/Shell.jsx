@@ -62,8 +62,10 @@ export function Brand({ to = '/', sub }) {
             <path d="M120 324v44a26 26 0 0 0 26 26h44" />
             <path d="M392 324v44a26 26 0 0 1-26 26h-44" />
           </g>
-          <path d="M192 334c0-78 56-134 142-139 5 85-51 139-142 139z" fill="#fff" />
-          <path d="M192 334c44-44 100-88 142-139" stroke="#176039" strokeWidth="16" strokeLinecap="round" />
+          <g transform="rotate(45 256 256)">
+            <path d="M256 348C198 318 186 214 256 160C326 214 314 318 256 348Z" fill="#fff" />
+            <path d="M256 368V184" stroke="#176039" strokeWidth="16" strokeLinecap="round" />
+          </g>
         </svg>
       </span>
       <span>
@@ -71,6 +73,39 @@ export function Brand({ to = '/', sub }) {
         {sub && <span className="brand-sub">{sub}</span>}
       </span>
     </Link>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Theme switch                                                        */
+/* ------------------------------------------------------------------ */
+
+const THEMES = [
+  { v: 'system', label: 'Automatic theme (follow device)', icon: I.ThemeAuto },
+  { v: 'light', label: 'Light theme', icon: I.Sun },
+  { v: 'dark', label: 'Dark theme', icon: I.Moon },
+];
+
+/** Light, dark, or follow the device - in the header, so visitors can reach it too. */
+export function ThemeSwitch() {
+  const { theme, setTheme } = useApp();
+  return (
+    <div className="segmented theme-switch" role="radiogroup" aria-label="Colour theme">
+      {THEMES.map(({ v, label, icon: Icon }) => (
+        <button
+          key={v}
+          type="button"
+          role="radio"
+          aria-checked={theme === v}
+          aria-label={label}
+          title={label}
+          className={theme === v ? 'active' : ''}
+          onClick={() => setTheme(v)}
+        >
+          <Icon />
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -163,6 +198,8 @@ export function WebShell({ children, sidebar = false }) {
             {!sidebar && (
               <Link to="/browse" className="btn btn-ghost btn-icon" aria-label="Search plants"><I.Search /></Link>
             )}
+
+            <ThemeSwitch />
 
             {user && (
               <Link to="/staff/notifications" className="btn btn-ghost btn-icon" aria-label="Notifications" style={{ position: 'relative' }}>
@@ -267,6 +304,7 @@ export function MobileShell({ children, title, back, actions, noNav }) {
         )}
         {title && <h1 className="truncate">{title}</h1>}
         {!title && <div className="spacer" />}
+        <ThemeSwitch />
         {actions}
       </header>
 

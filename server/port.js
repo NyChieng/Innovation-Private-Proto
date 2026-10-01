@@ -37,6 +37,10 @@ function write(cfg) {
  * `npm run port` re-rolls it.
  */
 export async function resolvePort({ reroll = false } = {}) {
+  // A one-off port, e.g. a second server for the tests beside a running one.
+  // Not saved, so the bookmarked port and printed QR codes stay valid.
+  if (!reroll && process.env.PORT) return Number(process.env.PORT);
+
   const cfg = read();
   if (!reroll && cfg.port && (await isFree(cfg.port))) return cfg.port;
 

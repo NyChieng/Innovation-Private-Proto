@@ -165,6 +165,8 @@
   background: var(--surface-2); border: 1px solid var(--border);
 }
 .install-steps li .ico { width: 16px; height: 16px; flex: none; color: var(--accent); }
+/* A longer step keeps its text in one span, so it wraps as a sentence. */
+.install-steps li > span { min-width: 0; }
 .install-steps li::before {
   counter-increment: step; content: counter(step);
   width: 19px; height: 19px; flex: none;

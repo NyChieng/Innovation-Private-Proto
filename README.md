@@ -36,12 +36,13 @@ the printed QR keep working between restarts. `npm run port` picks a new one.
 
 ### Why HTTPS, and the certificate warning
 
-The server runs over **HTTPS by default**, with a self-signed certificate generated on first
-start. This is not optional polish: a phone browser refuses the camera, GPS and the
+The server runs over **HTTPS by default**, with a certificate signed by a small local
+certificate authority generated on first start (kept in `.certs/`, which is git-ignored).
+This is not optional polish: a phone browser refuses the camera, GPS and the
 add-to-home-screen prompt on a plain `http://192.168.x.x` address, and those are most of
 what this prototype is for.
 
-Every browser warns once about the self-signed certificate. Accept it and it is remembered:
+Every browser warns once about the local certificate. Accept it and it is remembered:
 
 | Browser | What to tap |
 | --- | --- |
@@ -49,9 +50,26 @@ Every browser warns once about the self-signed certificate. Accept it and it is 
 | Safari / iOS | **Show Details** → **visit this website** → **Visit Website** |
 | Edge | **Advanced** → **Continue to** |
 
-The warning is expected: the certificate is generated locally and signed by nobody, because
-there is no public domain to certify. Nothing leaves your network. If you need plain HTTP
-for some reason, `npm run http` serves it, but the camera will not work.
+The warning is expected: the certificate is generated locally, because there is no public
+domain to certify. Nothing leaves your network. If you need plain HTTP for some reason,
+`npm run http` serves it, but the camera will not work.
+
+**Trusting it on an iPhone (needed for the home-screen icon).** Accepting the warning covers
+the page, but iOS fetches the home-screen icon separately, refuses the untrusted certificate,
+and puts a plain letter "F" on the home screen instead. Trust the local CA once and the icon,
+camera and offline mode all work with no warning. Open **`/connect`** on the phone in Safari
+and follow **Trust this server on your phone**:
+
+1. **Download certificate** → **Allow**
+2. **Settings** → **Profile Downloaded** → **Install**
+3. **Settings** → **General** → **About** → **Certificate Trust Settings** → switch on **FloraScan local CA**
+4. Delete the old home-screen icon and add it again
+
+The CA is name-constrained to `localhost` and private network addresses, so a phone that
+trusts it will never accept it for a public website. The server certificate is reissued
+automatically when the laptop's address changes, and the phone keeps trusting it. Remove the
+profile when you are done (**General** → **VPN & Device Management**), and never share
+`.certs/ca-key.pem`. Deleting `.certs/` makes a new CA, which phones must trust again.
 
 ### On your phone
 
@@ -89,8 +107,8 @@ Three ways, all working out of the box now that the server runs over HTTPS:
 3. **Your phone's own camera app.** The tags encode ordinary URLs, so this always works and
    needs nothing installed. This is the real design — the in-app scanner is a shortcut.
 
-On iOS, Safari sometimes still refuses the camera for a self-signed certificate even after
-you accept it. That is an Apple restriction with no workaround; use options 2 or 3 there.
+On iOS, Safari sometimes still refuses the camera for an untrusted certificate even after
+you accept the warning. Trusting the local CA (see above) avoids it; otherwise use options 2 or 3.
 
 ---
 

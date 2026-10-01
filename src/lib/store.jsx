@@ -7,10 +7,19 @@ export const useApp = () => useContext(AppCtx);
 const THEME_KEY = 'florascan.theme';
 const VIEW_KEY = 'florascan.view';
 
+// Browser chrome colour (Android address bar, installed-app title bar) for a
+// theme chosen by hand. On "system" the media-qualified tags in index.html apply.
+const THEME_COLOR = { light: '#f7f6f2', dark: '#0f2a1a' };
+
 function applyTheme(theme) {
   const root = document.documentElement;
   if (theme === 'system') root.removeAttribute('data-theme');
   else root.setAttribute('data-theme', theme);
+
+  for (const meta of document.querySelectorAll('meta[name="theme-color"]')) {
+    if (meta.dataset.auto === undefined) meta.dataset.auto = meta.content;
+    meta.content = theme === 'system' ? meta.dataset.auto : THEME_COLOR[theme];
+  }
 }
 
 export function AppProvider({ children }) {

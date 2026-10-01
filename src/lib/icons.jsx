@@ -62,7 +62,9 @@ export const Info = (p) => (<Svg {...p}><circle cx="12" cy="12" r="9" /><path d=
 export const Logout = (p) => (<Svg {...p}><path d="M14 20H6a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h8" /><path d="M17 15.5 20.5 12 17 8.5" /><path d="M20 12H9.5" /></Svg>);
 export const Sun = (p) => (<Svg {...p}><circle cx="12" cy="12" r="4" /><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.2 5.2l1.4 1.4M17.4 17.4l1.4 1.4M18.8 5.2l-1.4 1.4M6.6 17.4l-1.4 1.4" /></Svg>);
 export const Moon = (p) => (<Svg {...p}><path d="M20 14.2A8.3 8.3 0 0 1 9.8 4 8.5 8.5 0 1 0 20 14.2Z" /></Svg>);
-export const Filter = (p) => (<Svg {...p}><path d="M3 5.5h18l-7 8V20l-4 1.5v-8Z" /></Svg>);
+/** Half light, half dark: "follow the device". */
+export const ThemeAuto = (p) => (<Svg {...p}><circle cx="12" cy="12" r="8.5" /><path d="M12 3.5a8.5 8.5 0 0 1 0 17Z" fill="currentColor" stroke="none" /></Svg>);
+export const Filter =(p) => (<Svg {...p}><path d="M3 5.5h18l-7 8V20l-4 1.5v-8Z" /></Svg>);
 export const Sensor = (p) => (<Svg {...p}><path d="M12 13.5V21" /><circle cx="12" cy="10" r="2.4" /><path d="M8.2 14a5.4 5.4 0 0 1 0-8M15.8 6a5.4 5.4 0 0 1 0 8" /><path d="M5.6 16.8a9 9 0 0 1 0-13.6M18.4 3.2a9 9 0 0 1 0 13.6" /></Svg>);
 export const Shield = (p) => (<Svg {...p}><path d="M12 3 5 6v6c0 4.4 3 7.9 7 9 4-1.1 7-4.6 7-9V6l-7-3Z" /><path d="m9.2 12 2 2 3.6-3.8" /></Svg>);
 export const Menu = (p) => (<Svg {...p}><path d="M4 7h16M4 12h16M4 17h16" /></Svg>);

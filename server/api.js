@@ -1144,8 +1144,10 @@ export function createApi() {
       url, png, port, scheme,
       addresses: addrs.map((a) => ({ ...a, url: `${scheme}://${a.address}:${port}` })),
       secure: scheme === 'https',
+      // Where a phone can download the local CA certificate to trust it.
+      ca_url: req.app.get('protoCaPath') || null,
       note: scheme === 'https'
-        ? 'Your phone will warn about the self-signed certificate. Accept it once and the in-app camera scanner will work.'
+        ? 'Your phone will warn about the local certificate. Accept it once and the in-app camera scanner will work; trust it (below) to remove the warning for good.'
         : 'Browsers only allow camera access over HTTPS or localhost, so the in-app scanner cannot open the camera on this plain-HTTP address. Run "npm run https" if you need the live camera on your phone.',
     });
   });

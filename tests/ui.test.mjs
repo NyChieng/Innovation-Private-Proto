@@ -711,6 +711,97 @@ section('13. Theme and layout switching');
   await page.close();
 }
 
+// A visitor has no role switcher menu to dig through: the header carries the
+// switch, on the smallest phone we design for.
+{
+  const page = await newPage({ mobile: true, view: 'mobile' });
+  await page.setViewport({ width: 320, height: 720, isMobile: true, hasTouch: true });
+  await page.evaluate(() => localStorage.removeItem('florascan.theme'));
+  await go(page, '/');
+
+  const radios = await page.$$('.m-header .theme-switch [role="radio"]');
+  eq('the phone header has auto, light and dark theme buttons', radios.length, 3);
+  const theme = () => page.evaluate(() => ({
+    attr: document.documentElement.dataset.theme || null,
+    saved: localStorage.getItem('florascan.theme'),
+    checked: document.querySelector('.theme-switch [aria-checked="true"]')?.getAttribute('aria-label'),
+    meta: [...document.querySelectorAll('meta[name="theme-color"]')].map((m) => m.content),
+  }));
+
+  check('...with automatic selected by default', /Automatic/.test((await theme()).checked || ''), (await theme()).checked);
+
+  await page.click('.theme-switch [aria-label="Dark theme"]');
+  await sleep(200);
+  let t = await theme();
+  eq('the dark button switches to dark', t.attr, 'dark');
+  eq('...and remembers it', t.saved, 'dark');
+  check('...and the browser bar colour follows', t.meta.every((c) => c === '#0f2a1a'), t.meta.join(','));
+
+  await page.reload({ waitUntil: 'networkidle2' });
+  await sleep(300);
+  eq('the choice survives a reload', (await theme()).attr, 'dark');
+
+  await page.click('.theme-switch [aria-label="Light theme"]');
+  await sleep(200);
+  eq('the light button switches to light', (await theme()).attr, 'light');
+
+  await page.click('.theme-switch [aria-label^="Automatic"]');
+  await sleep(200);
+  t = await theme();
+  eq('automatic hands control back to the device', t.attr, null);
+  eq('...stored as "system"', t.saved, 'system');
+  check('...and restores the per-scheme browser bar colours', new Set(t.meta).size === 2, t.meta.join(','));
+
+  const header = await page.evaluate(() => {
+    const h = document.querySelector('.m-header').getBoundingClientRect();
+    const s = document.querySelector('.m-header .theme-switch').getBoundingClientRect();
+    return { right: s.right, width: h.width, height: h.height };
+  });
+  check('the switch fits in the header at 320px', header.right <= header.width && header.height < 80, JSON.stringify(header));
+
+  await expectNoErrors(page, 'no console errors from the header theme switch');
+  await page.close();
+}
+
+// Text layout on the plant page at 320px: the photo caption and its credit,
+// and the headed sections of the species description.
+{
+  const list = (await (await fetch(BASE + '/api/public/plants?limit=100')).json()).results;
+  let target = null;
+  for (const p of list) {
+    const { plant } = await (await fetch(BASE + '/api/public/plants/' + p.id)).json();
+    const sp = plant.species || {};
+    const headed = [sp.description, sp.characteristics, sp.leaf_description].filter(Boolean).length;
+    if (plant.photos?.[0]?.caption && plant.photos[0].credit && headed >= 2) { target = plant; break; }
+  }
+  check('there is a captioned plant with several description sections', !!target);
+
+  if (target) {
+    const page = await newPage({ mobile: true, view: 'mobile' });
+    await page.setViewport({ width: 320, height: 720, isMobile: true, hasTouch: true });
+    await go(page, '/plant/' + target.id);
+
+    const m = await page.evaluate(() => {
+      const meta = document.querySelector('.gallery-meta').getBoundingClientRect();
+      const cap = document.querySelector('.gallery-caption').getBoundingClientRect();
+      const hs = [...document.querySelectorAll('.prose h3')];
+      return {
+        metaW: meta.width, capW: cap.width,
+        firstTop: parseFloat(getComputedStyle(hs[0]).marginTop),
+        laterTop: hs.slice(1).map((h) => parseFloat(getComputedStyle(h).marginTop)),
+      };
+    });
+    check('the photo caption keeps a readable width instead of a sliver beside the credit',
+      m.capW >= Math.min(192, m.metaW) - 1, `${Math.round(m.capW)}px of ${Math.round(m.metaW)}px`);
+    eq('the first description heading sits flush with the card', m.firstTop, 0);
+    check('...and each later heading is spaced from the paragraph above',
+      m.laterTop.length > 0 && m.laterTop.every((v) => v >= 12), m.laterTop.join(','));
+
+    await expectNoErrors(page, 'no console errors on the plant page at 320px');
+    await page.close();
+  }
+}
+
 /* ------------------------------------------------------------------ */
 section('14. Session handling');
 {
@@ -1061,6 +1152,20 @@ section('24. The install guide differs by platform');
   check('an iPhone is told to use Safari’s Share menu',
     /Share/i.test(iosText) && /Add to Home Screen/i.test(iosText), iosText.slice(0, 200));
   check('...and is flagged as the current device', /You are here/i.test(iosText));
+
+  // Without a trusted certificate iOS shows a letter tile instead of the icon.
+  const trust = await iphone.evaluate(() => {
+    const card = document.getElementById('trust');
+    return card && {
+      text: card.innerText,
+      href: [...card.querySelectorAll('a')].find((a) => /Download certificate/.test(a.textContent))?.getAttribute('href'),
+    };
+  });
+  if (BASE.startsWith('https:')) {
+    check('the iPhone is offered the certificate to trust', !!trust, 'no #trust card');
+    eq('...linking to the CA download', trust?.href, '/florascan-ca.crt');
+    check('...with the Certificate Trust Settings step spelled out', /Certificate Trust Settings/.test(trust?.text || ''));
+  }
   await iphone.close();
 
   await expectNoErrors(page, 'no console errors on the install guide');

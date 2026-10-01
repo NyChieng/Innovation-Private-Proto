@@ -243,6 +243,11 @@ export function PlatformGuides() {
                 You are not in Safari. Copy the address into Safari first.
               </div>
             )}
+            {overHttps && (
+              <div className="tiny faint" style={{ marginTop: 9 }}>
+                Icon shows a plain letter? <a href="/connect#trust">Trust this server first</a>, then add it again.
+              </div>
+            )}
           </div>
         </div>
       </div>
