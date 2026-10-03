@@ -79,7 +79,7 @@ export default function MySubmissions() {
         {pending.length > 0 && (
           <>
             <h2 style={{ fontSize: '1rem', marginBottom: 10 }}>Waiting for a botanist ({pending.length})</h2>
-            <div style={{ display: 'grid', gap: 12, marginBottom: 26 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 12, marginBottom: 26 }}>
               {pending.map((s) => <Card key={s.id} sub={s} />)}
             </div>
           </>
@@ -88,7 +88,7 @@ export default function MySubmissions() {
         {done.length > 0 && (
           <>
             <h2 style={{ fontSize: '1rem', marginBottom: 10 }}>Reviewed ({done.length})</h2>
-            <div style={{ display: 'grid', gap: 12 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 12 }}>
               {done.map((s) => <Card key={s.id} sub={s} />)}
             </div>
           </>
@@ -106,7 +106,7 @@ function Card({ sub }) {
         <div style={{ width: 74, height: 58, borderRadius: 8, overflow: 'hidden', background: 'var(--surface-3)', flex: 'none', border: '1px solid var(--border)' }}>
           {p.photo && <img src={p.photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
         </div>
-        <div className="grow" style={{ minWidth: 200 }}>
+        <div className="grow" style={{ minWidth: 150 }}>
           <div className="row row-wrap" style={{ gap: 8, marginBottom: 3 }}>
             <StatusBadge status={p.status} />
             {p.species_not_listed && <span className="badge badge-info">Species not listed</span>}

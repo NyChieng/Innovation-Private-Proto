@@ -6,6 +6,7 @@ import { SPECIES as CURATED } from './seed-species.js';
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 export const PHOTO_DIR = path.join(ROOT, 'server', 'data', 'photos');
 const DATA_FILE = path.join(ROOT, 'server', 'data', 'species.json');
+const TINTS_FILE = path.join(ROOT, 'server', 'data', 'photo-tints.json');
 
 /**
  * The species list the demo is seeded from.
@@ -47,6 +48,28 @@ function load() {
 }
 
 export const SPECIES_DATA = load();
+
+/**
+ * Average colour per cached photograph, produced by scripts/photo-tints.mjs.
+ * Used as the placeholder behind an image while it loads, so a photo resolves
+ * out of its own colour instead of out of a grey box. Optional: without the
+ * file the client falls back to a tint derived from the filename.
+ */
+function loadTints() {
+  try {
+    const raw = JSON.parse(fs.readFileSync(TINTS_FILE, 'utf8'));
+    return raw.tints || {};
+  } catch {
+    return {};
+  }
+}
+
+export const PHOTO_TINTS = loadTints();
+
+/** The stored colour for a cached photo path, if we have one. */
+export function tintFor(file) {
+  return (file && PHOTO_TINTS[file]) || null;
+}
 
 export const hasRealPhotos = SPECIES_DATA.species.some((s) => (s.photos || []).some((p) => p.file));
 

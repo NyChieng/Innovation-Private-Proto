@@ -2,6 +2,7 @@ import { Suspense, useEffect } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useApp } from './lib/store.jsx';
 import { homeFor } from './lib/format.js';
+import { shouldShowIntro } from './lib/intro.js';
 import { WebShell, MobileShell } from './components/Shell.jsx';
 import RoleSwitcher from './components/RoleSwitcher.jsx';
 import InstallPrompt from './components/InstallPrompt.jsx';
@@ -17,6 +18,7 @@ import SpeciesDetail from './screens/SpeciesDetail.jsx';
 import Login from './screens/Login.jsx';
 import Connect from './screens/Connect.jsx';
 import Scan from './screens/Scan.jsx';
+import Welcome from './screens/Welcome.jsx';
 
 import PlantRegister from './screens/staff/PlantRegister.jsx';
 import RegisterPlant from './screens/staff/RegisterPlant.jsx';
@@ -83,6 +85,18 @@ export default function App() {
       <div style={{ minHeight: '100dvh', display: 'grid', placeItems: 'center' }}>
         <div className="row" style={{ gap: 10 }}><span className="spinner" /><span className="mute">Starting FloraScan...</span></div>
       </div>
+    );
+  }
+
+  // First visit: introduce the thing before dropping someone into a register.
+  // Deliberately outside the shell, and never over a scanned tag.
+  if (shouldShowIntro(loc.pathname)) {
+    return (
+      <>
+        <Welcome />
+        <RoleSwitcher />
+        <Toasts />
+      </>
     );
   }
 

@@ -55,7 +55,7 @@ export default function TagSheet() {
       for (let i = 0; i < missing.length; i += BATCH) {
         const slice = missing.slice(i, i + BATCH);
         const got = await Promise.all(
-          slice.map((id) => api.qr(id, window.location.origin)
+          slice.map((id) => api.qr(id)
             .then((r) => [id, r])
             .catch(() => [id, null])),
         );
@@ -161,7 +161,7 @@ export default function TagSheet() {
                           onChange={() => toggle(p.id)}
                           onClick={(e) => e.stopPropagation()}
                           aria-label={'Include ' + p.plant_code}
-                          style={{ width: 16, height: 16, accentColor: 'var(--accent)' }}
+                          style={{ accentColor: 'var(--accent)' }}
                         />
                       </td>
                       <td>

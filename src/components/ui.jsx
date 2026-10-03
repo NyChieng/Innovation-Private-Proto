@@ -190,13 +190,13 @@ export function Toasts() {
 /* Plant card                                                          */
 /* ------------------------------------------------------------------ */
 
-export function PlantCard({ plant, to, showStatus }) {
+export function PlantCard({ plant, to, showStatus, eager = false }) {
   const name = plant.scientific_name || plant.proposed_species_name || 'Unidentified specimen';
   return (
     <Link className="plant-card" to={to || `/plant/${plant.id}`}>
       <div className="plant-photo">
         {plant.photo
-          ? <SmartImage src={plant.photo} fallback={plant.photo_remote} alt="" />
+          ? <SmartImage src={plant.photo} fallback={plant.photo_remote} tint={plant.photo_tint} alt="" eager={eager} />
           : <div style={{ width: '100%', height: '100%', display: 'grid', placeItems: 'center' }}><I.Leaf style={{ width: 34, height: 34, color: 'var(--text-faint)' }} /></div>}
         <div className="overlay-tl">
           {showStatus && <StatusBadge status={plant.status} />}

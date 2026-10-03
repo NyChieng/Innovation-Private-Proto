@@ -138,7 +138,10 @@
 .card-foot { padding: 12px 18px; border-top: 1px solid var(--border); background: var(--surface-2); border-radius: 0 0 var(--r-md) var(--r-md); }
 
 .panel { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-md); padding: 16px; }
-.inset { background: var(--surface-inset); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 12px 14px; }
+/* Insets hold free text a ranger typed in the field, so they have to cope with
+   whatever arrives - including a long unbroken string, which would otherwise
+   stretch the card and every sibling beside it. */
+.inset { background: var(--surface-inset); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 12px 14px; overflow-wrap: anywhere; }
 
 /* ==================================================================
    Buttons
@@ -608,9 +611,16 @@
    Definition list (plant detail)
    ================================================================== */
 
-.dl { display: grid; grid-template-columns: minmax(130px, 168px) 1fr; gap: 0; font-size: 0.89rem; }
+/* minmax(0, 1fr), not 1fr: a grid track's implicit min-width is auto, so one
+   long unbroken string in a value - a URL in a note, a pasted coordinate -
+   widens the track and drags the whole page sideways. */
+/* Row-selection boxes in a table. Sized here rather than inline so the touch
+   rule further down can grow them for a thumb. */
+.table input[type='checkbox'] { width: 16px; height: 16px; accent-color: var(--accent); }
+
+.dl { display: grid; grid-template-columns: minmax(130px, 168px) minmax(0, 1fr); gap: 0; font-size: 0.89rem; }
 .dl dt { color: var(--text-mute); padding: 8px 0; border-bottom: 1px solid var(--border); font-weight: 520; }
-.dl dd { margin: 0; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.dl dd { margin: 0; padding: 8px 0; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
 .dl > :nth-last-child(1), .dl > :nth-last-child(2) { border-bottom: 0; }
 
 @media (max-width: 560px) {
@@ -705,7 +715,12 @@
 .rs-fab .avatar { width: 27px; height: 27px; font-size: 0.68rem; }
 .rs-fab .kbd { opacity: 0.55; font-size: 0.7rem; }
 
-@media (max-width: 860px) { .rs-fab { bottom: 76px; right: 12px; } }
+@media (max-width: 860px) {
+  .rs-fab { bottom: 76px; right: 12px; }
+  /* Screens without the bottom tab bar - the welcome screen - have nothing to
+     clear, so the pill sits in the corner instead of floating over content. */
+  body:not(:has(.bottom-nav)) .rs-fab { bottom: 14px; }
+}
 
 .rs-panel {
   position: fixed; z-index: 190; right: 18px; bottom: 68px;
@@ -892,4 +907,212 @@
 .qr-tag .t-foot {
   margin-top: 7px; padding-top: 6px; border-top: 1px solid #d5ddd6;
   font-size: 0.6rem; letter-spacing: 0.04em; text-transform: uppercase; color: #5a6b5d;
+}
+
+/* ==================================================================
+   Welcome
+   First screen for a cold visitor. Split layout: the photograph gets its own
+   panel rather than being stretched across the whole viewport, because the
+   source images are only about 500px wide and upscaling them to full-bleed
+   turns them to mush.
+   ================================================================== */
+
+.welcome {
+  min-height: 100dvh;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.85fr);
+  background: var(--green-950);
+  color: #e9f1e9;
+}
+
+.welcome-inner {
+  display: flex; flex-direction: column; justify-content: center;
+  padding: 48px clamp(24px, 5vw, 64px) calc(48px + env(safe-area-inset-bottom));
+  max-width: 620px; margin-left: auto; width: 100%;
+  animation: welcomeIn 0.6s var(--ease-out) both;
+}
+@keyframes welcomeIn {
+  from { opacity: 0; transform: translate3d(0, 14px, 0); }
+}
+
+/* --- photo panel --------------------------------------------------- */
+
+.welcome-photo {
+  position: relative; overflow: hidden;
+  background: var(--green-900);
+}
+.welcome-photo .smart-img { position: absolute; inset: 0; }
+/* Visibility is left to SmartImage’s own opacity transition. Driving it from
+   an animation here meant the photograph only appeared if that animation ran
+   to completion - one interrupted style recalc and the panel stayed blank. */
+.welcome-photo .smart-img.is-ready img {
+  animation: welcomeDrift 40s ease-in-out infinite alternate;
+}
+@keyframes welcomeDrift {
+  from { transform: scale(1.04) translate3d(0, 0, 0); }
+  to { transform: scale(1.12) translate3d(-2%, -1.5%, 0); }
+}
+/* Just enough to feather the seam with the text column and to seat the photo
+   credit. The photograph is the point of the panel - it should not be veiled. */
+.welcome-photo::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background:
+    linear-gradient(90deg, var(--green-950) 0%, rgba(11, 26, 18, 0.45) 7%, rgba(11, 26, 18, 0) 20%),
+    linear-gradient(0deg, rgba(8, 20, 12, 0.55) 0%, rgba(8, 20, 12, 0) 16%);
+}
+
+.welcome-credit {
+  position: absolute; right: 12px; bottom: 10px; z-index: 1;
+  font-size: 0.64rem; color: rgba(236, 244, 236, 0.78);
+  max-width: 70%; text-align: right; line-height: 1.35;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.75);
+}
+
+/* --- content ------------------------------------------------------- */
+
+.welcome-top { display: flex; align-items: center; gap: 14px; margin-bottom: 22px; }
+.welcome-mark {
+  width: 52px; height: 52px; border-radius: 14px; overflow: hidden; flex: none;
+  box-shadow: var(--sh-3);
+}
+.welcome-mark img { width: 100%; height: 100%; }
+.welcome h1 { font-size: 1.9rem; letter-spacing: -0.03em; color: #fff; line-height: 1.05; }
+.welcome-place {
+  display: flex; align-items: center; gap: 5px; margin: 4px 0 0;
+  font-size: 0.74rem; font-weight: 620; letter-spacing: 0.07em;
+  text-transform: uppercase; color: #9dbb9f;
+}
+
+.welcome-lead {
+  font-size: 1.02rem; line-height: 1.6; color: #c6d8c7;
+  margin-bottom: 26px; max-width: 46ch;
+}
+
+.welcome-points { list-style: none; margin: 0 0 24px; padding: 0; display: grid; gap: 14px; }
+.welcome-points li { display: flex; gap: 12px; align-items: flex-start; }
+.welcome-points .ico { width: 19px; height: 19px; flex: none; color: var(--green-300); margin-top: 2px; }
+.welcome-points strong { display: block; font-size: 0.93rem; color: #fff; font-weight: 620; }
+.welcome-points span { font-size: 0.86rem; color: #a9bdaa; line-height: 1.45; }
+
+.welcome-facts {
+  display: flex; flex-wrap: wrap; gap: 6px 20px;
+  padding: 14px 0 22px;
+  border-top: 1px solid rgba(255, 255, 255, 0.13);
+  font-size: 0.82rem; color: #9cb39e;
+}
+.welcome-facts strong { color: #fff; font-weight: 680; font-size: 0.98rem; }
+
+.welcome-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.welcome-actions .btn-block { flex: 1 1 100%; }
+.welcome-ghost {
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(255, 255, 255, 0.18);
+  color: #e3eee3;
+}
+.welcome-ghost:hover { background: rgba(255, 255, 255, 0.16); }
+
+.welcome-ios {
+  flex: 1 1 100%;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: var(--r-md);
+  padding: 14px 16px;
+}
+.welcome-ios-head {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 0.88rem; font-weight: 620; color: #fff; margin-bottom: 8px;
+}
+.welcome-ios-head .ico { width: 16px; height: 16px; color: var(--green-300); }
+.welcome-ios ol { margin: 0; padding-left: 20px; display: grid; gap: 5px; }
+.welcome-ios li { font-size: 0.85rem; color: #bdd0be; }
+.welcome-ios strong { color: #fff; }
+
+.welcome-foot {
+  margin-top: 24px; padding-top: 18px;
+  border-top: 1px solid rgba(255, 255, 255, 0.13);
+  font-size: 0.8rem; color: #93a995; line-height: 1.6;
+}
+
+.linkish {
+  background: none; border: 0;
+  font: inherit; color: var(--green-300);
+  text-decoration: underline; text-underline-offset: 2px;
+  cursor: pointer;
+  /* It sits mid-sentence, where a 20px-tall word is a poor thumb target, but
+     it cannot grow without pushing the line apart. The padding enlarges the
+     hit area and the matching negative margin gives the space back, so the
+     sentence reads exactly as before while the box is 36px tall. */
+  padding: 8px 4px;
+  margin: -8px -4px;
+}
+.linkish:hover { color: var(--green-200); }
+
+/* --- narrow: photo becomes a band above the content ----------------- */
+
+@media (max-width: 900px) {
+  .welcome { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+  .welcome-photo { height: 30vh; min-height: 170px; max-height: 260px; order: -1; }
+  .welcome-photo::after {
+    background:
+      linear-gradient(180deg, rgba(11, 26, 18, 0) 45%, rgba(11, 26, 18, 0.72) 85%, var(--green-950) 100%);
+  }
+  .welcome-inner {
+    margin-left: 0; max-width: none;
+    /* Room at the foot for the floating role switcher, so the last button is
+       never half-covered by it. */
+    padding: 24px 20px calc(96px + env(safe-area-inset-bottom));
+    justify-content: flex-start;
+  }
+  .welcome h1 { font-size: 1.6rem; }
+  .welcome-lead { font-size: 0.95rem; margin-bottom: 22px; }
+  .welcome-points { gap: 12px; margin-bottom: 20px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .welcome-inner { animation: none; }
+  .welcome-photo .smart-img.is-ready img { animation: none; transform: none; }
+}
+
+/* ==================================================================
+   Touch targets
+   A 30px control is comfortable with a mouse and fiddly with a thumb.
+   Scoped to coarse pointers so the desktop layout keeps its density.
+   ================================================================== */
+
+@media (pointer: coarse) {
+  .btn-sm { min-height: 40px; padding-block: 8px; }
+  .btn-sm.btn-icon { min-width: 40px; }
+  .chip { min-height: 38px; }
+  .segmented button { min-height: 36px; padding-inline: 16px; }
+  .tabs button, .tabs a { min-height: 42px; }
+  .side-link { min-height: 44px; }
+  .rs-item { min-height: 48px; }
+  /* The switch track is the real target; give the whole label some height. */
+  .switch { min-height: 40px; }
+  /* Checkboxes in tables are easy to miss at their default size. */
+  .table input[type='checkbox'] { width: 20px; height: 20px; }
+  /* The conservation ramp on the home page: 29px of bar and label is a hard
+     thing to hit with a thumb. */
+  .ramp-step { min-height: 44px; align-content: center; }
+}
+
+/* ==================================================================
+   Room for the floating demo switcher
+   It sits bottom-right above the tab bar, so the last row of a page
+   needs clearance or it ends up half-covered.
+   ================================================================== */
+
+@media (max-width: 860px) {
+  .page { padding-bottom: 132px; }
+}
+
+/* The footer is the last thing in the document, so the pill - being fixed -
+   always ends up over its final row once you scroll down. Reserve the pill's
+   own height plus its offset. Only the web shell has a footer, and there the
+   pill floats at the bottom whatever the width, so this needs no breakpoint. */
+.site-foot {
+  border-top: 1px solid var(--border);
+  background: var(--surface-2);
+  margin-top: auto;
+  padding: 22px 0 calc(22px + 72px);
 }

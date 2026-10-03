@@ -131,7 +131,7 @@ export default function Home() {
             <div className="plant-grid">
               {recent
                 ? newest.map((p, i) => (
-                    <Reveal key={p.id} index={i}><PlantCard plant={p} /></Reveal>
+                    <Reveal key={p.id} index={i}><PlantCard plant={p} eager={i < 4} /></Reveal>
                   ))
                 : Array.from({ length: 4 }).map((_, i) => (
                     <div className="card" key={i}>

@@ -96,6 +96,28 @@ when you are demonstrating on one device and talking about the other.
 Either way the result is the same: a home-screen icon that opens full screen with no browser
 bars, and pages already visited still open with no signal.
 
+**If the icon comes out blank on an iPhone**, it is almost always one of two things: the
+icon had an alpha channel (iOS fills transparency with black rather than compositing it),
+or the `apple-touch-icon` link carried no `sizes` attribute. Both are handled here — opaque
+PNGs at 152, 167 and 180, declared with explicit sizes, plus `/apple-touch-icon.png` and
+`/apple-touch-icon-precomposed.png` at the site root for iOS to probe. iOS caches these
+hard, so delete the old shortcut before adding it again.
+
+### What a printed tag points at
+
+A QR tag is printed once and then screwed to a post, so the address it carries has to be
+one that still works. The server decides it, never the browser that asked for the code —
+a botanist printing from a laptop is on `localhost`, and a tag encoding `localhost` sends
+every phone that scans it to its own device.
+
+Order of preference:
+
+1. the `public_base_url` setting, which the park points at its real domain
+2. this machine's network address, which is what makes the demo work on a phone
+
+**Set `public_base_url` in Admin → System settings before printing tags for real.**
+Tags printed now encode a `192.168.x.x` address that only works on this Wi-Fi.
+
 ### Scanning a tag
 
 Three ways, all working out of the box now that the server runs over HTTPS:
@@ -137,6 +159,18 @@ too — every account uses the password `demo1234`.
 Roles are **permission sets**, not hard-coded names. The API checks codes such as
 `plant.approve`, so a superuser can be added later as one more role holding every
 permission — no new tables, no fourth dashboard.
+
+---
+
+## The welcome screen
+
+A first-time visitor gets a one-screen introduction before the register. What it offers
+next depends on the device: a desktop visitor gets **Start exploring**, while a phone
+visitor is offered the home-screen install first, because that is what makes it usable on
+a trail. It is shown once per browser.
+
+Scanning a tag never shows it — somebody standing in front of a plant wants that plant,
+not an introduction. Replay it any time from the role switcher (**Intro**).
 
 ---
 
@@ -206,10 +240,12 @@ src/
   screens/          Public site, then staff/ for the dashboards
   lib/              API client, session store, formatting, icons
 tests/
-  api.test.mjs      248 API checks: access control, publication control, validation,
-                    audit, withheld locations, photo serving, the web app manifest
-  ui.test.mjs       197 browser checks: every route under every role, form input,
-                    QR-from-gallery, hidden locations, pagination, reduced motion
+  api.test.mjs      293 API checks: access control, publication control, validation,
+                    audit, withheld locations, photo serving, the web app manifest,
+                    printed-tag addressing, archiving a record still under review
+  ui.test.mjs       276 browser checks: every route under every role, form input,
+                    QR-from-gallery, hidden locations, pagination, reduced motion,
+                    the welcome screen, image loading, and layout under long text
 ```
 
 **One Node process, one port.** Vite runs in middleware mode inside Express, so the API and
@@ -277,6 +313,14 @@ botanist looking at the demo would notice.
 When the client supplies real field photographs, replace the upload path in
 `server/seed.js`; `plant_photos.file_path` does not change.
 
+**How they load.** Every image sits on its own average colour while it decodes, so a photo
+resolves out of a related green rather than out of a grey box. `npm run import:tints`
+samples those colours once from the cached files into `server/data/photo-tints.json`;
+without it the placeholder falls back to a tint derived from the filename. Slots reserve
+their aspect ratio so nothing jumps as pictures arrive, the first row of each grid is
+fetched eagerly while the rest stay lazy, and an image already sitting in cache is detected
+on mount rather than waiting for a load event that has already been and gone.
+
 ---
 
 ## Commands
@@ -287,6 +331,7 @@ When the client supplies real field photographs, replace the upload path in
 | `npm run http` | Same, over plain HTTP — camera and install will not work |
 | `npm run port` | Assign a new random port |
 | `npm run import:species` | Rebuild the species dataset from GBIF, iNaturalist and Wikipedia |
+| `npm run import:tints` | Sample an average colour per photo, used as the loading placeholder |
 | `npm run build` / `npm run preview` | Production build, and serve it |
 | `npm test` | API and browser test suites |
 
@@ -317,6 +362,17 @@ exercises the forms — empty submits, out-of-range numbers, script tags, SQL-lo
 strings, unicode and emoji — checking the interface says something useful each time. It
 also checks for horizontal overflow at 360, 390 and 414 px, which is how the narrow-screen
 bugs in the tag and account pickers were found.
+
+Two layout faults worth knowing about, because both are easy to reintroduce:
+
+- A grid track written as `1fr` keeps an implicit `min-width: auto`, so a single unbroken
+  string — a pasted URL in a ranger's field note — widens the track and drags the whole
+  page sideways. The review queue overflowed by nearly 6,000 px this way. Value lists and
+  free-text insets now use `minmax(0, 1fr)` with `overflow-wrap: anywhere`, and the UI
+  suite registers a record with a 900-character unbroken note to keep it that way.
+- The demo role switcher is fixed to the bottom-right, so it sits over whatever the
+  document ends with. The footer reserves room for it, and the suite scrolls to the
+  bottom and checks no footer link is left underneath.
 
 The UI tests find Chrome or Edge automatically; set `CHROME_PATH` if yours is elsewhere.
 

@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { db, insert, nowIso, notify, notifyPermission, audit, activity } from './db.js';
-import { SPECIES_DATA, photoExists } from './species-data.js';
+import { SPECIES_DATA, photoExists, tintFor } from './species-data.js';
 
 const SPECIES = SPECIES_DATA.species;
 
@@ -379,6 +379,7 @@ export function seed() {
         file_path: photoExists(ph.file) ? '/api/photos/file/' + ph.file : ph.url,
         thumbnail_path: photoExists(ph.file) ? '/api/photos/file/' + ph.file : ph.url,
         remote_url: ph.url || null,
+        tint: tintFor(ph.file),
         file_name: ph.file || null,
         mime_type: 'image/jpeg',
         size_bytes: 0,
@@ -488,6 +489,7 @@ export function seed() {
     ['site_name', 'FloraScan', 'string', 'Shown in headers and page titles'],
     ['park_name', 'Niah National Park', 'string', 'The site this register covers'],
     ['qr_base_url', '/p/', 'string', 'Plant page address the QR codes encode, before the token'],
+    ['public_base_url', '', 'string', 'Permanent public address of the site, e.g. https://florascan.sarawakforestry.com. Set this before printing tags for real: QR codes encode it, and a tag printed with the wrong address is useless. Leave blank to use this machine network address, which is right for a demo'],
     ['plant_code_prefix', 'PLT', 'string', 'Prefix for generated Plant IDs'],
     ['require_approval', 'true', 'bool', 'true = ranger entries wait for botanist review; false = they publish immediately. Botanist entries always publish immediately'],
     ['max_upload_mb', '8', 'int', 'Maximum photo upload size'],

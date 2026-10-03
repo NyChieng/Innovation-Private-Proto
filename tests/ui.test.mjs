@@ -123,6 +123,9 @@ async function newPage({ token, mobile = false, view } = {}) {
     else localStorage.removeItem('florascan.token');
     if (v) localStorage.setItem('florascan.view', v);
     else localStorage.removeItem('florascan.view');
+    // These tests exercise the app, not the first-run screen. The welcome
+    // section clears this again so it can test the splash on its own terms.
+    localStorage.setItem('florascan.intro-seen', '1');
   }, token || null, view || null);
   return page;
 }
@@ -856,7 +859,10 @@ section('16. No horizontal overflow on small screens');
     const page = await browser.newPage();
     await page.setViewport({ width, height: 844, isMobile: true, hasTouch: true });
     await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
-    await page.evaluate(() => localStorage.setItem('florascan.view', 'mobile'));
+    await page.evaluate(() => {
+      localStorage.setItem('florascan.view', 'mobile');
+      localStorage.setItem('florascan.intro-seen', '1');
+    });
 
     for (const r of routes) {
       await page.goto(BASE + r, { waitUntil: 'networkidle2' });
@@ -1191,7 +1197,214 @@ section('25. App icons');
 }
 
 /* ------------------------------------------------------------------ */
-section('26. Tidying up after the run');
+section('26. The welcome screen on a first visit');
+{
+  // Desktop: an introduction and a way in.
+  const desktop = await browser.newPage();
+  desktop.errors = [];
+  desktop.on('pageerror', (e) => desktop.errors.push('UNCAUGHT: ' + e.message));
+  await desktop.setViewport({ width: 1280, height: 860 });
+  await desktop.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
+  await desktop.evaluate(() => localStorage.clear());
+  await desktop.goto(BASE + '/', { waitUntil: 'networkidle2' });
+  await sleep(1200);
+
+  let text = await desktop.evaluate(() => document.body.innerText);
+  check('a first-time visitor gets the welcome screen',
+    await desktop.evaluate(() => !!document.querySelector('.welcome')), text.slice(0, 120));
+  check('...explaining what the thing is', /field guide|scan the qr/i.test(text));
+  check('...with a start button on desktop', /start exploring/i.test(text), text.slice(0, 200));
+  check('...and a photograph beside it',
+    await desktop.evaluate(() => !!document.querySelector('.welcome-photo img')));
+  check('the photograph is actually visible, not stuck transparent',
+    await desktop.evaluate(() => {
+      const img = document.querySelector('.welcome-photo img');
+      return !!img && Number(getComputedStyle(img).opacity) > 0.5;
+    }));
+  check('...and it is credited', /some rights reserved|CC/i.test(text));
+
+  // Starting takes you into the app, and it does not come back.
+  await desktop.evaluate(() => [...document.querySelectorAll('button')]
+    .find((b) => /start exploring/i.test(b.textContent))?.click());
+  await sleep(1000);
+  check('Start exploring enters the app',
+    await desktop.evaluate(() => !document.querySelector('.welcome')));
+  check('...landing on the register', /recently verified|browse/i.test(await desktop.evaluate(() => document.body.innerText)));
+
+  await desktop.goto(BASE + '/', { waitUntil: 'networkidle2' });
+  await sleep(700);
+  check('it is not shown again on a return visit',
+    await desktop.evaluate(() => !document.querySelector('.welcome')));
+
+  check('no console errors on the welcome screen', desktop.errors.length === 0,
+    desktop.errors.slice(0, 2).join(' | '));
+  await desktop.close();
+
+  // Phone: lead with the home-screen install instead of a Start button.
+  const phone = await browser.newPage();
+  await phone.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true });
+  await phone.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
+  await phone.evaluate(() => localStorage.clear());
+  await phone.goto(BASE + '/', { waitUntil: 'networkidle2' });
+  await sleep(1200);
+
+  text = await phone.evaluate(() => document.body.innerText);
+  check('a phone visitor is pointed at the home screen', /home screen/i.test(text), text.slice(0, 260));
+  check('...and can still carry on in the browser', /continue in the browser/i.test(text));
+  check('...without a desktop-style Start button', !/start exploring/i.test(text));
+  check('the last action is not cut off by the viewport',
+    await phone.evaluate(() => {
+      const btns = [...document.querySelectorAll('.welcome-actions button')];
+      const last = btns[btns.length - 1];
+      if (!last) return false;
+      return last.getBoundingClientRect().bottom <= document.documentElement.scrollHeight;
+    }));
+  await phone.close();
+
+  // A scanned tag must never be interrupted by an introduction.
+  const list = await (await fetch(BASE + '/api/public/plants?limit=1')).json();
+  const tagged = list.results[0];
+  const qr = await (await fetch(`${BASE}/api/qr/${tagged.id}`)).json();
+  const token = new URL(qr.target_url).pathname.split('/p/')[1];
+
+  const scanner = await browser.newPage();
+  await scanner.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true });
+  await scanner.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
+  await scanner.evaluate(() => localStorage.clear());
+  await scanner.goto(BASE + '/p/' + token, { waitUntil: 'networkidle2' });
+  await sleep(1000);
+
+  check('scanning a tag goes straight to the plant, not the intro',
+    await scanner.evaluate(() => !document.querySelector('.welcome')));
+  check('...and shows that plant',
+    (await scanner.evaluate(() => document.body.innerText)).includes(tagged.plant_code));
+  await scanner.close();
+}
+
+/* ------------------------------------------------------------------ */
+section('27. Images reserve space and become visible');
+{
+  const page = await newPage();
+  await go(page, '/browse');
+  await sleep(2500);
+
+  const imgs = await page.evaluate(() => {
+    const out = { total: 0, visible: 0, stuck: [], noRatio: 0 };
+    for (const el of document.querySelectorAll('.plant-card .smart-img')) {
+      out.total++;
+      const img = el.querySelector('img');
+      if (!img) continue;
+      const ready = el.classList.contains('is-ready');
+      const op = Number(getComputedStyle(img).opacity);
+      if (ready && op > 0.9) out.visible++;
+      // Loaded by the browser but never faded in: the failure that makes a
+      // whole grid look empty.
+      if (img.complete && img.naturalWidth > 0 && op < 0.1) {
+        out.stuck.push(img.currentSrc.slice(-40));
+      }
+      if (getComputedStyle(el).aspectRatio === 'auto'
+          && getComputedStyle(el.parentElement).aspectRatio === 'auto') out.noRatio++;
+    }
+    return out;
+  });
+
+  check('the grid rendered image slots', imgs.total > 0, imgs.total + ' slots');
+  check('loaded images are all visible', imgs.stuck.length === 0,
+    imgs.stuck.length + ' loaded but still transparent: ' + imgs.stuck.slice(0, 2).join(', '));
+  check('most images finished loading', imgs.visible > imgs.total * 0.5,
+    `${imgs.visible} of ${imgs.total}`);
+  check('every slot reserves its space, so nothing jumps', imgs.noRatio === 0,
+    imgs.noRatio + ' without an aspect ratio');
+
+  // The placeholder should be tinted like the photograph, not a flat grey.
+  const tints = await page.evaluate(() =>
+    [...document.querySelectorAll('.plant-card .smart-img')]
+      .map((e) => e.style.getPropertyValue('--tint'))
+      .filter(Boolean));
+  check('placeholders carry a colour', tints.length > 0, tints.length + ' tinted');
+  check('...and they differ between plants', new Set(tints).size > 1,
+    new Set(tints).size + ' distinct');
+
+  await expectNoErrors(page, 'no console errors while images load');
+  await page.close();
+}
+
+/* ------------------------------------------------------------------ */
+section('28. The layout survives awkward content and the floating pill');
+{
+  // A ranger types notes on a phone in the field. Sooner or later one of them
+  // pastes a long URL or holds a key down, and a grid track whose implicit
+  // min-width is auto will stretch and drag the whole page sideways.
+  const botToken = await tokenFor(ACCOUNTS.botanist);
+  const rangerToken = await tokenFor(ACCOUNTS.ranger);
+  const made = await fetch(BASE + '/api/plants', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + rangerToken },
+    body: JSON.stringify({
+      site_name: 'UI test plot, long-token layout',
+      proposed_species_name: 'Unbroken string case',
+      species_not_listed: true,
+      location_notes: 'https://example.org/' + 'x'.repeat(300),
+      morphology_notes: 'y'.repeat(900),
+    }),
+  });
+  check('a record with an unbroken 900-character note is accepted', made.status === 201);
+
+  for (const width of [360, 1280]) {
+    const page = await newPage({ token: botToken });
+    await page.setViewport({ width, height: 860, isMobile: width < 500, hasTouch: width < 500 });
+    await page.goto(BASE + '/staff/review', { waitUntil: 'networkidle2' });
+    await new Promise((r) => setTimeout(r, 700));
+
+    const over = await page.evaluate(() => {
+      const d = document.documentElement;
+      return { px: d.scrollWidth - d.clientWidth, client: d.clientWidth };
+    });
+    check(`the review queue does not scroll sideways at ${width}px`, over.px <= 1,
+      `overflows by ${over.px}px`);
+    await page.close();
+  }
+
+  // The role switcher is fixed to the bottom-right, so it sits over whatever
+  // the document ends with - which is the footer and its links.
+  const page = await newPage({ token: null });
+  await page.setViewport({ width: 1280, height: 860 });
+  await page.goto(BASE + '/', { waitUntil: 'networkidle2' });
+  await page.evaluate(() => { document.scrollingElement.scrollTop = document.scrollingElement.scrollHeight; });
+  await new Promise((r) => setTimeout(r, 400));
+
+  const buried = await page.evaluate(() => {
+    const pill = document.querySelector('.rs-fab');
+    if (!pill) return ['no pill rendered'];
+    const b = pill.getBoundingClientRect();
+    return [...document.querySelectorAll('.site-foot a')].filter((a) => {
+      const r = a.getBoundingClientRect();
+      const down = Math.min(r.bottom, b.bottom) - Math.max(r.top, b.top);
+      const across = Math.min(r.right, b.right) - Math.max(r.left, b.left);
+      return down > 6 && across > 6;
+    }).map((a) => a.textContent.trim());
+  });
+  check('no footer link ends up under the floating switcher', buried.length === 0, buried.join(', '));
+
+  // Mid-sentence controls still have to be tappable without the padding
+  // pushing the line apart.
+  await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
+  await page.evaluate(() => localStorage.clear());
+  await page.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true });
+  await page.goto(BASE + '/', { waitUntil: 'networkidle2' });
+  await new Promise((r) => setTimeout(r, 800));
+
+  const inlineTargets = await page.evaluate(() => [...document.querySelectorAll('.linkish')]
+    .map((e) => Math.round(e.getBoundingClientRect().height)));
+  check('the inline sign-in control is tall enough to tap',
+    inlineTargets.length > 0 && inlineTargets.every((h) => h >= 30),
+    'heights: ' + inlineTargets.join(', '));
+  check('no console errors on any of it', page.errors.length === 0, page.errors.join('\n'));
+  await page.close();
+}
+
+/* ------------------------------------------------------------------ */
+section('29. Tidying up after the run');
 {
   // The form tests register real plants. Archive them so the register is
   // demo-ready immediately after a test run, without restarting the server.

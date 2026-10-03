@@ -168,6 +168,7 @@ function shapePlant(p, { full = false, viewer = null } = {}) {
     photo: photos[0]?.file_path ?? null,
     photo_remote: photos[0]?.remote_url ?? null,
     photo_credit: photos[0]?.credit ?? null,
+    photo_tint: photos[0]?.tint ?? null,
     photo_count: photos.length,
     review_comment: sub?.status === 'rejected' ? sub.review_comment : null,
     submission_id: sub?.id ?? null,
@@ -194,6 +195,43 @@ function shapePlant(p, { full = false, viewer = null } = {}) {
 /** Mirrors v_public_plants: approved, not deleted, species resolved. */
 function publicPlants() {
   return db.plants.filter((p) => p.status === 'approved' && !p.deleted_at && p.species_id);
+}
+
+/* ------------------------------------------------------------------ */
+/* Where a printed tag should point                                    */
+/* ------------------------------------------------------------------ */
+
+const LOOPBACK = /^(localhost|127\.0\.0\.1|\[::1\]|::1)$/i;
+
+/**
+ * The address a QR tag encodes.
+ *
+ * A tag is printed once and then screwed to a post for years, so it must not
+ * carry an address that only works on the machine that generated it. A
+ * botanist printing tags from a laptop is browsing `localhost`, and a tag
+ * encoding `localhost` sends every phone that scans it to its own device.
+ *
+ * Order of preference:
+ *   1. `public_base_url`, which the park sets to its real domain before
+ *      printing anything for real
+ *   2. the LAN address, reachable from a phone on the same Wi-Fi, which is
+ *      what makes the prototype demonstrable
+ *   3. whatever the request came in on, as a last resort
+ */
+export function publicOrigin(req) {
+  const configured = String(getSetting('public_base_url') || '').trim().replace(/\/+$/, '');
+  if (configured) return configured;
+
+  const scheme = req.app.get('protoScheme') || req.protocol || 'https';
+  const port = req.app.get('protoPort');
+  const lan = lanAddresses()[0]?.address;
+  if (lan) return `${scheme}://${lan}${port ? ':' + port : ''}`;
+
+  const host = (req.get('host') || '').replace(/:\d+$/, '');
+  if (!LOOPBACK.test(host)) return `${scheme}://${req.get('host')}`;
+
+  // Nothing better available; the tag will only work on this machine.
+  return `${scheme}://${req.get('host')}`;
 }
 
 /* ------------------------------------------------------------------ */
@@ -809,6 +847,25 @@ export function createApi() {
       qr.deactivated_at = nowIso();
       qr.deactivation_reason = req.body?.reason || 'Record archived';
     }
+
+    // Archiving something that was still awaiting review has to close the
+    // submission too. Left pending it stays in the botanist queue, where
+    // approving it would publish a record somebody had already withdrawn.
+    const pending = db.plant_submissions.find((s) => s.plant_id === plant.id && s.status === 'pending');
+    if (pending) {
+      const reason = req.body?.reason || 'The record was archived before review.';
+      pending.status = 'rejected';
+      pending.reviewed_by = req.user.id;
+      pending.reviewed_at = nowIso();
+      pending.review_comment = reason;
+      notify({
+        user_id: pending.submitted_by, type: 'submission.rejected',
+        title: 'Submission withdrawn: ' + plant.plant_code,
+        body: req.user.full_name + ' archived this record before it was reviewed. ' + reason.slice(0, 120),
+        related_type: 'plant', related_id: plant.id,
+      });
+    }
+
     recordRevisions(plant.id, req.user.id, before, plant, req.body?.reason || null);
     audit({ user_id: req.user.id, action: 'archive', entity_type: 'plants', entity_id: plant.id, old_values: { status: before.status }, new_values: { status: 'archived' } });
     res.json({ plant: shapePlant(plant, { full: true, viewer: req.user }) });
@@ -875,8 +932,7 @@ export function createApi() {
     const qr = activeQr(plant.id);
     if (!qr) return res.status(404).json({ error: 'No QR code has been issued for this record yet.' });
 
-    const origin = req.query.origin || `${req.protocol}://${req.get('host')}`;
-    const target = `${origin}/p/${qr.qr_token}`;
+    const target = `${publicOrigin(req)}/p/${qr.qr_token}`;
     qr.target_url = target;
 
     const [png, svg] = await Promise.all([

@@ -11,7 +11,7 @@
  * plant record is always labelled as such by the page that reads it.
  */
 
-const VERSION = 'florascan-v2'; // bump when cached shell files change (v2: new icons)
+const VERSION = 'florascan-v3'; // bump when cached shell files change (v3: apple touch icon set)
 const SHELL = `${VERSION}-shell`;
 const RUNTIME = `${VERSION}-runtime`;
 

@@ -13,7 +13,7 @@
     "preview": "node server/index.js --prod",
     "port": "node server/port.js",
     "import:species": "node scripts/import-species.mjs",
-    "icons": "node scripts/build-icons.mjs",
+    "import:tints": "node scripts/photo-tints.mjs",
     "test": "node tests/api.test.mjs && node tests/ui.test.mjs",
     "test:api": "node tests/api.test.mjs",
     "test:ui": "node tests/ui.test.mjs"

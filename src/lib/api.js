@@ -79,7 +79,7 @@ export const api = {
   history: (id) => request('GET', `/plants/${id}/history`),
 
   submissions: (params) => request('GET', '/submissions' + qs(params)),
-  qr: (plantId, origin) => request('GET', `/qr/${plantId}` + qs({ origin })),
+  qr: (plantId) => request('GET', `/qr/${plantId}`),
 
   notifications: () => request('GET', '/notifications'),
   readNotification: (id) => request('POST', `/notifications/${id}/read`, {}),

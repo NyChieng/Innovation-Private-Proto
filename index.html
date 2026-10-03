@@ -6,6 +6,14 @@
     <title>FloraScan</title>
     <meta name="description" content="Scan a plant tag or search the Niah National Park register. Every published record is verified by a botanist." />
 
+    <!--
+      Photographs are served from this machine when the import has cached them,
+      and from iNaturalist when it has not. Warming the connection costs
+      nothing in the cached case and saves a DNS + TLS round trip in the other.
+    -->
+    <link rel="preconnect" href="https://inaturalist-open-data.s3.amazonaws.com" crossorigin />
+    <link rel="dns-prefetch" href="https://inaturalist-open-data.s3.amazonaws.com" />
+
     <!-- Installable web app -->
     <link rel="manifest" href="/manifest.webmanifest" />
     <meta name="theme-color" content="#0f2a1a" media="(prefers-color-scheme: dark)" />
@@ -16,6 +24,17 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="FloraScan" />
+    <!--
+      iOS picks the home-screen icon by the `sizes` attribute, and a single
+      un-sized link is the usual reason a web app ends up showing a screenshot
+      of the page instead of its logo. Every file here is an opaque PNG: iOS
+      does not composite transparency, it fills it with black.
+      /apple-touch-icon.png and the -precomposed variant sit at the site root
+      because iOS probes those paths directly when no link tag suits.
+    -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon-180.png" />
+    <link rel="apple-touch-icon" sizes="167x167" href="/icons/apple-touch-icon-167.png" />
+    <link rel="apple-touch-icon" sizes="152x152" href="/icons/apple-touch-icon-152.png" />
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
 
     <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />

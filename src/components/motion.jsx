@@ -100,16 +100,63 @@ export function CountUp({ value, duration = 900, format = (n) => n.toLocaleStrin
  * photograph never lands as a white flash. Falls back to a generated
  * illustration if the file is missing.
  */
-export function SmartImage({ src, alt = '', fallback, className = '', ratio, style, ...rest }) {
+/**
+ * A tint derived from the source path, used behind the image while it loads.
+ * A photograph resolving out of a related green reads as the picture arriving;
+ * the same grey box everywhere reads as something being broken.
+ */
+function tintFor(src) {
+  if (!src) return null;
+  let h = 2166136261;
+  for (let i = 0; i < src.length; i++) {
+    h ^= src.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  const hue = 95 + ((h >>> 0) % 55) - 20;
+  return `hsl(${hue} 22% 26%)`;
+}
+
+export function SmartImage({
+  src, alt = '', fallback, tint, className = '', ratio, style, eager = false, ...rest
+}) {
   const [state, setState] = useState('loading'); // loading | ready | failed
   const [current, setCurrent] = useState(src);
   const triedFallback = useRef(false);
+  const imgRef = useRef(null);
 
   useEffect(() => {
     setCurrent(src);
     setState('loading');
     triedFallback.current = false;
   }, [src]);
+
+  /*
+   * An image served from cache - a back-navigation, or the service worker -
+   * can finish before React attaches onLoad, and the load event never fires.
+   * Without this check those images stay at opacity 0 forever, which looks
+   * exactly like a broken photo. So ask the element directly once it mounts.
+   */
+  useEffect(() => {
+    const img = imgRef.current;
+    if (!img || state !== 'loading') return undefined;
+
+    let cancelled = false;
+    const settle = () => { if (!cancelled) setState('ready'); };
+
+    if (img.complete) {
+      if (img.naturalWidth > 0) {
+        // decode() resolves once it can be painted, so there is no half-drawn frame.
+        if (img.decode) img.decode().then(settle, settle);
+        else settle();
+      } else if (!triedFallback.current && fallback) {
+        triedFallback.current = true;
+        setCurrent(fallback);
+      } else {
+        setState('failed');
+      }
+    }
+    return () => { cancelled = true; };
+  }, [current, state, fallback]);
 
   const onError = () => {
     if (fallback && !triedFallback.current) {
@@ -122,16 +169,30 @@ export function SmartImage({ src, alt = '', fallback, className = '', ratio, sty
 
   return (
     <span
-      className={`smart-img${state === 'ready' ? ' is-ready' : ''}${className ? ' ' + className : ''}`}
-      style={{ aspectRatio: ratio, ...style }}
+      className={[
+        'smart-img',
+        state === 'ready' ? 'is-ready' : '',
+        state === 'failed' ? 'is-failed' : '',
+        className,
+      ].filter(Boolean).join(' ')}
+      // A measured average beats a guess from the filename, but either is
+      // better than a grey box.
+      style={{ aspectRatio: ratio, '--tint': tint || tintFor(current), ...style }}
     >
       {current && (
         <img
+          ref={imgRef}
           src={current}
           alt={alt}
-          loading="lazy"
+          loading={eager ? 'eager' : 'lazy'}
+          // The hero is the one image worth fetching ahead of everything else.
+          fetchpriority={eager ? 'high' : undefined}
           decoding="async"
-          onLoad={() => setState('ready')}
+          onLoad={(e) => {
+            const img = e.currentTarget;
+            if (img.decode) img.decode().then(() => setState('ready'), () => setState('ready'));
+            else setState('ready');
+          }}
           onError={onError}
           {...rest}
         />

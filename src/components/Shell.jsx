@@ -247,7 +247,7 @@ export function WebShell({ children, sidebar = false }) {
       )}
 
       {!sidebar && (
-        <footer className="no-print" style={{ borderTop: '1px solid var(--border)', background: 'var(--surface-2)', padding: '22px 0', marginTop: 'auto' }}>
+        <footer className="site-foot no-print">
           <div className="wrap row row-wrap row-between" style={{ gap: 14 }}>
             <div className="tiny mute">
               <strong style={{ color: 'var(--text-soft)' }}>FloraScan</strong> &middot; Prototype X for NeuonAI and Sarawak Forestry Corporation

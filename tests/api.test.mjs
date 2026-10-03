@@ -860,17 +860,143 @@ if (!ORIGIN.startsWith('https:')) {
 }
 
 /* ------------------------------------------------------------------ */
-section('28. Tidying up after the run');
+section('28. A printed tag points somewhere a phone can reach');
+{
+  const plant = (await get('/public/plants?limit=1')).body.results[0];
+
+  // The address must never come from the browser that asked for the code: a
+  // botanist printing tags is on localhost, and a tag encoding localhost sends
+  // every phone that scans it to its own device.
+  const spoofed = await get(`/qr/${plant.id}?origin=${encodeURIComponent('https://localhost:9999')}`);
+  eq('a QR code is produced', spoofed.status, 200);
+  check('the caller cannot dictate the address', !spoofed.body.target_url.includes('localhost:9999'),
+    spoofed.body.target_url);
+
+  const url = new URL(spoofed.body.target_url);
+  check('the tag never encodes a loopback address',
+    !/^(localhost|127\.|::1)/.test(url.hostname), url.hostname);
+  check('...and it carries the opaque token', url.pathname.includes(spoofed.body.qr_token));
+
+  const plain = await get(`/qr/${plant.id}`);
+  eq('the address is the same with no origin given', plain.body.target_url, spoofed.body.target_url);
+
+  // Following the encoded URL has to land on that plant.
+  const token = url.pathname.split('/p/')[1];
+  const scan = await get('/public/plants/token/' + token);
+  eq('following the tag resolves the record', scan.status, 200);
+  eq('...and it is the right plant', scan.body.plant.plant_code, plant.plant_code);
+
+  // A park with a real domain configures it, and tags then carry that instead.
+  await patch('/settings/public_base_url', { value: 'https://florascan.example.gov.my' }, adminT);
+  const configured = await get(`/qr/${plant.id}`);
+  check('a configured public address wins',
+    configured.body.target_url.startsWith('https://florascan.example.gov.my/p/'),
+    configured.body.target_url);
+
+  await patch('/settings/public_base_url', { value: 'https://florascan.example.gov.my/' }, adminT);
+  const trailing = await get(`/qr/${plant.id}`);
+  check('a trailing slash does not double up',
+    !trailing.body.target_url.includes('//p/'), trailing.body.target_url);
+
+  await patch('/settings/public_base_url', { value: '' }, adminT);
+  const back = await get(`/qr/${plant.id}`);
+  check('clearing it falls back to the network address',
+    !back.body.target_url.includes('example.gov.my'), back.body.target_url);
+}
+
+/* ------------------------------------------------------------------ */
+section('29. Apple touch icons');
+{
+  const html = await (await fetch(ORIGIN + '/')).text();
+
+  // iOS picks by `sizes`; a single un-sized link is the usual reason a home
+  // screen ends up with a screenshot of the page instead of the logo.
+  const links = [...html.matchAll(/<link[^>]*rel="apple-touch-icon"[^>]*>/g)].map((m) => m[0]);
+  check('apple-touch-icon links are present', links.length >= 2, links.length + ' found');
+  check('...and at least one declares a size', links.some((l) => /sizes="\d+x\d+"/.test(l)));
+  check('...including 180x180, what a modern iPhone asks for',
+    links.some((l) => l.includes('180x180')));
+
+  for (const m of links) {
+    const href = m.match(/href="([^"]+)"/)?.[1];
+    if (!href) continue;
+    const res = await fetch(ORIGIN + href);
+    check(`${href} is served`, res.status === 200, 'got ' + res.status);
+    const buf = Buffer.from(await res.arrayBuffer());
+    // Colour type 6 is RGBA, 4 is grey+alpha. iOS fills alpha with black.
+    check(`${href} is opaque`, buf[25] !== 6 && buf[25] !== 4, 'colour type ' + buf[25]);
+  }
+
+  // iOS probes these paths when no link tag suits.
+  for (const p of ['/apple-touch-icon.png', '/apple-touch-icon-precomposed.png']) {
+    const r = await fetch(ORIGIN + p);
+    check(`root fallback ${p} exists`, r.status === 200, 'got ' + r.status);
+  }
+
+  check('the web app title is set for iOS', /apple-mobile-web-app-title/.test(html));
+}
+
+/* ------------------------------------------------------------------ */
+section('30. Photo tints for smoother loading');
+{
+  const plants = (await get('/public/plants?limit=12')).body.results;
+  const withPhoto = plants.filter((p) => p.photo);
+
+  if (withPhoto.length) {
+    const tinted = withPhoto.filter((p) => p.photo_tint);
+    check('cards carry a placeholder colour', tinted.length > 0,
+      `${tinted.length} of ${withPhoto.length} — run "npm run import:tints"`);
+    check('...and it is a hex colour',
+      tinted.every((p) => /^#[0-9a-f]{6}$/i.test(p.photo_tint)),
+      tinted[0]?.photo_tint);
+
+    const detail = (await get('/public/plants/' + withPhoto[0].id)).body.plant;
+    check('each cached photograph on the record carries one too',
+      detail.photos.every((ph) => !ph.file || ph.tint));
+  }
+}
+
+/* ------------------------------------------------------------------ */
+section('31. Archiving a record that was still awaiting review');
+{
+  const made = await post('/plants', {
+    site_name: 'Debug plot, archive-while-pending',
+    proposed_species_name: 'Unknown archive case',
+    species_not_listed: true,
+  }, rangerT);
+  eq('a ranger submits a record', made.status, 201);
+  const id = made.body.plant.id;
+
+  const queued = await get('/submissions?status=pending', botT);
+  check('it shows in the botanist queue', queued.body.results.some((s) => s.plant.id === id));
+
+  const arch = await post(`/plants/${id}/archive`, { reason: 'Withdrawn, wrong tree' }, botT);
+  eq('a botanist archives it before reviewing', arch.status, 200);
+
+  const after = await get('/submissions?status=pending', botT);
+  check('it no longer sits in the queue', !after.body.results.some((s) => s.plant.id === id),
+    'an archived record left in the queue could be approved and published');
+
+  const closed = (await get('/submissions?status=all', botT)).body.results.find((s) => s.plant.id === id);
+  check('the submission is closed, not just hidden', closed && closed.status !== 'pending');
+  check('...and says why', !!closed?.review_comment);
+}
+
+/* ------------------------------------------------------------------ */
+section('32. Tidying up after the run');
 {
   // These suites create records to exercise the workflow. Left behind, they
   // sit at the top of the public register and make a demo look broken, so
   // archive them: the same soft-delete a botanist would use, which keeps the
   // audit trail intact rather than pretending they never happened.
   const all = (await get('/plants', botT)).body.results;
+  // Section 10's awkward payload hides its markers in the species name and the
+  // notes rather than the site, so match across every field a suite writes to -
+  // otherwise that record sits in the review queue for the next demo.
+  const MARKERS = /test plot|test, marker|Bypass test|Approval-o|Botanist direct entry|Workflow test|Rejection test|Audit test|DROP TABLE|Debug plot|<script>|a{200,}/i;
   const litter = all.filter((p) =>
     p.status !== 'archived'
-    && /test plot|test, marker|Bypass test|Approval-o|Botanist direct entry|Workflow test|Rejection test|Audit test|DROP TABLE|Debug plot/i
-      .test(p.site_name || ''));
+    && MARKERS.test([p.site_name, p.proposed_species_name, p.location_notes, p.morphology_notes].join(' ')));
 
   let archived = 0;
   for (const p of litter) {
@@ -881,7 +1007,7 @@ section('28. Tidying up after the run');
     `${litter.length - archived} could not be archived`);
 
   const stillPublic = (await get('/public/plants?limit=100')).body.results
-    .filter((p) => /test plot|test, marker|Bypass test|Workflow test|Audit test/i.test(p.site_name || ''));
+    .filter((p) => MARKERS.test([p.site_name, p.scientific_name, p.common_name].join(' ')));
   check('no test records remain in the public register', stillPublic.length === 0,
     stillPublic.map((p) => p.plant_code + ' @ ' + p.site_name).join(', '));
 }

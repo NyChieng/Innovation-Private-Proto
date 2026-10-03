@@ -199,7 +199,7 @@ export default function Browse() {
               <>
                 <div className="plant-grid" style={{ opacity: loading ? 0.55 : 1, transition: 'opacity 0.15s' }}>
                   {data.results.map((p, i) => (
-                    <Reveal key={p.id} index={i % 8}><PlantCard plant={p} /></Reveal>
+                    <Reveal key={p.id} index={i % 8}><PlantCard plant={p} eager={i < 6} /></Reveal>
                   ))}
                 </div>
 

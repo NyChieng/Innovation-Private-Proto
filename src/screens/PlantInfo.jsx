@@ -56,7 +56,7 @@ function Gallery({ photos, alt }) {
         aria-label="Enlarge photograph"
       >
         <div style={{ aspectRatio: '4/3', borderRadius: 'var(--r-md)', overflow: 'hidden', border: '1px solid var(--border)' }}>
-          <SmartImage src={current.file_path} fallback={current.remote_url} alt={alt} />
+          <SmartImage src={current.file_path} fallback={current.remote_url} tint={current.tint} alt={alt} />
         </div>
         {current.credit && <span className="credit-overlay">{current.credit}</span>}
       </button>
@@ -80,7 +80,7 @@ function Gallery({ photos, alt }) {
                 background: 'var(--surface-3)', cursor: 'pointer',
               }}
             >
-              <SmartImage src={p.thumbnail_path || p.file_path} fallback={p.remote_url} alt="" />
+              <SmartImage src={p.thumbnail_path || p.file_path} fallback={p.remote_url} tint={p.tint} alt="" />
             </button>
           ))}
         </div>

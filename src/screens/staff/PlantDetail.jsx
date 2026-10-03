@@ -17,7 +17,7 @@ function QrPanel({ plant }) {
 
   useEffect(() => {
     setQr(null); setError(null);
-    api.qr(plant.id, window.location.origin).then(setQr).catch((e) => setError(e.message));
+    api.qr(plant.id).then(setQr).catch((e) => setError(e.message));
   }, [plant.id, plant.status]);
 
   if (error) return <Notice kind="warn" title="No tag yet">{error}</Notice>;

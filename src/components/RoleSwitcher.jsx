@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useApp } from '../lib/store.jsx';
 import { Avatar } from './ui.jsx';
 import { homeFor } from '../lib/format.js';
+import { resetIntro } from '../lib/intro.js';
 import * as I from '../lib/icons.jsx';
 
 /**
@@ -159,9 +160,20 @@ export default function RoleSwitcher() {
                 ))}
               </div>
             </div>
-            <button className="btn btn-sm btn-block" onClick={() => { setOpen(false); navigate('/connect'); }}>
-              <I.Phone /> Open on my phone
-            </button>
+            <div className="row" style={{ gap: 7 }}>
+              <button className="btn btn-sm grow" onClick={() => { setOpen(false); navigate('/connect'); }}>
+                <I.Phone /> Open on my phone
+              </button>
+              {/* Replaying the welcome screen matters during a walkthrough:
+                  it only ever appears once per browser otherwise. */}
+              <button
+                className="btn btn-sm"
+                title="Show the welcome screen again"
+                onClick={() => { resetIntro(); setOpen(false); navigate('/'); }}
+              >
+                <I.Refresh /> Intro
+              </button>
+            </div>
             <div className="tiny faint">Demo password for every account: <span className="mono">demo1234</span></div>
           </div>
         </div>
