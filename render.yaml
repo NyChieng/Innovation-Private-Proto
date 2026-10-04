@@ -9,10 +9,13 @@
 # which is what makes the QR tags, the phone hand-off and the installable web
 # app work without CORS.
 #
-# Before the first deploy, set these two in the Render dashboard (they are
-# marked sync:false so they are never committed):
-#   DATABASE_URL      mysql://user:password@host:port/defaultdb   (Aiven)
-#   PUBLIC_BASE_URL   https://<this service>.onrender.com
+# Before the first deploy, set these in the Render dashboard (they are marked
+# sync:false, so the values are never committed):
+#   DB_HOST DB_PORT DB_USER DB_PASSWORD DB_NAME   the Aiven connection
+#   PUBLIC_BASE_URL                               https://<this service>.onrender.com
+#
+# The DB_* names are what the rest of the group shares the Aiven details as;
+# a single DATABASE_URL is accepted instead if you prefer one string.
 #
 # PUBLIC_BASE_URL is chicken-and-egg: deploy once, copy the URL Render gives
 # you, set it, redeploy. Printed QR tags encode it, so it must be right before
@@ -46,7 +49,15 @@ services:
         value: "24"
       - key: NODE_ENV
         value: production
-      - key: DATABASE_URL
+      - key: DB_HOST
+        sync: false
+      - key: DB_PORT
+        sync: false
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: DB_NAME
         sync: false
       - key: PUBLIC_BASE_URL
         sync: false

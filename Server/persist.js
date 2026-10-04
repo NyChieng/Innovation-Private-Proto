@@ -39,6 +39,27 @@ export const persistenceEnabled = () => Boolean(pool);
 const LOCAL_HOST = /^(localhost|127\.0\.0\.1|\[::1\]|::1)$/i;
 
 /**
+ * Where the database is, from either shape of configuration.
+ *
+ * DATABASE_URL is one string and is what Render wants. The rest of the group
+ * shares the Aiven details as DB_HOST / DB_PORT / DB_USER / DB_PASSWORD /
+ * DB_NAME, so those are accepted too and assembled here - one .env works for
+ * everybody rather than each person translating it.
+ *
+ * The password is percent-encoded on the way in: an Aiven password containing
+ * @ or / would otherwise break the URL it is being put into.
+ */
+function databaseUrl() {
+  if (process.env.DATABASE_URL) return process.env.DATABASE_URL;
+
+  const { DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME } = process.env;
+  if (!DB_HOST || !DB_USER) return null;
+
+  const auth = `${encodeURIComponent(DB_USER)}:${encodeURIComponent(DB_PASSWORD || '')}`;
+  return `mysql://${auth}@${DB_HOST}:${DB_PORT || 3306}/${DB_NAME || 'defaultdb'}`;
+}
+
+/**
  * Whether to speak TLS to this database, and how.
  *
  * Aiven and every other managed MySQL require it. A local MySQL - XAMPP, or a
@@ -75,7 +96,7 @@ export async function initPersistence() {
   // for good, so a test run uses "npm run dev:memory" and keeps out of it.
   if (process.argv.includes('--no-db')) return null;
 
-  const url = process.env.DATABASE_URL;
+  const url = databaseUrl();
   if (!url) return null;
 
   const mysql = (await import('mysql2/promise')).default;
