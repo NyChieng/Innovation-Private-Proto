@@ -328,6 +328,7 @@ on mount rather than waiting for a load event that has already been and gone.
 | Command | What it does |
 | --- | --- |
 | `npm run dev` | Start the server over HTTPS (the default) |
+| `npm run dev:memory` | Same, but ignore the database — what the tests run against |
 | `npm run http` | Same, over plain HTTP — camera and install will not work |
 | `npm run port` | Assign a new random port |
 | `npm run import:species` | Rebuild the species dataset from GBIF, iNaturalist and Wikipedia |
@@ -337,7 +338,42 @@ on mount rather than waiting for a load event that has already been and gone.
 
 ---
 
+## Keeping data across restarts
+
+Out of the box the prototype holds everything in memory and reseeds on every
+start, which is the right behaviour for a demo — nobody can leave it in a mess.
+Set `DATABASE_URL` in `.env` (copy `.env.example`) and it will instead save
+itself to Postgres and come back where it left off.
+
+What it does is deliberately modest. The store in `server/db.js` is plain arrays
+that the API mutates in place, across 75 call sites. Rather than rewrite all of
+that as async SQL, `server/persist.js` writes the whole store to a single JSONB
+row after each change — debounced two seconds, with a ten-second ceiling so a
+busy period still gets written — and reads it back at boot. Ids are walked
+forward past whatever the snapshot used, so nothing collides. The database holds
+one document, not a relational schema; `plant_registry_schema.sql` remains the
+design of record.
+
+Two details that matter in practice:
+
+- **Use the Supabase *session pooler* connection string**, not the direct one.
+  On the free tier `db.<ref>.supabase.co` publishes no IPv4 address at all, so
+  the direct connection simply fails to resolve from most machines and hosts.
+- **The table is tuned for autovacuum on a flat row count.** Every save rewrites
+  the one row, and Postgres keeps the old version until it is collected; the
+  default threshold is a share of the row count, which on a one-row table never
+  trips. Left alone it grew to 4.9 MB for a 570 kB snapshot.
+
+If the database cannot be reached the server says so once and carries on in
+memory, so a lost connection never takes the demo down with it.
+
+---
+
 ## Tests
+
+The suites register and archive real records to exercise the workflow, so run
+them against a server started with `npm run dev:memory`. Pointed at the live
+database they would leave that litter in it permanently.
 
 Start the server, then in a second terminal:
 

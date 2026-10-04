@@ -132,10 +132,12 @@ export default function Connect() {
           <div className="card card-pad">
             <h3 style={{ marginBottom: 8 }}>How to connect</h3>
             <ol className="small mute" style={{ paddingLeft: 18, margin: 0, lineHeight: 1.85 }}>
-              <li>Put your phone on the <strong>same Wi-Fi or hotspot</strong> as this computer.</li>
+              {/* Hosted on a real domain, the phone reaches the site over the
+                  internet: no shared network, and nothing to accept. */}
+              {!info.hosted && <li>Put your phone on the <strong>same Wi-Fi or hotspot</strong> as this computer.</li>}
               <li>Open the camera app and point it at the QR code.</li>
               <li>Tap the notification that appears.</li>
-              {info.secure && <li>Accept the certificate warning once (Advanced &rarr; Proceed).</li>}
+              {info.secure && !info.hosted && <li>Accept the certificate warning once (Advanced &rarr; Proceed).</li>}
             </ol>
           </div>
 

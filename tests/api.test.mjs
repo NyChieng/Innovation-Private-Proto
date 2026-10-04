@@ -16,8 +16,13 @@
 // This is a local run against our own machine, so trusting it is fine.
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
-const PORT = process.env.PORT || (await readPort());
-const ORIGIN = await detectOrigin(PORT);
+// BASE_URL points the suite at a deployed site instead of this machine, e.g.
+//   BASE_URL=https://florascan.onrender.com npm run test:api
+// Mind what it is aimed at: these tests register and archive real records, so
+// a run against production leaves that litter in the live database.
+const ORIGIN = process.env.BASE_URL
+  ? process.env.BASE_URL.replace(/\/+$/, '')
+  : await detectOrigin(process.env.PORT || (await readPort()));
 const BASE = `${ORIGIN}/api`;
 
 async function readPort() {

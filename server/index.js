@@ -8,11 +8,19 @@ import qrTerminal from 'qrcode-terminal';
 
 import { seed } from './seed.js';
 import { createApi } from './api.js';
+import { initPersistence, closePersistence, persistenceMiddleware } from './persist.js';
 import { resolvePort } from './port.js';
 import { lanAddresses } from './net.js';
 import { tlsOptions, caDer, CA_PATH } from './certs.js';
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+
+// Node reads .env itself since v20.6, so there is no dotenv dependency here.
+// Real environment variables win, which is what a host expects.
+try {
+  const envFile = path.join(root, '.env');
+  if (fs.existsSync(envFile)) process.loadEnvFile(envFile);
+} catch { /* a malformed .env should not stop the prototype starting */ }
 const argv = process.argv.slice(2);
 // HTTPS by default. A phone browser refuses the camera, geolocation and the
 // install prompt on a plain http:// LAN address, which is most of what this
@@ -24,9 +32,26 @@ const prod = argv.includes('--prod') || process.env.NODE_ENV === 'production';
 
 seed();
 
+// With DATABASE_URL set, a saved snapshot replaces the seeded data. Without
+// it this does nothing and the prototype stays in memory, as before.
+let persistence = null;
+try {
+  persistence = await initPersistence();
+} catch (err) {
+  console.error(`\n  Could not reach the database: ${err.message}`);
+  console.error('  Carrying on in memory - the demo works, but nothing is saved.\n');
+}
+
 const app = express();
 app.disable('x-powered-by');
 
+// Hosted behind a platform's proxy, the only truthful account of the public
+// scheme and host is in the forwarded headers - the app itself sees plain HTTP
+// on a private container address. Trusting them locally would let any caller
+// spoof the origin, so this is production only.
+if (prod) app.set('trust proxy', 1);
+
+app.use('/api', persistenceMiddleware);
 app.use('/api', createApi());
 
 /* ------------------------------------------------------------------ */
@@ -130,7 +155,22 @@ function footer(line) {
   line(process.env.PORT
     ? `\x1b[2mPort ${port} comes from the PORT variable and is not saved.\x1b[0m`
     : `\x1b[2mPort ${port} is saved in proto.config.json - "npm run port" picks a new one.\x1b[0m`);
+  line(persistence
+    ? `\x1b[2mSaved state: ${persistence}\x1b[0m`
+    : '\x1b[2mIn memory only - set DATABASE_URL in .env to keep data across restarts.\x1b[0m');
   console.log('');
+}
+
+// A redeploy or a Ctrl-C should not lose the last couple of seconds of edits,
+// which are still sitting in the debounce window.
+let closing = false;
+for (const sig of ['SIGINT', 'SIGTERM']) {
+  process.on(sig, async () => {
+    if (closing) return;
+    closing = true;
+    await closePersistence();
+    process.exit(0);
+  });
 }
 
 server.on('error', (err) => {

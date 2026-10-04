@@ -16,12 +16,16 @@
     "import:tints": "node scripts/photo-tints.mjs",
     "test": "node tests/api.test.mjs && node tests/ui.test.mjs",
     "test:api": "node tests/api.test.mjs",
-    "test:ui": "node tests/ui.test.mjs"
+    "test:ui": "node tests/ui.test.mjs",
+    "dev:memory": "node server/index.js --no-db"
   },
   "dependencies": {
+    "bcryptjs": "^3.0.3",
     "express": "^4.21.2",
     "jsqr": "^1.4.0",
+    "mysql2": "^3.24.5",
     "node-forge": "^1.4.0",
+    "pg": "^8.23.1",
     "qrcode": "^1.5.4",
     "qrcode-terminal": "^0.12.0",
     "react": "^18.3.1",

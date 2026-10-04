@@ -9,6 +9,7 @@ import path from 'node:path';
 import { renderPhoto } from './images.js';
 import { photoExists, PHOTO_DIR, SPECIES_DATA, hasRealPhotos } from './species-data.js';
 import { lanAddresses } from './net.js';
+import { hashPassword, verifyPassword, DEMO_PASSWORD } from './passwords.js';
 
 /* ------------------------------------------------------------------ */
 /* Sessions                                                            */
@@ -222,13 +223,27 @@ export function publicOrigin(req) {
   const configured = String(getSetting('public_base_url') || '').trim().replace(/\/+$/, '');
   if (configured) return configured;
 
+  // Deployment config, below the admin setting so the running site can still
+  // be corrected without a redeploy, but above any guess from the network.
+  const fromEnv = String(process.env.PUBLIC_BASE_URL || '').trim().replace(/\/+$/, '');
+  if (fromEnv) return fromEnv;
+
+  // Deployed behind a host's proxy. The app itself speaks plain HTTP while the
+  // public address is HTTPS, so the forwarded header is the only honest source
+  // of the scheme, and the Host header is the real domain. The machine's own
+  // addresses are a private container IP here and must not be used.
+  if (req.app.get('trust proxy')) {
+    const proto = String(req.get('x-forwarded-proto') || '').split(',')[0].trim();
+    const host = req.get('host');
+    if (host) return `${proto || req.protocol || 'https'}://${host}`;
+  }
+
+  // Local: the address another device on the same Wi-Fi can reach, which is
+  // what makes the phone hand-off work at all.
   const scheme = req.app.get('protoScheme') || req.protocol || 'https';
   const port = req.app.get('protoPort');
   const lan = lanAddresses()[0]?.address;
   if (lan) return `${scheme}://${lan}${port ? ':' + port : ''}`;
-
-  const host = (req.get('host') || '').replace(/:\d+$/, '');
-  if (!LOOPBACK.test(host)) return `${scheme}://${req.get('host')}`;
 
   // Nothing better available; the tag will only work on this machine.
   return `${scheme}://${req.get('host')}`;
@@ -359,7 +374,7 @@ export function createApi() {
         role_label: db.roles.find((r) => r.id === u.role_id)?.label,
         is_active: !!u.is_active,
       })),
-      demo_password: 'demo1234',
+      demo_password: DEMO_PASSWORD,
       families: [...new Set(db.species.map((s) => s.family).filter(Boolean))].sort(),
       genera: [...new Set(db.species.map((s) => s.genus).filter(Boolean))].sort(),
       sites: [...new Set(db.plants.map((p) => p.site_name).filter(Boolean))].sort(),
@@ -375,14 +390,15 @@ export function createApi() {
 
   api.get('/auth/me', (req, res) => res.json({ user: shapeUser(req.user) }));
 
-  api.post('/auth/login', (req, res) => {
+  api.post('/auth/login', async (req, res, next) => {
+   try {
     const { email, password } = req.body || {};
     const user = db.users.find((u) => u.email.toLowerCase() === String(email || '').toLowerCase().trim());
     if (!user) {
       activity({ user_id: null, action: 'login_failed', detail: 'Unknown email: ' + email });
       return res.status(401).json({ error: 'No account with that email address.' });
     }
-    if (password !== 'demo1234') {
+    if (!await verifyPassword(password, user.password_hash)) {
       activity({ user_id: user.id, action: 'login_failed', detail: 'Wrong password' });
       return res.status(401).json({ error: 'Incorrect password. The demo password is demo1234.' });
     }
@@ -393,6 +409,11 @@ export function createApi() {
     user.last_login_at = nowIso();
     activity({ user_id: user.id, action: 'login', detail: 'Signed in' });
     res.json({ token: issueToken(user.id), user: shapeUser(user) });
+   } catch (err) {
+    // An async handler's rejection does not reach Express 4 on its own, and an
+    // unanswered login request just hangs the sign-in button.
+    next(err);
+   }
   });
 
   api.post('/auth/logout', (req, res) => {
@@ -1050,13 +1071,13 @@ export function createApi() {
       role_id: Number(b.role_id),
       full_name: b.full_name.trim(), email: b.email.trim().toLowerCase(),
       title: b.title || null, phone: b.phone || null,
-      password_hash: 'demo$' + Buffer.from('demo1234').toString('base64'),
+      password_hash: hashPassword(DEMO_PASSWORD),
       must_change_password: 1, is_active: 1,
       email_verified_at: null, last_login_at: null,
       created_by: req.user.id, updated_at: nowIso(), deleted_at: null,
     });
     audit({ user_id: req.user.id, action: 'create', entity_type: 'users', entity_id: row.id, new_values: { email: row.email, role_id: row.role_id } });
-    res.status(201).json({ user: shapeUser(row), temporary_password: 'demo1234' });
+    res.status(201).json({ user: shapeUser(row), temporary_password: DEMO_PASSWORD });
   });
 
   api.patch('/users/:id', need('user.manage'), (req, res) => {
@@ -1089,12 +1110,15 @@ export function createApi() {
   api.post('/users/:id/reset-password', need('user.manage'), (req, res) => {
     const u = byId('users', req.params.id);
     if (!u) return res.status(404).json({ error: 'Not found' });
+    // This used to flag the account and report a temporary password without
+    // ever setting one - the old password went on working.
+    u.password_hash = hashPassword(DEMO_PASSWORD);
     u.must_change_password = 1;
     u.updated_at = nowIso();
     for (const [token, uid] of sessions) if (uid === u.id) sessions.delete(token);
     audit({ user_id: req.user.id, action: 'password_reset', entity_type: 'users', entity_id: u.id, new_values: { must_change_password: 1 } });
     activity({ user_id: req.user.id, action: 'password_changed', detail: 'Reset the password for ' + u.email });
-    res.json({ ok: true, temporary_password: 'demo1234' });
+    res.json({ ok: true, temporary_password: DEMO_PASSWORD });
   });
 
   api.get('/activity', need('system.audit'), (req, res) => {
@@ -1188,23 +1212,31 @@ export function createApi() {
   /** Everything the "open on your phone" screen needs. */
   api.get('/connect', async (req, res) => {
     const port = req.app.get('protoPort');
-    const scheme = req.app.get('protoScheme') || 'http';
     const addrs = lanAddresses();
-    const primary = addrs[0]?.address || '127.0.0.1';
-    const url = `${scheme}://${primary}:${port}`;
+    const url = publicOrigin(req);
+    const scheme = url.startsWith('https') ? 'https' : 'http';
+
+    // Hosted on a real domain with a real certificate: there is no local
+    // network worth enumerating and nothing for the phone to trust, so the
+    // certificate dance has to disappear rather than confuse people.
+    const hosted = !addrs.some((a) => url.includes(a.address));
+
     const png = await QRCode.toDataURL(url, {
       margin: 1, width: 900, errorCorrectionLevel: 'M',
       color: { dark: '#14281d', light: '#ffffff' },
     });
     res.json({
-      url, png, port, scheme,
-      addresses: addrs.map((a) => ({ ...a, url: `${scheme}://${a.address}:${port}` })),
+      url, png, port, scheme, hosted,
+      addresses: hosted ? [] : addrs.map((a) => ({ ...a, url: `${scheme}://${a.address}:${port}` })),
       secure: scheme === 'https',
-      // Where a phone can download the local CA certificate to trust it.
-      ca_url: req.app.get('protoCaPath') || null,
-      note: scheme === 'https'
-        ? 'Your phone will warn about the local certificate. Accept it once and the in-app camera scanner will work; trust it (below) to remove the warning for good.'
-        : 'Browsers only allow camera access over HTTPS or localhost, so the in-app scanner cannot open the camera on this plain-HTTP address. Run "npm run https" if you need the live camera on your phone.',
+      // Where a phone can download the local CA certificate to trust it. Only
+      // meaningful while the site is served from this machine.
+      ca_url: hosted ? null : (req.app.get('protoCaPath') || null),
+      note: hosted
+        ? 'Open this address on your phone, or scan the code. The site has a real certificate, so there is nothing to accept and the camera scanner works straight away.'
+        : scheme === 'https'
+          ? 'Your phone will warn about the local certificate. Accept it once and the in-app camera scanner will work; trust it (below) to remove the warning for good.'
+          : 'Browsers only allow camera access over HTTPS or localhost, so the in-app scanner cannot open the camera on this plain-HTTP address. Run "npm run https" if you need the live camera on your phone.',
     });
   });
 

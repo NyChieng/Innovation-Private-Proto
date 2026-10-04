@@ -23,9 +23,12 @@ const puppeteer = require('puppeteer-core');
 // This is a local run against our own machine, so trusting it is fine.
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
-const PORT = process.env.PORT || JSON.parse(
-  fs.readFileSync(new URL('../proto.config.json', import.meta.url), 'utf8'),
-).port;
+// Only needed when testing this machine; a BASE_URL run has no local config.
+const PORT = process.env.PORT || (() => {
+  try {
+    return JSON.parse(fs.readFileSync(new URL('../proto.config.json', import.meta.url), 'utf8')).port;
+  } catch { return null; }
+})();
 
 /** The server can run on either scheme; find out which, rather than assume. */
 async function detectOrigin(port) {
@@ -38,7 +41,12 @@ async function detectOrigin(port) {
   throw new Error(`Nothing answering on port ${port}. Start the server with "npm run dev".`);
 }
 
-const BASE = await detectOrigin(PORT);
+// BASE_URL drives the browser against a deployed site instead of this machine.
+// These tests register and archive real records, so point it at staging rather
+// than at the site you are about to demo.
+const BASE = process.env.BASE_URL
+  ? process.env.BASE_URL.replace(/\/+$/, '')
+  : await detectOrigin(PORT);
 
 const CHROME_CANDIDATES = [
   process.env.CHROME_PATH,

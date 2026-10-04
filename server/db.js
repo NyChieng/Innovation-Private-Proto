@@ -38,6 +38,33 @@ export function nextId(table) {
   return counters[table];
 }
 
+/**
+ * Replace every table from a saved snapshot. The arrays are refilled in place
+ * rather than reassigned: nothing currently holds a reference to one, but a
+ * stale alias would be a miserable bug to find later.
+ *
+ * Returns the row count per table, for the startup line.
+ */
+export function loadSnapshot(data) {
+  const counts = {};
+  for (const table of Object.keys(db)) {
+    if (!Array.isArray(db[table]) || !Array.isArray(data?.[table])) continue;
+    db[table].length = 0;
+    for (const row of data[table]) db[table].push(row);
+    counts[table] = db[table].length;
+  }
+  syncCounters();
+  return counts;
+}
+
+/** Ids have to carry on past whatever the snapshot already used. */
+export function syncCounters() {
+  for (const [table, rows] of Object.entries(db)) {
+    if (!Array.isArray(rows)) continue;
+    counters[table] = rows.reduce((max, r) => Math.max(max, Number(r.id) || 0), 0);
+  }
+}
+
 export const nowIso = () => new Date().toISOString();
 
 export function insert(table, row) {

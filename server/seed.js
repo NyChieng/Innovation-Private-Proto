@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { db, insert, nowIso, notify, notifyPermission, audit, activity } from './db.js';
 import { SPECIES_DATA, photoExists, tintFor } from './species-data.js';
+import { hashPassword, DEMO_PASSWORD } from './passwords.js';
 
 const SPECIES = SPECIES_DATA.species;
 
@@ -111,8 +112,9 @@ export function seed() {
     email: u.email,
     title: u.title,
     phone: '+60 8' + (5000000 + Math.floor(rnd() * 900000)),
-    // Prototype only. The real API stores a bcrypt hash and never the password.
-    password_hash: 'demo$' + Buffer.from('demo1234').toString('base64'),
+    // A real bcrypt hash, salted per account, exactly as the schema specifies.
+    // Every demo account shares the same password; the hashes still differ.
+    password_hash: hashPassword(DEMO_PASSWORD),
     must_change_password: 0,
     is_active: u.inactive ? 0 : 1,
     email_verified_at: daysAgo(120),

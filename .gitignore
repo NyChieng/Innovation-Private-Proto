@@ -4,3 +4,4 @@ proto.config.json
 .certs/
 *.log
 server/data/photos/
+.env
