@@ -2,7 +2,9 @@ import crypto from 'node:crypto';
 import express from 'express';
 import QRCode from 'qrcode';
 import {
-  db, insert, byId, nowIso, getSetting, setSetting, permissionsForRole, userCan,
+  q, one, count, insert, update, byId, tx, nowIso,
+  getSetting, setSetting, allSettings, permissionsForRole, userCan,
+  roles as cachedRoles, roleById,
   audit, activity, notify, notifyPermission, recordRevisions,
 } from './db.js';
 import path from 'node:path';
@@ -11,18 +13,36 @@ import { photoExists, PHOTO_DIR, SPECIES_DATA, hasRealPhotos } from './species-d
 import { lanAddresses } from './net.js';
 import { hashPassword, verifyPassword, DEMO_PASSWORD } from './passwords.js';
 
+/**
+ * An async handler that rejects does not reach Express 4's error middleware on
+ * its own - the request simply hangs. Everything below is wrapped in this.
+ */
+const route = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+
+/** Placeholders for an IN clause; mysql2's execute() will not expand an array. */
+const placeholders = (list) => list.map(() => '?').join(', ');
+
 /* ------------------------------------------------------------------ */
 /* Sessions                                                            */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Tokens are opaque random strings. The hash of each one is stored in
+ * refresh_tokens, exactly as the schema specifies - the token itself is never
+ * written down. The Map in front of it is a cache, not the record: a restart
+ * empties it and the next request falls back to the table, so a signed-in
+ * ranger stays signed in across a redeploy.
+ */
 const sessions = new Map(); // token -> user_id
 
-function issueToken(userId) {
+const hashToken = (token) => crypto.createHash('sha256').update(token).digest('hex');
+
+async function issueToken(userId) {
   const token = crypto.randomBytes(24).toString('hex');
   sessions.set(token, userId);
-  insert('refresh_tokens', {
+  await insert('refresh_tokens', {
     user_id: userId,
-    token_hash: crypto.createHash('sha256').update(token).digest('hex'),
+    token_hash: hashToken(token),
     device_info: 'Prototype browser session',
     expires_at: new Date(Date.now() + 7 * 86400000).toISOString(),
     revoked_at: null,
@@ -30,20 +50,45 @@ function issueToken(userId) {
   return token;
 }
 
-function currentUser(req) {
+async function revokeToken(token) {
+  sessions.delete(token);
+  await q('UPDATE refresh_tokens SET revoked_at = ? WHERE token_hash = ? AND revoked_at IS NULL',
+    [nowIso(), hashToken(token)]);
+}
+
+async function revokeAllFor(userId) {
+  for (const [token, uid] of sessions) if (uid === userId) sessions.delete(token);
+  await q('UPDATE refresh_tokens SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL',
+    [nowIso(), userId]);
+}
+
+async function currentUser(req) {
   const header = req.get('authorization') || '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : null;
   if (!token) return null;
-  const id = sessions.get(token);
-  if (!id) return null;
-  const user = byId('users', id);
+
+  let id = sessions.get(token);
+  if (!id) {
+    const row = await one(
+      `SELECT user_id FROM refresh_tokens
+        WHERE token_hash = ? AND revoked_at IS NULL AND expires_at > ? LIMIT 1`,
+      [hashToken(token), nowIso()],
+    );
+    if (!row) return null;
+    id = row.user_id;
+    sessions.set(token, id);
+  }
+
+  // Re-read on every request, so deactivating an account takes effect at once
+  // rather than when the token happens to expire.
+  const user = await byId('users', id);
   if (!user || !user.is_active || user.deleted_at) return null;
   return user;
 }
 
 function shapeUser(u) {
   if (!u) return null;
-  const role = db.roles.find((r) => r.id === u.role_id);
+  const role = roleById(u.role_id);
   return {
     id: u.id, full_name: u.full_name, email: u.email, title: u.title,
     phone: u.phone, role: role?.name, role_label: role?.label, role_id: u.role_id,
@@ -51,35 +96,6 @@ function shapeUser(u) {
     last_login_at: u.last_login_at, created_at: u.created_at,
     permissions: permissionsForRole(u.role_id),
   };
-}
-
-/* ------------------------------------------------------------------ */
-/* Shaping helpers - the API always returns joined, client-ready rows   */
-/* ------------------------------------------------------------------ */
-
-const statusById = (id) => db.conservation_statuses.find((c) => c.id === id) || null;
-
-function shapeSpecies(s) {
-  if (!s) return null;
-  const cs = statusById(s.conservation_status_id);
-  return {
-    ...s,
-    conservation_code: cs?.code ?? 'NE',
-    conservation_label: cs?.label ?? 'Not evaluated',
-    conservation_source: s.conservation_source ?? null,
-    plant_count: db.plants.filter((p) => p.species_id === s.id && !p.deleted_at).length,
-  };
-}
-
-function photosFor(plantId) {
-  return db.plant_photos
-    .filter((ph) => ph.plant_id === plantId && !ph.deleted_at)
-    .sort((a, b) => b.is_primary - a.is_primary);
-}
-
-function activeQr(plantId) {
-  return db.qr_codes.find((q) => q.plant_id === plantId && q.status === 'active')
-    || db.qr_codes.find((q) => q.plant_id === plantId) || null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -127,17 +143,89 @@ function withheldLocation(shaped) {
   };
 }
 
-function shapePlant(p, { full = false, viewer = null } = {}) {
+/* ------------------------------------------------------------------ */
+/* Reading plants                                                      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Plants always come back joined to their species and conservation status,
+ * which is what every caller needs and what v_public_plants does for the
+ * public half. One query rather than one per row.
+ */
+const PLANT_SELECT = `
+  SELECT p.*,
+         s.scientific_name, s.common_name, s.local_name, s.family, s.genus,
+         s.growth_form, s.conservation_status_id,
+         cs.code  AS conservation_code,
+         cs.label AS conservation_label
+    FROM plants p
+    LEFT JOIN species s  ON s.id = p.species_id
+    LEFT JOIN conservation_statuses cs ON cs.id = s.conservation_status_id
+`;
+
+const plantsWhere = (clause, params = []) => q(`${PLANT_SELECT} WHERE ${clause}`, params);
+
+/**
+ * Everything shapePlant needs that is not on the joined row, fetched for a
+ * whole page at once.
+ *
+ * Doing this per plant is what makes a list page slow: six lookups each, which
+ * on a 130-row register is close to eight hundred round trips. Against a
+ * database in Singapore that is half a minute. Five queries instead.
+ */
+async function plantExtras(rows) {
+  const ids = rows.map((r) => r.id);
+  const empty = { photos: new Map(), qr: new Map(), users: new Map(), subs: new Map(), scans: new Map(), reports: new Map(), species: new Map() };
+  if (!ids.length) return empty;
+
+  const userIds = [...new Set(rows.flatMap((r) => [r.registered_by, r.verified_by]).filter(Boolean))];
+  const speciesIds = [...new Set(rows.map((r) => r.species_id).filter(Boolean))];
+  const ph = placeholders(ids);
+
+  const [photos, codes, users, subs, scans, reports, species] = await Promise.all([
+    q(`SELECT * FROM plant_photos WHERE plant_id IN (${ph}) AND deleted_at IS NULL
+        ORDER BY is_primary DESC, id ASC`, ids),
+    q(`SELECT * FROM qr_codes WHERE plant_id IN (${ph})
+        ORDER BY (status = 'active') DESC, id ASC`, ids),
+    userIds.length
+      ? q(`SELECT id, full_name FROM users WHERE id IN (${placeholders(userIds)})`, userIds)
+      : [],
+    q(`SELECT * FROM plant_submissions WHERE plant_id IN (${ph}) ORDER BY submitted_at DESC`, ids),
+    q(`SELECT plant_id, COUNT(*) n FROM qr_scans WHERE plant_id IN (${ph}) GROUP BY plant_id`, ids),
+    q(`SELECT plant_id, COUNT(*) n FROM plant_reports WHERE plant_id IN (${ph}) GROUP BY plant_id`, ids),
+    // The whole species row, not just the columns joined onto the plant: a
+    // detail page shows the description, characteristics and the leaf, flower
+    // and fruit sections.
+    speciesIds.length
+      ? q(`SELECT * FROM species WHERE id IN (${placeholders(speciesIds)})`, speciesIds)
+      : [],
+  ]);
+
+  const group = (list, key) => {
+    const m = new Map();
+    for (const row of list) {
+      if (!m.has(row[key])) m.set(row[key], []);
+      m.get(row[key]).push(row);
+    }
+    return m;
+  };
+
+  return {
+    photos: group(photos, 'plant_id'),
+    qr: group(codes, 'plant_id'),
+    users: new Map(users.map((u) => [u.id, u])),
+    subs: group(subs, 'plant_id'),
+    scans: new Map(scans.map((r) => [r.plant_id, Number(r.n)])),
+    reports: new Map(reports.map((r) => [r.plant_id, Number(r.n)])),
+    species: new Map(species.map((s) => [s.id, s])),
+  };
+}
+
+function shapePlant(p, ex, { full = false, viewer = null } = {}) {
   if (!p) return null;
-  const sp = p.species_id ? db.species.find((s) => s.id === p.species_id) : null;
-  const cs = sp ? statusById(sp.conservation_status_id) : null;
-  const qr = activeQr(p.id);
-  const registrar = byId('users', p.registered_by);
-  const verifier = byId('users', p.verified_by);
-  const photos = photosFor(p.id);
-  const sub = db.plant_submissions
-    .filter((s) => s.plant_id === p.id)
-    .sort((a, b) => new Date(b.submitted_at) - new Date(a.submitted_at))[0] || null;
+  const photos = ex.photos.get(p.id) || [];
+  const qr = (ex.qr.get(p.id) || [])[0] || null;
+  const sub = (ex.subs.get(p.id) || [])[0] || null;
 
   const base = {
     id: p.id,
@@ -146,14 +234,14 @@ function shapePlant(p, { full = false, viewer = null } = {}) {
     species_id: p.species_id,
     proposed_species_name: p.proposed_species_name,
     species_not_listed: !p.species_id,
-    scientific_name: sp?.scientific_name ?? null,
-    common_name: sp?.common_name ?? null,
-    local_name: sp?.local_name ?? null,
-    family: sp?.family ?? null,
-    genus: sp?.genus ?? null,
-    growth_form: sp?.growth_form ?? null,
-    conservation_code: cs?.code ?? null,
-    conservation_label: cs?.label ?? null,
+    scientific_name: p.scientific_name ?? null,
+    common_name: p.common_name ?? null,
+    local_name: p.local_name ?? null,
+    family: p.family ?? null,
+    genus: p.genus ?? null,
+    growth_form: p.growth_form ?? null,
+    conservation_code: p.conservation_code ?? null,
+    conservation_label: p.conservation_label ?? null,
     latitude: p.latitude, longitude: p.longitude,
     altitude_m: p.altitude_m, gps_accuracy_m: p.gps_accuracy_m,
     site_name: p.site_name, location_notes: p.location_notes,
@@ -163,8 +251,8 @@ function shapePlant(p, { full = false, viewer = null } = {}) {
     view_count: p.view_count,
     registered_at: p.registered_at, verified_at: p.verified_at,
     registered_by: p.registered_by,
-    registered_by_name: registrar?.full_name ?? null,
-    verified_by_name: verifier?.full_name ?? null,
+    registered_by_name: ex.users.get(p.registered_by)?.full_name ?? null,
+    verified_by_name: ex.users.get(p.verified_by)?.full_name ?? null,
     qr_token: qr?.qr_token ?? null,
     photo: photos[0]?.file_path ?? null,
     photo_remote: photos[0]?.remote_url ?? null,
@@ -176,33 +264,52 @@ function shapePlant(p, { full = false, viewer = null } = {}) {
   };
 
   // Anyone not signed in as staff gets the protected view.
-  const staff = !!viewer;
-  const protect = !staff && isLocationProtected(base.conservation_code);
-
+  const protect = !viewer && isLocationProtected(base.conservation_code);
   if (!full) return protect ? withheldLocation(base) : base;
 
   const detail = {
     ...base,
-    species: shapeSpecies(sp),
+    species: p.species_id && ex.species.get(p.species_id) ? {
+      ...ex.species.get(p.species_id),
+      conservation_code: p.conservation_code ?? 'NE',
+      conservation_label: p.conservation_label ?? 'Not evaluated',
+    } : null,
     photos,
     submission: sub,
-    scan_count: db.qr_scans.filter((s) => s.plant_id === p.id).length,
-    reports: db.plant_reports.filter((r) => r.plant_id === p.id).length,
+    scan_count: ex.scans.get(p.id) || 0,
+    reports: ex.reports.get(p.id) || 0,
   };
-
   return protect ? withheldLocation(detail) : detail;
 }
 
-/** Mirrors v_public_plants: approved, not deleted, species resolved. */
-function publicPlants() {
-  return db.plants.filter((p) => p.status === 'approved' && !p.deleted_at && p.species_id);
+/** Fetch, then shape, a set of plants - the pairing every endpoint needs. */
+async function shapeMany(rows, opts) {
+  const ex = await plantExtras(rows);
+  return rows.map((r) => shapePlant(r, ex, opts));
+}
+
+async function shapeOne(row, opts) {
+  if (!row) return null;
+  const ex = await plantExtras([row]);
+  return shapePlant(row, ex, opts);
+}
+
+/** The species row plus its status and how many plants reference it. */
+async function shapeSpecies(s) {
+  if (!s) return null;
+  const cs = s.conservation_status_id ? await byId('conservation_statuses', s.conservation_status_id) : null;
+  return {
+    ...s,
+    conservation_code: cs?.code ?? 'NE',
+    conservation_label: cs?.label ?? 'Not evaluated',
+    conservation_source: s.conservation_source ?? null,
+    plant_count: await count('SELECT COUNT(*) FROM plants WHERE species_id = ? AND deleted_at IS NULL', [s.id]),
+  };
 }
 
 /* ------------------------------------------------------------------ */
 /* Where a printed tag should point                                    */
 /* ------------------------------------------------------------------ */
-
-const LOOPBACK = /^(localhost|127\.0\.0\.1|\[::1\]|::1)$/i;
 
 /**
  * The address a QR tag encodes.
@@ -215,16 +322,15 @@ const LOOPBACK = /^(localhost|127\.0\.0\.1|\[::1\]|::1)$/i;
  * Order of preference:
  *   1. `public_base_url`, which the park sets to its real domain before
  *      printing anything for real
- *   2. the LAN address, reachable from a phone on the same Wi-Fi, which is
+ *   2. PUBLIC_BASE_URL from the environment, which is how a deployment sets it
+ *   3. the forwarded host, when running behind a platform's proxy
+ *   4. the LAN address, reachable from a phone on the same Wi-Fi, which is
  *      what makes the prototype demonstrable
- *   3. whatever the request came in on, as a last resort
  */
 export function publicOrigin(req) {
   const configured = String(getSetting('public_base_url') || '').trim().replace(/\/+$/, '');
   if (configured) return configured;
 
-  // Deployment config, below the admin setting so the running site can still
-  // be corrected without a redeploy, but above any guess from the network.
   const fromEnv = String(process.env.PUBLIC_BASE_URL || '').trim().replace(/\/+$/, '');
   if (fromEnv) return fromEnv;
 
@@ -238,14 +344,11 @@ export function publicOrigin(req) {
     if (host) return `${proto || req.protocol || 'https'}://${host}`;
   }
 
-  // Local: the address another device on the same Wi-Fi can reach, which is
-  // what makes the phone hand-off work at all.
   const scheme = req.app.get('protoScheme') || req.protocol || 'https';
   const port = req.app.get('protoPort');
   const lan = lanAddresses()[0]?.address;
   if (lan) return `${scheme}://${lan}${port ? ':' + port : ''}`;
 
-  // Nothing better available; the tag will only work on this machine.
   return `${scheme}://${req.get('host')}`;
 }
 
@@ -255,8 +358,8 @@ export function publicOrigin(req) {
 
 /**
  * Mirrors the CHECK constraints in plant_registry_schema.sql, so the API
- * refuses the same values MySQL would refuse. Returns an error string, or
- * null when the payload is acceptable.
+ * refuses the same values MySQL would refuse - and says why, which a database
+ * error would not. Returns an error string, or null when acceptable.
  */
 const LIMITS = {
   latitude: [-90, 90],
@@ -315,22 +418,26 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 /**
  * The five search fields from the proposal: common name, scientific name,
  * Plant ID, family or genus, and location.
+ *
+ * Applied to joined rows after they are fetched rather than as SQL. The
+ * register is small, and the rule that makes this awkward in SQL - that a
+ * withheld location must not be searchable either - is the same rule applied
+ * when shaping, so keeping them together keeps them consistent.
  */
-function matchesQuery(p, q, { viewer = null } = {}) {
-  if (!q) return true;
-  const needle = q.trim().toLowerCase();
-  const sp = p.species_id ? db.species.find((s) => s.id === p.species_id) : null;
-  const cs = sp ? statusById(sp.conservation_status_id) : null;
+function matchesQuery(p, needleRaw, { viewer = null } = {}) {
+  if (!needleRaw) return true;
+  const needle = String(needleRaw).trim().toLowerCase();
+  if (!needle) return true;
 
   // Searching a trail name must not surface a plant whose location is
   // withheld, or the protection leaks straight back out through the search box.
-  const hideLocation = !viewer && isLocationProtected(cs?.code);
+  const hideLocation = !viewer && isLocationProtected(p.conservation_code);
 
   const hay = [
     p.plant_code, p.proposed_species_name,
     hideLocation ? null : p.site_name,
     hideLocation ? null : p.location_notes,
-    sp?.scientific_name, sp?.common_name, sp?.local_name, sp?.family, sp?.genus,
+    p.scientific_name, p.common_name, p.local_name, p.family, p.genus,
   ].filter(Boolean).join(' ').toLowerCase();
   return needle.split(/\s+/).every((t) => hay.includes(t));
 }
@@ -342,11 +449,11 @@ export function createApi() {
   api.use(express.json({ limit: '12mb' }));
 
   /* -------- auth context on every request -------- */
-  api.use((req, res, next) => {
-    req.user = currentUser(req);
+  api.use(route(async (req, res, next) => {
+    req.user = await currentUser(req);
     req.can = (code) => userCan(req.user, code);
     next();
-  });
+  }));
 
   const need = (code) => (req, res, next) => {
     if (!req.user) return res.status(401).json({ error: 'Sign in required' });
@@ -360,25 +467,37 @@ export function createApi() {
   /* Bootstrap                                                        */
   /* ================================================================ */
 
-  api.get('/bootstrap', (req, res) => {
+  api.get('/bootstrap', route(async (req, res) => {
+    const [statuses, users, facets] = await Promise.all([
+      q('SELECT * FROM conservation_statuses ORDER BY sort_order'),
+      q('SELECT id, full_name, email, title, role_id, is_active FROM users WHERE deleted_at IS NULL ORDER BY id'),
+      Promise.all([
+        q('SELECT DISTINCT family FROM species WHERE family IS NOT NULL AND deleted_at IS NULL ORDER BY family'),
+        q('SELECT DISTINCT genus FROM species WHERE genus IS NOT NULL AND deleted_at IS NULL ORDER BY genus'),
+        q('SELECT DISTINCT site_name FROM plants WHERE site_name IS NOT NULL AND deleted_at IS NULL ORDER BY site_name'),
+        q('SELECT DISTINCT growth_form FROM species WHERE growth_form IS NOT NULL AND deleted_at IS NULL ORDER BY growth_form'),
+      ]),
+    ]);
+    const [families, genera, sites, growthForms] = facets;
+
     res.json({
       site_name: getSetting('site_name'),
       park_name: getSetting('park_name'),
       require_approval: getSetting('require_approval'),
-      conservation_statuses: db.conservation_statuses,
-      roles: db.roles.map((r) => ({ ...r, permissions: permissionsForRole(r.id) })),
+      conservation_statuses: statuses,
+      roles: cachedRoles().map((r) => ({ ...r, permissions: permissionsForRole(r.id) })),
       // Prototype convenience: the role switcher needs the demo roster.
-      demo_accounts: db.users.map((u) => ({
+      demo_accounts: users.map((u) => ({
         id: u.id, full_name: u.full_name, email: u.email, title: u.title,
-        role: db.roles.find((r) => r.id === u.role_id)?.name,
-        role_label: db.roles.find((r) => r.id === u.role_id)?.label,
+        role: roleById(u.role_id)?.name,
+        role_label: roleById(u.role_id)?.label,
         is_active: !!u.is_active,
       })),
       demo_password: DEMO_PASSWORD,
-      families: [...new Set(db.species.map((s) => s.family).filter(Boolean))].sort(),
-      genera: [...new Set(db.species.map((s) => s.genus).filter(Boolean))].sort(),
-      sites: [...new Set(db.plants.map((p) => p.site_name).filter(Boolean))].sort(),
-      growth_forms: [...new Set(db.species.map((s) => s.growth_form).filter(Boolean))].sort(),
+      families: families.map((r) => r.family),
+      genera: genera.map((r) => r.genus),
+      sites: sites.map((r) => r.site_name),
+      growth_forms: growthForms.map((r) => r.growth_form),
       data: {
         source: SPECIES_DATA.source,
         generated_at: SPECIES_DATA.generated_at,
@@ -386,14 +505,14 @@ export function createApi() {
         real_photos: hasRealPhotos,
       },
     });
-  });
+  }));
 
   api.get('/auth/me', (req, res) => res.json({ user: shapeUser(req.user) }));
 
-  api.post('/auth/login', async (req, res, next) => {
-   try {
+  api.post('/auth/login', route(async (req, res) => {
     const { email, password } = req.body || {};
-    const user = db.users.find((u) => u.email.toLowerCase() === String(email || '').toLowerCase().trim());
+    const user = await one('SELECT * FROM users WHERE LOWER(email) = ? LIMIT 1',
+      [String(email || '').toLowerCase().trim()]);
     if (!user) {
       activity({ user_id: null, action: 'login_failed', detail: 'Unknown email: ' + email });
       return res.status(401).json({ error: 'No account with that email address.' });
@@ -406,25 +525,20 @@ export function createApi() {
       activity({ user_id: user.id, action: 'login_failed', detail: 'Account deactivated' });
       return res.status(403).json({ error: 'This account has been deactivated by an administrator.' });
     }
-    user.last_login_at = nowIso();
+    await update('users', user.id, { last_login_at: nowIso() });
     activity({ user_id: user.id, action: 'login', detail: 'Signed in' });
-    res.json({ token: issueToken(user.id), user: shapeUser(user) });
-   } catch (err) {
-    // An async handler's rejection does not reach Express 4 on its own, and an
-    // unanswered login request just hangs the sign-in button.
-    next(err);
-   }
-  });
+    res.json({ token: await issueToken(user.id), user: shapeUser(user) });
+  }));
 
-  api.post('/auth/logout', (req, res) => {
+  api.post('/auth/logout', route(async (req, res) => {
     const header = req.get('authorization') || '';
     const token = header.startsWith('Bearer ') ? header.slice(7) : null;
-    if (token && sessions.has(token)) {
+    if (token) {
       if (req.user) activity({ user_id: req.user.id, action: 'logout', detail: 'Signed out' });
-      sessions.delete(token);
+      await revokeToken(token);
     }
     res.json({ ok: true });
-  });
+  }));
 
   /**
    * Prototype-only: jump straight into any demo account.
@@ -432,75 +546,71 @@ export function createApi() {
    * the client can compare roles quickly; it is NOT part of the real design
    * and must not ship to production.
    */
-  api.post('/auth/switch', (req, res) => {
-    const user = byId('users', req.body?.user_id);
+  api.post('/auth/switch', route(async (req, res) => {
+    const user = await byId('users', req.body?.user_id);
     if (!user) return res.status(404).json({ error: 'No such demo account' });
     if (!user.is_active) return res.status(403).json({ error: 'That account is deactivated - reactivate it from the Admin dashboard first.' });
-    user.last_login_at = nowIso();
+    await update('users', user.id, { last_login_at: nowIso() });
     activity({ user_id: user.id, action: 'login', detail: 'Switched role (prototype switcher)' });
-    res.json({ token: issueToken(user.id), user: shapeUser(user) });
-  });
+    res.json({ token: await issueToken(user.id), user: shapeUser(user) });
+  }));
 
   /* ================================================================ */
   /* Public register                                                  */
   /* ================================================================ */
 
-  api.get('/public/plants', (req, res) => {
+  api.get('/public/plants', route(async (req, res) => {
     const {
-      q = '', family = '', genus = '', conservation = '', site = '', growth_form = '',
+      q: search = '', family = '', genus = '', conservation = '', site = '', growth_form = '',
       sort = 'recent', limit = '24', offset = '0',
     } = req.query;
-    let rows = publicPlants().filter((p) => matchesQuery(p, q, { viewer: req.user }));
 
-    if (family || genus || conservation || growth_form) {
-      rows = rows.filter((p) => {
-        const sp = db.species.find((s) => s.id === p.species_id);
-        const cs = statusById(sp?.conservation_status_id);
-        if (family && sp?.family !== family) return false;
-        if (genus && sp?.genus !== genus) return false;
-        if (growth_form && sp?.growth_form !== growth_form) return false;
-        if (conservation && cs?.code !== conservation) return false;
-        return true;
-      });
-    }
-    if (site) {
-      rows = rows.filter((p) => {
-        if (p.site_name !== site) return false;
-        if (req.user) return true;
-        const sp = db.species.find((s) => s.id === p.species_id);
-        return !isLocationProtected(statusById(sp?.conservation_status_id)?.code);
-      });
-    }
+    // Mirrors v_public_plants: approved, not deleted, species resolved.
+    const where = ["p.status = 'approved'", 'p.deleted_at IS NULL', 'p.species_id IS NOT NULL'];
+    const params = [];
+    if (family) { where.push('s.family = ?'); params.push(family); }
+    if (genus) { where.push('s.genus = ?'); params.push(genus); }
+    if (growth_form) { where.push('s.growth_form = ?'); params.push(growth_form); }
+    if (conservation) { where.push('cs.code = ?'); params.push(conservation); }
+    if (site) { where.push('p.site_name = ?'); params.push(site); }
 
-    const shaped = rows.map((p) => shapePlant(p, { viewer: req.user }));
+    let rows = await plantsWhere(where.join(' AND '), params);
+    rows = rows.filter((p) => matchesQuery(p, search, { viewer: req.user }));
+
+    // Filtering by site must not confirm that a protected plant is on a given
+    // trail - that is the withheld location arriving by another route.
+    if (site && !req.user) rows = rows.filter((p) => !isLocationProtected(p.conservation_code));
+
     const sorters = {
       recent: (a, b) => new Date(b.registered_at) - new Date(a.registered_at),
       name: (a, b) => (a.scientific_name || '').localeCompare(b.scientific_name || ''),
       code: (a, b) => a.plant_code.localeCompare(b.plant_code),
       popular: (a, b) => b.view_count - a.view_count,
     };
-    shaped.sort(sorters[sort] || sorters.recent);
+    rows.sort(sorters[sort] || sorters.recent);
 
     // Paged: the register is big enough now that returning every record would
     // mean a phone downloading a hundred-odd photographs to show the first screen.
     const take = Math.min(100, Math.max(1, Number(limit) || 24));
     const skip = Math.max(0, Number(offset) || 0);
-    const page = shaped.slice(skip, skip + take);
+    const page = rows.slice(skip, skip + take);
 
     res.json({
-      total: shaped.length,
+      total: rows.length,
       offset: skip,
       limit: take,
-      has_more: skip + page.length < shaped.length,
-      results: page,
+      has_more: skip + page.length < rows.length,
+      results: await shapeMany(page, { viewer: req.user }),
     });
-  });
+  }));
 
   /** The QR target. Opaque token in, public record out. */
-  api.get('/public/plants/token/:token', (req, res) => {
-    const qr = db.qr_codes.find((q) => q.qr_token === req.params.token);
+  api.get('/public/plants/token/:token', route(async (req, res) => {
+    const qr = await one('SELECT * FROM qr_codes WHERE qr_token = ? LIMIT 1', [req.params.token]);
     if (!qr) return res.status(404).json({ error: 'Unknown tag', reason: 'not_found' });
-    const plant = byId('plants', qr.plant_id);
+
+    const rows = await plantsWhere('p.id = ?', [qr.plant_id]);
+    const plant = rows[0];
     if (!plant || plant.deleted_at) return res.status(404).json({ error: 'Unknown tag', reason: 'not_found' });
 
     if (plant.status !== 'approved') {
@@ -511,8 +621,9 @@ export function createApi() {
       });
     }
 
+    await q('UPDATE plants SET view_count = view_count + 1 WHERE id = ?', [plant.id]);
     plant.view_count += 1;
-    insert('qr_scans', {
+    await insert('qr_scans', {
       qr_code_id: qr.id, plant_id: plant.id,
       user_id: req.user?.id ?? null,
       device_type: /android/i.test(req.get('user-agent') || '') ? 'android'
@@ -520,68 +631,92 @@ export function createApi() {
       ip_hash: crypto.createHash('sha256').update(req.ip || 'unknown').digest('hex'),
       scanned_at: nowIso(),
     });
-    res.json({ plant: shapePlant(plant, { full: true, viewer: req.user }) });
-  });
+    res.json({ plant: await shapeOne(plant, { full: true, viewer: req.user }) });
+  }));
 
-  api.get('/public/plants/:id', (req, res) => {
-    const plant = byId('plants', req.params.id);
+  api.get('/public/plants/:id', route(async (req, res) => {
+    const rows = await plantsWhere('p.id = ?', [req.params.id]);
+    const plant = rows[0];
     if (!plant || plant.deleted_at) return res.status(404).json({ error: 'Not found' });
     const visible = plant.status === 'approved' || req.can('plant.view_all')
       || (req.user && plant.registered_by === req.user.id);
     if (!visible) return res.status(404).json({ error: 'Not found' });
-    if (plant.status === 'approved') plant.view_count += 1;
-    res.json({ plant: shapePlant(plant, { full: true, viewer: req.user }) });
-  });
+    if (plant.status === 'approved') {
+      await q('UPDATE plants SET view_count = view_count + 1 WHERE id = ?', [plant.id]);
+      plant.view_count += 1;
+    }
+    res.json({ plant: await shapeOne(plant, { full: true, viewer: req.user }) });
+  }));
 
-  api.get('/public/stats', (req, res) => {
-    const pub = publicPlants();
-    res.json({
-      published_plants: pub.length,
-      species: new Set(pub.map((p) => p.species_id)).size,
-      families: new Set(pub.map((p) => db.species.find((s) => s.id === p.species_id)?.family)).size,
-      threatened: pub.filter((p) => {
-        const sp = db.species.find((s) => s.id === p.species_id);
-        return ['VU', 'EN', 'CR', 'EW', 'EX'].includes(statusById(sp?.conservation_status_id)?.code);
-      }).length,
-      scans: db.qr_scans.length,
-      sites: new Set(pub.map((p) => p.site_name)).size,
-    });
-  });
+  api.get('/public/stats', route(async (req, res) => {
+    const base = `FROM plants p JOIN species s ON s.id = p.species_id
+                  LEFT JOIN conservation_statuses cs ON cs.id = s.conservation_status_id
+                  WHERE p.status = 'approved' AND p.deleted_at IS NULL`;
+    const [published, species, families, threatened, scans, sites] = await Promise.all([
+      count(`SELECT COUNT(*) ${base}`),
+      count(`SELECT COUNT(DISTINCT p.species_id) ${base}`),
+      count(`SELECT COUNT(DISTINCT s.family) ${base}`),
+      count(`SELECT COUNT(*) ${base} AND cs.code IN ('VU','EN','CR','EW','EX')`),
+      count('SELECT COUNT(*) FROM qr_scans'),
+      count(`SELECT COUNT(DISTINCT p.site_name) ${base}`),
+    ]);
+    res.json({ published_plants: published, species, families, threatened, scans, sites });
+  }));
 
   /* ================================================================ */
   /* Species                                                          */
   /* ================================================================ */
 
-  api.get('/species', (req, res) => {
-    const q = String(req.query.q || '').toLowerCase().trim();
-    let rows = db.species.filter((s) => !s.deleted_at);
-    if (q) {
+  api.get('/species', route(async (req, res) => {
+    const search = String(req.query.q || '').toLowerCase().trim();
+    let rows = await q('SELECT * FROM species WHERE deleted_at IS NULL ORDER BY scientific_name');
+    if (search) {
       rows = rows.filter((s) => [s.scientific_name, s.common_name, s.local_name, s.family, s.genus]
-        .filter(Boolean).join(' ').toLowerCase().includes(q));
+        .filter(Boolean).join(' ').toLowerCase().includes(search));
     }
-    rows.sort((a, b) => a.scientific_name.localeCompare(b.scientific_name));
-    res.json({ results: rows.map(shapeSpecies) });
-  });
+    // Plant counts for the whole list in one query rather than one each.
+    const counts = new Map((await q(
+      `SELECT species_id, COUNT(*) n FROM plants
+        WHERE deleted_at IS NULL AND species_id IS NOT NULL GROUP BY species_id`,
+    )).map((r) => [r.species_id, Number(r.n)]));
+    const statuses = new Map((await q('SELECT * FROM conservation_statuses')).map((c) => [c.id, c]));
 
-  api.get('/species/:id', (req, res) => {
-    const s = byId('species', req.params.id);
-    if (!s) return res.status(404).json({ error: 'Not found' });
     res.json({
-      species: shapeSpecies(s),
-      plants: db.plants
-        .filter((p) => p.species_id === s.id && !p.deleted_at)
-        .filter((p) => p.status === 'approved' || req.can('plant.view_all'))
-        .map((p) => shapePlant(p, { viewer: req.user })),
+      results: rows.map((s) => {
+        const cs = statuses.get(s.conservation_status_id) || null;
+        return {
+          ...s,
+          conservation_code: cs?.code ?? 'NE',
+          conservation_label: cs?.label ?? 'Not evaluated',
+          conservation_source: s.conservation_source ?? null,
+          plant_count: counts.get(s.id) || 0,
+        };
+      }),
     });
-  });
+  }));
 
-  api.post('/species', need('species.manage'), (req, res) => {
+  api.get('/species/:id', route(async (req, res) => {
+    const s = await byId('species', req.params.id);
+    if (!s) return res.status(404).json({ error: 'Not found' });
+    const where = req.can('plant.view_all')
+      ? 'p.species_id = ? AND p.deleted_at IS NULL'
+      : "p.species_id = ? AND p.deleted_at IS NULL AND p.status = 'approved'";
+    const rows = await plantsWhere(where, [s.id]);
+    res.json({
+      species: await shapeSpecies(s),
+      plants: await shapeMany(rows, { viewer: req.user }),
+    });
+  }));
+
+  api.post('/species', need('species.manage'), route(async (req, res) => {
     const body = req.body || {};
     if (!body.scientific_name?.trim()) return res.status(400).json({ error: 'Scientific name is required.' });
-    const dupe = db.species.find((s) => s.scientific_name.toLowerCase() === body.scientific_name.trim().toLowerCase());
+    const dupe = await one('SELECT id FROM species WHERE LOWER(scientific_name) = ? LIMIT 1',
+      [body.scientific_name.trim().toLowerCase()]);
     if (dupe) return res.status(409).json({ error: 'That scientific name is already in the species list.' });
 
-    const row = insert('species', {
+    const fallbackStatus = await one('SELECT id FROM conservation_statuses ORDER BY sort_order LIMIT 1');
+    const row = await insert('species', {
       scientific_name: body.scientific_name.trim(),
       common_name: body.common_name || null,
       local_name: body.local_name || null,
@@ -596,76 +731,85 @@ export function createApi() {
       fruit_description: body.fruit_description || null,
       habitat: body.habitat || null,
       distribution: body.distribution || null,
-      conservation_status_id: body.conservation_status_id || db.conservation_statuses[0].id,
+      conservation_status_id: body.conservation_status_id || fallbackStatus?.id || null,
       created_by: req.user.id,
       updated_at: nowIso(), deleted_at: null,
     });
     audit({ user_id: req.user.id, action: 'create', entity_type: 'species', entity_id: row.id, new_values: { scientific_name: row.scientific_name } });
-    res.status(201).json({ species: shapeSpecies(row) });
-  });
+    res.status(201).json({ species: await shapeSpecies(row) });
+  }));
 
-  api.patch('/species/:id', need('species.manage'), (req, res) => {
-    const s = byId('species', req.params.id);
-    if (!s) return res.status(404).json({ error: 'Not found' });
-    const before = { ...s };
+  api.patch('/species/:id', need('species.manage'), route(async (req, res) => {
+    const before = await byId('species', req.params.id);
+    if (!before) return res.status(404).json({ error: 'Not found' });
     const allowed = ['scientific_name', 'common_name', 'local_name', 'family', 'genus', 'species_epithet',
       'description', 'characteristics', 'growth_form', 'leaf_description', 'flower_description',
       'fruit_description', 'habitat', 'distribution', 'conservation_status_id'];
-    allowed.forEach((k) => { if (k in (req.body || {})) s[k] = req.body[k]; });
-    s.updated_at = nowIso();
-    audit({ user_id: req.user.id, action: 'update', entity_type: 'species', entity_id: s.id, old_values: before, new_values: { ...s } });
-    res.json({ species: shapeSpecies(s) });
-  });
+    const patch = {};
+    allowed.forEach((k) => { if (k in (req.body || {})) patch[k] = req.body[k]; });
+    patch.updated_at = nowIso();
+    const after = await update('species', before.id, patch);
+    audit({ user_id: req.user.id, action: 'update', entity_type: 'species', entity_id: before.id, old_values: before, new_values: after });
+    res.json({ species: await shapeSpecies(after) });
+  }));
 
   /* ================================================================ */
   /* Plants - staff register                                          */
   /* ================================================================ */
 
-  api.get('/plants', (req, res) => {
+  api.get('/plants', route(async (req, res) => {
     if (!req.user) return res.status(401).json({ error: 'Sign in required' });
-    const { q = '', status = '', family = '', conservation = '', site = '', mine = '' } = req.query;
+    const { q: search = '', status = '', family = '', conservation = '', site = '', mine = '' } = req.query;
 
-    let rows = db.plants.filter((p) => !p.deleted_at);
-
+    const where = ['p.deleted_at IS NULL'];
+    const params = [];
     // A ranger without plant.view_all sees only their own records.
-    if (!req.can('plant.view_all')) rows = rows.filter((p) => p.registered_by === req.user.id);
-    if (mine === '1') rows = rows.filter((p) => p.registered_by === req.user.id);
-    if (status) rows = rows.filter((p) => p.status === status);
-    rows = rows.filter((p) => matchesQuery(p, q, { viewer: req.user }));
-    if (family || conservation) {
-      rows = rows.filter((p) => {
-        const sp = db.species.find((s) => s.id === p.species_id);
-        if (family && sp?.family !== family) return false;
-        if (conservation && statusById(sp?.conservation_status_id)?.code !== conservation) return false;
-        return true;
-      });
+    if (!req.can('plant.view_all') || mine === '1') {
+      where.push('p.registered_by = ?');
+      params.push(req.user.id);
     }
-    if (site) rows = rows.filter((p) => p.site_name === site);
+    if (status) { where.push('p.status = ?'); params.push(status); }
+    if (family) { where.push('s.family = ?'); params.push(family); }
+    if (conservation) { where.push('cs.code = ?'); params.push(conservation); }
+    if (site) { where.push('p.site_name = ?'); params.push(site); }
 
+    let rows = await plantsWhere(where.join(' AND '), params);
+    rows = rows.filter((p) => matchesQuery(p, search, { viewer: req.user }));
     rows.sort((a, b) => new Date(b.registered_at) - new Date(a.registered_at));
-    res.json({ total: rows.length, results: rows.map((p) => shapePlant(p, { viewer: req.user })) });
-  });
 
-  api.get('/plants/counts', (req, res) => {
+    res.json({ total: rows.length, results: await shapeMany(rows, { viewer: req.user }) });
+  }));
+
+  api.get('/plants/counts', route(async (req, res) => {
     if (!req.user) return res.status(401).json({ error: 'Sign in required' });
-    const scope = req.can('plant.view_all')
-      ? db.plants.filter((p) => !p.deleted_at)
-      : db.plants.filter((p) => !p.deleted_at && p.registered_by === req.user.id);
-    const count = (s) => scope.filter((p) => p.status === s).length;
-    res.json({
-      all: scope.length,
-      pending: count('pending'), approved: count('approved'),
-      rejected: count('rejected'), archived: count('archived'),
-      mine: db.plants.filter((p) => !p.deleted_at && p.registered_by === req.user.id).length,
-      queue: req.can('plant.approve') ? db.plant_submissions.filter((s) => s.status === 'pending').length : 0,
-      unread_notifications: db.notifications.filter((n) => n.user_id === req.user.id && !n.is_read).length,
-      open_reports: req.can('report.view') ? db.plant_reports.filter((r) => r.status === 'open').length : 0,
-    });
-  });
+    const scoped = req.can('plant.view_all') ? '' : ' AND registered_by = ' + Number(req.user.id);
+    const byStatus = await q(
+      `SELECT status, COUNT(*) n FROM plants WHERE deleted_at IS NULL${scoped} GROUP BY status`,
+    );
+    const map = new Map(byStatus.map((r) => [r.status, Number(r.n)]));
+    const all = [...map.values()].reduce((a, b) => a + b, 0);
 
-  api.post('/plants', need('plant.create'), (req, res) => {
+    const [mine, queue, unread, openReports] = await Promise.all([
+      count('SELECT COUNT(*) FROM plants WHERE deleted_at IS NULL AND registered_by = ?', [req.user.id]),
+      req.can('plant.approve')
+        ? count("SELECT COUNT(*) FROM plant_submissions WHERE status = 'pending'") : 0,
+      count('SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0', [req.user.id]),
+      req.can('report.view') ? count("SELECT COUNT(*) FROM plant_reports WHERE status = 'open'") : 0,
+    ]);
+
+    res.json({
+      all,
+      pending: map.get('pending') || 0,
+      approved: map.get('approved') || 0,
+      rejected: map.get('rejected') || 0,
+      archived: map.get('archived') || 0,
+      mine, queue, unread_notifications: unread, open_reports: openReports,
+    });
+  }));
+
+  api.post('/plants', need('plant.create'), route(async (req, res) => {
     const b = req.body || {};
-    if (b.species_id && !byId('species', b.species_id)) {
+    if (b.species_id && !await byId('species', b.species_id)) {
       return res.status(400).json({ error: 'No such species.' });
     }
     if (!b.species_id && !b.proposed_species_name?.trim()) {
@@ -684,390 +828,462 @@ export function createApi() {
     if (canPublish && b.species_id) status = 'approved';
     else if (!requireApproval && b.species_id) status = 'approved';
 
-    const seq = db.plants.length + 1;
-    const plant = insert('plants', {
-      plant_code: getSetting('plant_code_prefix') + '-2026-' + String(seq).padStart(4, '0'),
-      species_id: b.species_id ? Number(b.species_id) : null,
-      proposed_species_name: b.species_id ? null : (b.proposed_species_name?.trim() || null),
-      status,
-      latitude: b.latitude ?? null, longitude: b.longitude ?? null,
-      altitude_m: b.altitude_m ?? null, gps_accuracy_m: b.gps_accuracy_m ?? null,
-      site_name: b.site_name.trim(), location_notes: b.location_notes || null,
-      height_m: b.height_m ?? null, trunk_diameter_cm: b.trunk_diameter_cm ?? null,
-      health_status: b.health_status || null, life_stage: b.life_stage || null,
-      morphology_notes: b.morphology_notes || null, notes: b.notes || null,
-      view_count: 0,
-      registered_by: req.user.id, registered_at: nowIso(),
-      verified_by: status === 'approved' ? req.user.id : null,
-      verified_at: status === 'approved' ? nowIso() : null,
-      updated_at: nowIso(), deleted_at: null,
+    const prefix = getSetting('plant_code_prefix') || 'PLT';
+    // Continue the sequence from the highest code already issued, rather than
+    // from the row count - deleting a record would otherwise reissue a code.
+    const highest = await count(
+      "SELECT COALESCE(MAX(CAST(SUBSTRING_INDEX(plant_code, '-', -1) AS UNSIGNED)), 0) FROM plants",
+    );
+
+    const created = await tx(async (t) => {
+      const plant = await t.insert('plants', {
+        plant_code: `${prefix}-2026-${String(highest + 1).padStart(4, '0')}`,
+        species_id: b.species_id ? Number(b.species_id) : null,
+        proposed_species_name: b.species_id ? null : (b.proposed_species_name?.trim() || null),
+        status,
+        latitude: b.latitude ?? null, longitude: b.longitude ?? null,
+        altitude_m: b.altitude_m ?? null, gps_accuracy_m: b.gps_accuracy_m ?? null,
+        site_name: b.site_name.trim(), location_notes: b.location_notes || null,
+        height_m: b.height_m ?? null, trunk_diameter_cm: b.trunk_diameter_cm ?? null,
+        health_status: b.health_status || null, life_stage: b.life_stage || null,
+        morphology_notes: b.morphology_notes || null, notes: b.notes || null,
+        view_count: 0,
+        registered_by: req.user.id, registered_at: nowIso(),
+        verified_by: status === 'approved' ? req.user.id : null,
+        verified_at: status === 'approved' ? nowIso() : null,
+        updated_at: nowIso(), deleted_at: null,
+      });
+
+      // Photographs. The prototype accepts data URLs from the camera / file
+      // picker; the real API writes files to disk and keeps only the path,
+      // exactly as plant_photos.file_path implies.
+      const photos = Array.isArray(b.photos) ? b.photos.slice(0, 6) : [];
+      for (const [i, p] of photos.entries()) {
+        await t.insert('plant_photos', {
+          plant_id: plant.id,
+          file_path: p.data_url || p.file_path,
+          thumbnail_path: p.data_url || p.file_path,
+          file_name: p.file_name || 'capture-' + (i + 1) + '.jpg',
+          mime_type: p.mime_type || 'image/jpeg',
+          size_bytes: p.size_bytes || 0,
+          width_px: null, height_px: null,
+          caption: p.caption || null,
+          is_primary: i === 0 ? 1 : 0,
+          uploaded_by: req.user.id, deleted_at: null,
+        });
+      }
+
+      let submission = null;
+      if (status === 'approved') {
+        await t.insert('qr_codes', {
+          plant_id: plant.id, qr_token: crypto.randomUUID(),
+          image_path: null, target_url: null, version: 1, status: 'active',
+          generated_by: req.user.id, generated_at: nowIso(),
+          deactivated_at: null, deactivation_reason: null,
+        });
+      } else {
+        submission = await t.insert('plant_submissions', {
+          plant_id: plant.id, submission_type: 'new', status: 'pending',
+          proposed_changes: null, submitted_by: req.user.id, submitted_at: nowIso(),
+          reviewed_by: null, reviewed_at: null, review_comment: null,
+        });
+      }
+      return { plant, submission };
     });
 
-    // Photographs. The prototype accepts data URLs from the camera / file
-    // picker and stores them in memory; the real API writes files to disk and
-    // keeps only the path, exactly as plant_photos.file_path implies.
-    const photos = Array.isArray(b.photos) ? b.photos.slice(0, 6) : [];
-    photos.forEach((p, i) => insert('plant_photos', {
-      plant_id: plant.id,
-      file_path: p.data_url || p.file_path,
-      thumbnail_path: p.data_url || p.file_path,
-      file_name: p.file_name || 'capture-' + (i + 1) + '.jpg',
-      mime_type: p.mime_type || 'image/jpeg',
-      size_bytes: p.size_bytes || 0,
-      width_px: null, height_px: null,
-      caption: p.caption || null,
-      is_primary: i === 0 ? 1 : 0,
-      uploaded_by: req.user.id, deleted_at: null,
-    }));
-
-    if (status === 'approved') {
-      issueQr(plant, req.user.id);
-    } else {
-      const sub = insert('plant_submissions', {
-        plant_id: plant.id, submission_type: 'new', status: 'pending',
-        proposed_changes: null, submitted_by: req.user.id, submitted_at: nowIso(),
-        reviewed_by: null, reviewed_at: null, review_comment: null,
-      });
-      notifyPermission('plant.approve', {
+    if (created.submission) {
+      await notifyPermission('plant.approve', {
         type: 'submission.new',
         title: 'New submission awaiting review',
-        body: req.user.full_name + ' submitted ' + plant.plant_code + ' from ' + plant.site_name + '.',
-        related_type: 'submission', related_id: sub.id,
+        body: req.user.full_name + ' submitted ' + created.plant.plant_code + ' from ' + created.plant.site_name + '.',
+        related_type: 'submission', related_id: created.submission.id,
       });
     }
 
     audit({
-      user_id: req.user.id, action: 'create', entity_type: 'plants', entity_id: plant.id,
-      new_values: { plant_code: plant.plant_code, status },
+      user_id: req.user.id, action: 'create', entity_type: 'plants', entity_id: created.plant.id,
+      new_values: { plant_code: created.plant.plant_code, status },
     });
-    res.status(201).json({ plant: shapePlant(plant, { full: true, viewer: req.user }) });
-  });
+    const joined = (await plantsWhere('p.id = ?', [created.plant.id]))[0];
+    res.status(201).json({ plant: await shapeOne(joined, { full: true, viewer: req.user }) });
+  }));
 
-  api.patch('/plants/:id', need('plant.edit'), (req, res) => {
-    const plant = byId('plants', req.params.id);
-    if (!plant || plant.deleted_at) return res.status(404).json({ error: 'Not found' });
+  api.patch('/plants/:id', need('plant.edit'), route(async (req, res) => {
+    const before = await byId('plants', req.params.id);
+    if (!before || before.deleted_at) return res.status(404).json({ error: 'Not found' });
     const invalid = validatePlant(req.body || {});
     if (invalid) return res.status(400).json({ error: invalid });
 
-    const before = { ...plant };
     const allowed = ['species_id', 'proposed_species_name', 'site_name', 'location_notes',
       'latitude', 'longitude', 'altitude_m', 'height_m', 'trunk_diameter_cm',
       'health_status', 'life_stage', 'morphology_notes', 'notes'];
-    allowed.forEach((k) => { if (k in (req.body || {})) plant[k] = req.body[k]; });
-    if (plant.species_id && !byId('species', plant.species_id)) {
+    const patch = {};
+    allowed.forEach((k) => { if (k in (req.body || {})) patch[k] = req.body[k]; });
+
+    const speciesId = 'species_id' in patch ? patch.species_id : before.species_id;
+    if (speciesId && !await byId('species', speciesId)) {
       return res.status(400).json({ error: 'No such species.' });
     }
-    if (plant.species_id) plant.proposed_species_name = null;
-    plant.updated_at = nowIso();
+    if (speciesId) patch.proposed_species_name = null;
+    patch.updated_at = nowIso();
 
-    recordRevisions(plant.id, req.user.id, before, plant, req.body?.change_reason || null);
+    const after = await update('plants', before.id, patch);
+    await recordRevisions(before.id, req.user.id, before, after, req.body?.change_reason || null);
     audit({
-      user_id: req.user.id, action: 'update', entity_type: 'plants', entity_id: plant.id,
-      old_values: before, new_values: { ...plant },
+      user_id: req.user.id, action: 'update', entity_type: 'plants', entity_id: before.id,
+      old_values: before, new_values: after,
     });
-    res.json({ plant: shapePlant(plant, { full: true, viewer: req.user }) });
-  });
+    const joined = (await plantsWhere('p.id = ?', [before.id]))[0];
+    res.json({ plant: await shapeOne(joined, { full: true, viewer: req.user }) });
+  }));
 
   /* -------- review workflow -------- */
 
-  function issueQr(plant, userId) {
-    const existing = db.qr_codes.find((q) => q.plant_id === plant.id && q.status === 'active');
-    if (existing) return existing;
-    // Reactivate a tag that was withdrawn when the record was archived, so a
-    // printed tag stays valid across archive -> restore.
-    const old = db.qr_codes.find((q) => q.plant_id === plant.id && q.status === 'inactive');
+  /**
+   * Issue a tag, or bring back the one this plant already had.
+   *
+   * uq_qr_one_active in the schema allows at most one active code per plant,
+   * so this must reactivate rather than insert a second. A printed tag stays
+   * valid across archive and restore because its token never changes.
+   */
+  async function issueQr(plantId, userId) {
+    const active = await one("SELECT * FROM qr_codes WHERE plant_id = ? AND status = 'active' LIMIT 1", [plantId]);
+    if (active) return active;
+
+    const old = await one("SELECT * FROM qr_codes WHERE plant_id = ? AND status = 'inactive' LIMIT 1", [plantId]);
     if (old) {
-      old.status = 'active';
-      old.deactivated_at = null;
-      old.deactivation_reason = null;
-      return old;
+      return await update('qr_codes', old.id, {
+        status: 'active', deactivated_at: null, deactivation_reason: null,
+      });
     }
-    return insert('qr_codes', {
-      plant_id: plant.id, qr_token: crypto.randomUUID(),
+    return await insert('qr_codes', {
+      plant_id: plantId, qr_token: crypto.randomUUID(),
       image_path: null, target_url: null, version: 1, status: 'active',
       generated_by: userId ?? null, generated_at: nowIso(),
       deactivated_at: null, deactivation_reason: null,
     });
   }
 
-  api.post('/plants/:id/approve', need('plant.approve'), (req, res) => {
-    const plant = byId('plants', req.params.id);
-    if (!plant) return res.status(404).json({ error: 'Not found' });
-    if (!plant.species_id) {
+  const pendingSubmission = (plantId) =>
+    one("SELECT * FROM plant_submissions WHERE plant_id = ? AND status = 'pending' LIMIT 1", [plantId]);
+
+  api.post('/plants/:id/approve', need('plant.approve'), route(async (req, res) => {
+    const before = await byId('plants', req.params.id);
+    if (!before) return res.status(404).json({ error: 'Not found' });
+    if (!before.species_id) {
       return res.status(400).json({
         error: 'This record has no confirmed species. Set the species first, then approve it.',
       });
     }
-    const before = { ...plant };
-    plant.status = 'approved';
-    plant.verified_by = req.user.id;
-    plant.verified_at = nowIso();
-    plant.updated_at = nowIso();
+    const after = await update('plants', before.id, {
+      status: 'approved',
+      verified_by: req.user.id,
+      verified_at: nowIso(),
+      updated_at: nowIso(),
+    });
 
-    const qr = issueQr(plant, req.user.id);
-    const sub = db.plant_submissions.find((s) => s.plant_id === plant.id && s.status === 'pending');
+    const qr = await issueQr(before.id, req.user.id);
+    const sub = await pendingSubmission(before.id);
     if (sub) {
-      sub.status = 'approved';
-      sub.reviewed_by = req.user.id;
-      sub.reviewed_at = nowIso();
-      sub.review_comment = req.body?.note || null;
-      notify({
+      await update('plant_submissions', sub.id, {
+        status: 'approved', reviewed_by: req.user.id,
+        reviewed_at: nowIso(), review_comment: req.body?.note || null,
+      });
+      await notify({
         user_id: sub.submitted_by, type: 'submission.approved',
-        title: 'Submission published: ' + plant.plant_code,
+        title: 'Submission published: ' + after.plant_code,
         body: req.user.full_name + ' approved your record. It is now on the public site and its tag can be printed.',
-        related_type: 'plant', related_id: plant.id,
+        related_type: 'plant', related_id: after.id,
       });
     }
-    recordRevisions(plant.id, req.user.id, before, plant, 'Approved by botanist');
+    await recordRevisions(before.id, req.user.id, before, after, 'Approved by botanist');
     audit({
-      user_id: req.user.id, action: 'approve', entity_type: 'plants', entity_id: plant.id,
+      user_id: req.user.id, action: 'approve', entity_type: 'plants', entity_id: before.id,
       old_values: { status: before.status }, new_values: { status: 'approved', qr_token: qr.qr_token },
     });
-    res.json({ plant: shapePlant(plant, { full: true, viewer: req.user }) });
-  });
+    const joined = (await plantsWhere('p.id = ?', [before.id]))[0];
+    res.json({ plant: await shapeOne(joined, { full: true, viewer: req.user }) });
+  }));
 
-  api.post('/plants/:id/reject', need('plant.approve'), (req, res) => {
+  api.post('/plants/:id/reject', need('plant.approve'), route(async (req, res) => {
     const note = String(req.body?.note || '').trim();
     if (!note) return res.status(400).json({ error: 'A note is required when rejecting, so the ranger knows what to change.' });
-    const plant = byId('plants', req.params.id);
-    if (!plant) return res.status(404).json({ error: 'Not found' });
+    const before = await byId('plants', req.params.id);
+    if (!before) return res.status(404).json({ error: 'Not found' });
 
-    const before = { ...plant };
-    plant.status = 'rejected';
-    plant.updated_at = nowIso();
-    const sub = db.plant_submissions.find((s) => s.plant_id === plant.id && s.status === 'pending');
+    const after = await update('plants', before.id, { status: 'rejected', updated_at: nowIso() });
+    const sub = await pendingSubmission(before.id);
     if (sub) {
-      sub.status = 'rejected';
-      sub.reviewed_by = req.user.id;
-      sub.reviewed_at = nowIso();
-      sub.review_comment = note;
-      notify({
+      await update('plant_submissions', sub.id, {
+        status: 'rejected', reviewed_by: req.user.id,
+        reviewed_at: nowIso(), review_comment: note,
+      });
+      await notify({
         user_id: sub.submitted_by, type: 'submission.rejected',
-        title: 'Submission returned: ' + plant.plant_code,
+        title: 'Submission returned: ' + after.plant_code,
         body: req.user.full_name + ' asked for changes. ' + note.slice(0, 120),
-        related_type: 'plant', related_id: plant.id,
+        related_type: 'plant', related_id: after.id,
       });
     }
-    recordRevisions(plant.id, req.user.id, before, plant, note);
+    await recordRevisions(before.id, req.user.id, before, after, note);
     audit({
-      user_id: req.user.id, action: 'reject', entity_type: 'plants', entity_id: plant.id,
+      user_id: req.user.id, action: 'reject', entity_type: 'plants', entity_id: before.id,
       old_values: { status: before.status }, new_values: { status: 'rejected', note },
     });
-    res.json({ plant: shapePlant(plant, { full: true, viewer: req.user }) });
-  });
+    const joined = (await plantsWhere('p.id = ?', [before.id]))[0];
+    res.json({ plant: await shapeOne(joined, { full: true, viewer: req.user }) });
+  }));
 
-  api.post('/plants/:id/archive', need('plant.archive'), (req, res) => {
-    const plant = byId('plants', req.params.id);
-    if (!plant) return res.status(404).json({ error: 'Not found' });
-    const before = { ...plant };
-    plant.status = 'archived';
-    plant.updated_at = nowIso();
-    const qr = db.qr_codes.find((q) => q.plant_id === plant.id && q.status === 'active');
+  api.post('/plants/:id/archive', need('plant.archive'), route(async (req, res) => {
+    const before = await byId('plants', req.params.id);
+    if (!before) return res.status(404).json({ error: 'Not found' });
+    const after = await update('plants', before.id, { status: 'archived', updated_at: nowIso() });
+
+    const qr = await one("SELECT * FROM qr_codes WHERE plant_id = ? AND status = 'active' LIMIT 1", [before.id]);
     if (qr) {
-      qr.status = 'inactive';
-      qr.deactivated_at = nowIso();
-      qr.deactivation_reason = req.body?.reason || 'Record archived';
+      await update('qr_codes', qr.id, {
+        status: 'inactive',
+        deactivated_at: nowIso(),
+        deactivation_reason: req.body?.reason || 'Record archived',
+      });
     }
 
     // Archiving something that was still awaiting review has to close the
     // submission too. Left pending it stays in the botanist queue, where
     // approving it would publish a record somebody had already withdrawn.
-    const pending = db.plant_submissions.find((s) => s.plant_id === plant.id && s.status === 'pending');
+    const pending = await pendingSubmission(before.id);
     if (pending) {
       const reason = req.body?.reason || 'The record was archived before review.';
-      pending.status = 'rejected';
-      pending.reviewed_by = req.user.id;
-      pending.reviewed_at = nowIso();
-      pending.review_comment = reason;
-      notify({
+      await update('plant_submissions', pending.id, {
+        status: 'rejected', reviewed_by: req.user.id,
+        reviewed_at: nowIso(), review_comment: reason,
+      });
+      await notify({
         user_id: pending.submitted_by, type: 'submission.rejected',
-        title: 'Submission withdrawn: ' + plant.plant_code,
+        title: 'Submission withdrawn: ' + after.plant_code,
         body: req.user.full_name + ' archived this record before it was reviewed. ' + reason.slice(0, 120),
-        related_type: 'plant', related_id: plant.id,
+        related_type: 'plant', related_id: after.id,
       });
     }
 
-    recordRevisions(plant.id, req.user.id, before, plant, req.body?.reason || null);
-    audit({ user_id: req.user.id, action: 'archive', entity_type: 'plants', entity_id: plant.id, old_values: { status: before.status }, new_values: { status: 'archived' } });
-    res.json({ plant: shapePlant(plant, { full: true, viewer: req.user }) });
-  });
+    await recordRevisions(before.id, req.user.id, before, after, req.body?.reason || null);
+    audit({ user_id: req.user.id, action: 'archive', entity_type: 'plants', entity_id: before.id, old_values: { status: before.status }, new_values: { status: 'archived' } });
+    const joined = (await plantsWhere('p.id = ?', [before.id]))[0];
+    res.json({ plant: await shapeOne(joined, { full: true, viewer: req.user }) });
+  }));
 
-  api.post('/plants/:id/restore', need('plant.archive'), (req, res) => {
-    const plant = byId('plants', req.params.id);
-    if (!plant) return res.status(404).json({ error: 'Not found' });
-    const before = { ...plant };
-    plant.status = 'approved';
-    plant.updated_at = nowIso();
-    issueQr(plant, req.user.id);
-    recordRevisions(plant.id, req.user.id, before, plant, 'Restored to public view');
-    audit({ user_id: req.user.id, action: 'update', entity_type: 'plants', entity_id: plant.id, old_values: { status: 'archived' }, new_values: { status: 'approved' } });
-    res.json({ plant: shapePlant(plant, { full: true, viewer: req.user }) });
-  });
+  api.post('/plants/:id/restore', need('plant.archive'), route(async (req, res) => {
+    const before = await byId('plants', req.params.id);
+    if (!before) return res.status(404).json({ error: 'Not found' });
+    const after = await update('plants', before.id, { status: 'approved', updated_at: nowIso() });
+    await issueQr(before.id, req.user.id);
+    await recordRevisions(before.id, req.user.id, before, after, 'Restored to public view');
+    audit({ user_id: req.user.id, action: 'update', entity_type: 'plants', entity_id: before.id, old_values: { status: 'archived' }, new_values: { status: 'approved' } });
+    const joined = (await plantsWhere('p.id = ?', [before.id]))[0];
+    res.json({ plant: await shapeOne(joined, { full: true, viewer: req.user }) });
+  }));
 
-  api.get('/plants/:id/history', (req, res) => {
+  api.get('/plants/:id/history', route(async (req, res) => {
     if (!req.user) return res.status(401).json({ error: 'Sign in required' });
-    const plant = byId('plants', req.params.id);
+    const plant = await byId('plants', req.params.id);
     if (!plant) return res.status(404).json({ error: 'Not found' });
     const own = plant.registered_by === req.user.id;
     if (!req.can('plant.history') && !own) return res.status(403).json({ error: 'Not permitted' });
 
-    const revisions = db.plant_revisions
-      .filter((r) => r.plant_id === plant.id)
-      .map((r) => ({ ...r, changed_by_name: byId('users', r.changed_by)?.full_name || 'System' }))
-      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-    const audits = db.audit_logs
-      .filter((a) => a.entity_type === 'plants' && a.entity_id === plant.id)
-      .map((a) => ({ ...a, user_name: byId('users', a.user_id)?.full_name || 'System' }))
-      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    const [revisions, audits] = await Promise.all([
+      q(`SELECT r.*, COALESCE(u.full_name, 'System') AS changed_by_name
+           FROM plant_revisions r LEFT JOIN users u ON u.id = r.changed_by
+          WHERE r.plant_id = ? ORDER BY r.created_at DESC`, [plant.id]),
+      q(`SELECT a.*, COALESCE(u.full_name, 'System') AS user_name
+           FROM audit_logs a LEFT JOIN users u ON u.id = a.user_id
+          WHERE a.entity_type = 'plants' AND a.entity_id = ? ORDER BY a.created_at DESC`, [plant.id]),
+    ]);
     res.json({ revisions, audits });
-  });
+  }));
 
   /* -------- submissions -------- */
 
-  api.get('/submissions', (req, res) => {
+  api.get('/submissions', route(async (req, res) => {
     if (!req.user) return res.status(401).json({ error: 'Sign in required' });
     const status = String(req.query.status || 'pending');
     const mine = req.query.mine === '1' || !req.can('plant.approve');
 
-    let rows = db.plant_submissions.filter((s) => (status === 'all' ? true : s.status === status));
-    if (mine) rows = rows.filter((s) => s.submitted_by === req.user.id);
+    const where = [];
+    const params = [];
+    if (status !== 'all') { where.push('sub.status = ?'); params.push(status); }
+    if (mine) { where.push('sub.submitted_by = ?'); params.push(req.user.id); }
 
-    rows.sort((a, b) => new Date(a.submitted_at) - new Date(b.submitted_at));
+    const rows = await q(
+      `SELECT sub.*,
+              submitter.full_name AS submitted_by_name,
+              reviewer.full_name  AS reviewed_by_name
+         FROM plant_submissions sub
+         LEFT JOIN users submitter ON submitter.id = sub.submitted_by
+         LEFT JOIN users reviewer  ON reviewer.id  = sub.reviewed_by
+         ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+        ORDER BY sub.submitted_at ASC`,
+      params,
+    );
+
+    const plantIds = [...new Set(rows.map((r) => r.plant_id))];
+    const plants = plantIds.length
+      ? await plantsWhere(`p.id IN (${placeholders(plantIds)})`, plantIds)
+      : [];
+    const shaped = await shapeMany(plants, { full: true, viewer: req.user });
+    const byPlant = new Map(shaped.map((p) => [p.id, p]));
+
     res.json({
-      results: rows.map((s) => ({
-        ...s,
-        submitted_by_name: byId('users', s.submitted_by)?.full_name || null,
-        reviewed_by_name: byId('users', s.reviewed_by)?.full_name || null,
-        plant: shapePlant(byId('plants', s.plant_id), { full: true, viewer: req.user }),
-      })),
+      results: rows.map((s) => ({ ...s, plant: byPlant.get(s.plant_id) ?? null })),
     });
-  });
+  }));
 
   /* ================================================================ */
   /* QR codes                                                         */
   /* ================================================================ */
 
-  api.get('/qr/:plantId', async (req, res) => {
-    const plant = byId('plants', req.params.plantId);
+  api.get('/qr/:plantId', route(async (req, res) => {
+    const rows = await plantsWhere('p.id = ?', [req.params.plantId]);
+    const plant = rows[0];
     if (!plant) return res.status(404).json({ error: 'Not found' });
-    const qr = activeQr(plant.id);
+    const qr = await one(
+      "SELECT * FROM qr_codes WHERE plant_id = ? ORDER BY (status = 'active') DESC, id ASC LIMIT 1",
+      [plant.id],
+    );
     if (!qr) return res.status(404).json({ error: 'No QR code has been issued for this record yet.' });
 
     const target = `${publicOrigin(req)}/p/${qr.qr_token}`;
-    qr.target_url = target;
+    // Recorded as printed: a tag already on a tree cannot be re-pointed, so
+    // the address it carries is kept rather than recomputed later.
+    await update('qr_codes', qr.id, { target_url: target });
 
-    const [png, svg] = await Promise.all([
+    const [png, svg, scans] = await Promise.all([
       QRCode.toDataURL(target, { margin: 1, width: 900, errorCorrectionLevel: 'M', color: { dark: '#14281d', light: '#ffffff' } }),
       QRCode.toString(target, { type: 'svg', margin: 1, errorCorrectionLevel: 'M' }),
+      count('SELECT COUNT(*) FROM qr_scans WHERE plant_id = ?', [plant.id]),
     ]);
     res.json({
       qr_token: qr.qr_token, status: qr.status, version: qr.version,
       target_url: target, png, svg,
       plant_code: plant.plant_code,
-      scientific_name: db.species.find((s) => s.id === plant.species_id)?.scientific_name || null,
-      common_name: db.species.find((s) => s.id === plant.species_id)?.common_name || null,
-      scans: db.qr_scans.filter((s) => s.plant_id === plant.id).length,
+      scientific_name: plant.scientific_name || null,
+      common_name: plant.common_name || null,
+      scans,
     });
-  });
+  }));
 
   /* ================================================================ */
   /* Notifications                                                    */
   /* ================================================================ */
 
-  api.get('/notifications', (req, res) => {
+  api.get('/notifications', route(async (req, res) => {
     if (!req.user) return res.status(401).json({ error: 'Sign in required' });
-    const rows = db.notifications
-      .filter((n) => n.user_id === req.user.id)
-      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    const rows = await q('SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC',
+      [req.user.id]);
     res.json({ unread: rows.filter((n) => !n.is_read).length, results: rows });
-  });
+  }));
 
-  api.post('/notifications/:id/read', (req, res) => {
+  api.post('/notifications/:id/read', route(async (req, res) => {
     if (!req.user) return res.status(401).json({ error: 'Sign in required' });
-    const n = byId('notifications', req.params.id);
+    const n = await byId('notifications', req.params.id);
     if (!n || n.user_id !== req.user.id) return res.status(404).json({ error: 'Not found' });
-    n.is_read = 1; n.read_at = nowIso();
+    await update('notifications', n.id, { is_read: 1, read_at: nowIso() });
     res.json({ ok: true });
-  });
+  }));
 
-  api.post('/notifications/read-all', (req, res) => {
+  api.post('/notifications/read-all', route(async (req, res) => {
     if (!req.user) return res.status(401).json({ error: 'Sign in required' });
-    db.notifications.filter((n) => n.user_id === req.user.id && !n.is_read)
-      .forEach((n) => { n.is_read = 1; n.read_at = nowIso(); });
+    await q('UPDATE notifications SET is_read = 1, read_at = ? WHERE user_id = ? AND is_read = 0',
+      [nowIso(), req.user.id]);
     res.json({ ok: true });
-  });
+  }));
 
   /* ================================================================ */
   /* Public error reports                                             */
   /* ================================================================ */
 
-  api.post('/reports', (req, res) => {
+  api.post('/reports', route(async (req, res) => {
     const b = req.body || {};
-    const plant = byId('plants', b.plant_id);
+    const plant = await byId('plants', b.plant_id);
     if (!plant) return res.status(404).json({ error: 'Not found' });
     if (!b.description?.trim()) return res.status(400).json({ error: 'Please describe what looks wrong.' });
-    const row = insert('plant_reports', {
+    const row = await insert('plant_reports', {
       plant_id: plant.id, reported_by: req.user?.id ?? null,
       reporter_name: b.reporter_name || null, reporter_email: b.reporter_email || null,
       issue_type: b.issue_type || 'other', description: b.description.trim(),
       status: 'open', handled_by: null, handled_at: null, resolution_note: null,
     });
-    notifyPermission('report.view', {
+    await notifyPermission('report.view', {
       type: 'report.new', title: 'Visitor reported incorrect information',
       body: 'A visitor flagged ' + plant.plant_code + ': ' + b.description.trim().slice(0, 100),
       related_type: 'plant', related_id: plant.id,
     });
     res.status(201).json({ report: row });
-  });
+  }));
 
-  api.get('/reports', need('report.view'), (req, res) => {
-    const rows = db.plant_reports
-      .map((r) => ({
-        ...r,
-        plant: shapePlant(byId('plants', r.plant_id), { viewer: req.user }),
-        handled_by_name: byId('users', r.handled_by)?.full_name || null,
-      }))
-      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-    res.json({ open: rows.filter((r) => r.status === 'open').length, results: rows });
-  });
+  api.get('/reports', need('report.view'), route(async (req, res) => {
+    const rows = await q(
+      `SELECT r.*, handler.full_name AS handled_by_name
+         FROM plant_reports r LEFT JOIN users handler ON handler.id = r.handled_by
+        ORDER BY r.created_at DESC`,
+    );
+    const plantIds = [...new Set(rows.map((r) => r.plant_id))];
+    const plants = plantIds.length
+      ? await plantsWhere(`p.id IN (${placeholders(plantIds)})`, plantIds)
+      : [];
+    const shaped = await shapeMany(plants, { viewer: req.user });
+    const byPlant = new Map(shaped.map((p) => [p.id, p]));
 
-  api.post('/reports/:id/resolve', need('report.resolve'), (req, res) => {
-    const r = byId('plant_reports', req.params.id);
+    res.json({
+      open: rows.filter((r) => r.status === 'open').length,
+      results: rows.map((r) => ({ ...r, plant: byPlant.get(r.plant_id) ?? null })),
+    });
+  }));
+
+  api.post('/reports/:id/resolve', need('report.resolve'), route(async (req, res) => {
+    const r = await byId('plant_reports', req.params.id);
     if (!r) return res.status(404).json({ error: 'Not found' });
-    r.status = req.body?.dismiss ? 'dismissed' : 'resolved';
-    r.handled_by = req.user.id;
-    r.handled_at = nowIso();
-    r.resolution_note = req.body?.note || null;
-    audit({ user_id: req.user.id, action: 'update', entity_type: 'plant_reports', entity_id: r.id, new_values: { status: r.status } });
-    res.json({ report: r });
-  });
+    const updated = await update('plant_reports', r.id, {
+      status: req.body?.dismiss ? 'dismissed' : 'resolved',
+      handled_by: req.user.id,
+      handled_at: nowIso(),
+      resolution_note: req.body?.note || null,
+    });
+    audit({ user_id: req.user.id, action: 'update', entity_type: 'plant_reports', entity_id: r.id, new_values: { status: updated.status } });
+    res.json({ report: updated });
+  }));
 
   /* ================================================================ */
   /* Admin - users, activity, audit, settings                         */
   /* ================================================================ */
 
-  api.get('/users', need('user.view'), (req, res) => {
+  api.get('/users', need('user.view'), route(async (req, res) => {
+    const rows = await q(
+      `SELECT u.*, creator.full_name AS created_by_name,
+              (SELECT COUNT(*) FROM plants p WHERE p.registered_by = u.id) AS plants_registered,
+              (SELECT COUNT(*) FROM plants p WHERE p.verified_by  = u.id) AS plants_verified
+         FROM users u LEFT JOIN users creator ON creator.id = u.created_by
+        WHERE u.deleted_at IS NULL ORDER BY u.id`,
+    );
     res.json({
-      results: db.users.filter((u) => !u.deleted_at).map((u) => ({
+      results: rows.map((u) => ({
         ...shapeUser(u),
-        created_by_name: byId('users', u.created_by)?.full_name || null,
-        plants_registered: db.plants.filter((p) => p.registered_by === u.id).length,
-        plants_verified: db.plants.filter((p) => p.verified_by === u.id).length,
+        created_by_name: u.created_by_name || null,
+        plants_registered: Number(u.plants_registered),
+        plants_verified: Number(u.plants_verified),
       })),
     });
-  });
+  }));
 
-  api.post('/users', need('user.manage'), (req, res) => {
+  api.post('/users', need('user.manage'), route(async (req, res) => {
     const b = req.body || {};
     if (!b.full_name?.trim()) return res.status(400).json({ error: 'Full name is required.' });
     if (!b.email?.trim()) return res.status(400).json({ error: 'Email address is required.' });
     if (!EMAIL_RE.test(b.email.trim())) return res.status(400).json({ error: 'That does not look like an email address.' });
-    if (db.users.some((u) => u.email.toLowerCase() === b.email.trim().toLowerCase())) {
-      return res.status(409).json({ error: 'An account with that email address already exists.' });
-    }
-    if (!db.roles.some((r) => r.id === Number(b.role_id))) return res.status(400).json({ error: 'Choose a role.' });
+    const dupe = await one('SELECT id FROM users WHERE LOWER(email) = ? LIMIT 1', [b.email.trim().toLowerCase()]);
+    if (dupe) return res.status(409).json({ error: 'An account with that email address already exists.' });
+    if (!roleById(b.role_id)) return res.status(400).json({ error: 'Choose a role.' });
 
-    const row = insert('users', {
+    const row = await insert('users', {
       role_id: Number(b.role_id),
       full_name: b.full_name.trim(), email: b.email.trim().toLowerCase(),
       title: b.title || null, phone: b.phone || null,
@@ -1078,103 +1294,123 @@ export function createApi() {
     });
     audit({ user_id: req.user.id, action: 'create', entity_type: 'users', entity_id: row.id, new_values: { email: row.email, role_id: row.role_id } });
     res.status(201).json({ user: shapeUser(row), temporary_password: DEMO_PASSWORD });
-  });
+  }));
 
-  api.patch('/users/:id', need('user.manage'), (req, res) => {
-    const u = byId('users', req.params.id);
-    if (!u) return res.status(404).json({ error: 'Not found' });
-    const before = { ...u };
-    if ('role_id' in (req.body || {})) {
+  api.patch('/users/:id', need('user.manage'), route(async (req, res) => {
+    const before = await byId('users', req.params.id);
+    if (!before) return res.status(404).json({ error: 'Not found' });
+    const body = req.body || {};
+    const patch = {};
+
+    if ('role_id' in body) {
       if (!req.can('user.assign_role')) return res.status(403).json({ error: 'Not permitted to change roles.' });
-      u.role_id = Number(req.body.role_id);
+      patch.role_id = Number(body.role_id);
     }
-    ['full_name', 'title', 'phone'].forEach((k) => { if (k in (req.body || {})) u[k] = req.body[k]; });
-    if ('is_active' in (req.body || {})) {
-      u.is_active = req.body.is_active ? 1 : 0;
-      if (!u.is_active) {
-        // Revoke live sessions so a deactivated account loses access at once.
-        for (const [token, uid] of sessions) if (uid === u.id) sessions.delete(token);
-      }
-    }
-    u.updated_at = nowIso();
+    ['full_name', 'title', 'phone'].forEach((k) => { if (k in body) patch[k] = body[k]; });
+    if ('is_active' in body) patch.is_active = body.is_active ? 1 : 0;
+    patch.updated_at = nowIso();
+
+    const after = await update('users', before.id, patch);
+    // Revoke live sessions so a deactivated account loses access at once.
+    if (patch.is_active === 0) await revokeAllFor(before.id);
+
     audit({
       user_id: req.user.id,
-      action: before.role_id !== u.role_id ? 'role_change' : 'update',
-      entity_type: 'users', entity_id: u.id,
+      action: before.role_id !== after.role_id ? 'role_change' : 'update',
+      entity_type: 'users', entity_id: before.id,
       old_values: { role_id: before.role_id, is_active: before.is_active, full_name: before.full_name },
-      new_values: { role_id: u.role_id, is_active: u.is_active, full_name: u.full_name },
+      new_values: { role_id: after.role_id, is_active: after.is_active, full_name: after.full_name },
     });
-    res.json({ user: shapeUser(u) });
-  });
+    res.json({ user: shapeUser(after) });
+  }));
 
-  api.post('/users/:id/reset-password', need('user.manage'), (req, res) => {
-    const u = byId('users', req.params.id);
+  api.post('/users/:id/reset-password', need('user.manage'), route(async (req, res) => {
+    const u = await byId('users', req.params.id);
     if (!u) return res.status(404).json({ error: 'Not found' });
     // This used to flag the account and report a temporary password without
     // ever setting one - the old password went on working.
-    u.password_hash = hashPassword(DEMO_PASSWORD);
-    u.must_change_password = 1;
-    u.updated_at = nowIso();
-    for (const [token, uid] of sessions) if (uid === u.id) sessions.delete(token);
+    await update('users', u.id, {
+      password_hash: hashPassword(DEMO_PASSWORD),
+      must_change_password: 1,
+      updated_at: nowIso(),
+    });
+    await revokeAllFor(u.id);
     audit({ user_id: req.user.id, action: 'password_reset', entity_type: 'users', entity_id: u.id, new_values: { must_change_password: 1 } });
     activity({ user_id: req.user.id, action: 'password_changed', detail: 'Reset the password for ' + u.email });
     res.json({ ok: true, temporary_password: DEMO_PASSWORD });
-  });
+  }));
 
-  api.get('/activity', need('system.audit'), (req, res) => {
-    const rows = db.user_activity_logs
-      .map((a) => ({ ...a, user_name: byId('users', a.user_id)?.full_name || 'Unknown', user_email: byId('users', a.user_id)?.email || null }))
-      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-      .slice(0, 300);
+  api.get('/activity', need('system.audit'), route(async (req, res) => {
+    const rows = await q(
+      `SELECT a.*, COALESCE(u.full_name, 'Unknown') AS user_name, u.email AS user_email
+         FROM user_activity_logs a LEFT JOIN users u ON u.id = a.user_id
+        ORDER BY a.created_at DESC LIMIT 300`,
+    );
     res.json({ results: rows });
-  });
+  }));
 
-  api.get('/audit', need('system.audit'), (req, res) => {
+  api.get('/audit', need('system.audit'), route(async (req, res) => {
     const { entity_type = '', action = '' } = req.query;
-    let rows = db.audit_logs.map((a) => ({ ...a, user_name: byId('users', a.user_id)?.full_name || 'System' }));
-    if (entity_type) rows = rows.filter((r) => r.entity_type === entity_type);
-    if (action) rows = rows.filter((r) => r.action === action);
-    rows.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-    res.json({
-      total: rows.length,
-      entity_types: [...new Set(db.audit_logs.map((a) => a.entity_type))],
-      actions: [...new Set(db.audit_logs.map((a) => a.action))],
-      results: rows.slice(0, 300),
-    });
-  });
+    const where = [];
+    const params = [];
+    if (entity_type) { where.push('a.entity_type = ?'); params.push(entity_type); }
+    if (action) { where.push('a.action = ?'); params.push(action); }
+    const clause = where.length ? 'WHERE ' + where.join(' AND ') : '';
 
-  api.get('/admin/stats', need('user.view'), (req, res) => {
+    const [rows, total, types, actions] = await Promise.all([
+      q(`SELECT a.*, COALESCE(u.full_name, 'System') AS user_name
+           FROM audit_logs a LEFT JOIN users u ON u.id = a.user_id
+           ${clause} ORDER BY a.created_at DESC LIMIT 300`, params),
+      count(`SELECT COUNT(*) FROM audit_logs a ${clause}`, params),
+      q('SELECT DISTINCT entity_type FROM audit_logs'),
+      q('SELECT DISTINCT action FROM audit_logs'),
+    ]);
     res.json({
-      users: db.users.filter((u) => !u.deleted_at).length,
-      active_users: db.users.filter((u) => u.is_active && !u.deleted_at).length,
-      by_role: db.roles.map((r) => ({
-        role: r.name, label: r.label,
-        count: db.users.filter((u) => u.role_id === r.id && !u.deleted_at).length,
-      })),
-      logins_7d: db.user_activity_logs.filter((a) => a.action === 'login'
-        && Date.now() - new Date(a.created_at) < 7 * 86400000).length,
-      failed_logins: db.user_activity_logs.filter((a) => a.action === 'login_failed').length,
-      audit_entries: db.audit_logs.length,
+      total,
+      entity_types: types.map((r) => r.entity_type),
+      actions: actions.map((r) => r.action),
+      results: rows,
     });
-  });
+  }));
 
-  api.get('/settings', need('system.settings'), (req, res) => {
+  api.get('/admin/stats', need('user.view'), route(async (req, res) => {
+    const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
+    const [users, active, byRole, logins7d, failed, auditEntries] = await Promise.all([
+      count('SELECT COUNT(*) FROM users WHERE deleted_at IS NULL'),
+      count('SELECT COUNT(*) FROM users WHERE is_active = 1 AND deleted_at IS NULL'),
+      q('SELECT role_id, COUNT(*) n FROM users WHERE deleted_at IS NULL GROUP BY role_id'),
+      count("SELECT COUNT(*) FROM user_activity_logs WHERE action = 'login' AND created_at >= ?", [weekAgo]),
+      count("SELECT COUNT(*) FROM user_activity_logs WHERE action = 'login_failed'"),
+      count('SELECT COUNT(*) FROM audit_logs'),
+    ]);
+    const perRole = new Map(byRole.map((r) => [r.role_id, Number(r.n)]));
     res.json({
-      results: db.settings.map((s) => ({ ...s, updated_by_name: byId('users', s.updated_by)?.full_name || null })),
+      users, active_users: active,
+      by_role: cachedRoles().map((r) => ({ role: r.name, label: r.label, count: perRole.get(r.id) || 0 })),
+      logins_7d: logins7d, failed_logins: failed, audit_entries: auditEntries,
     });
-  });
+  }));
 
-  api.patch('/settings/:key', need('system.settings'), (req, res) => {
-    const row = db.settings.find((s) => s.setting_key === req.params.key);
-    if (!row) return res.status(404).json({ error: 'Unknown setting' });
-    const before = row.setting_value;
-    setSetting(req.params.key, req.body?.value, req.user.id);
+  api.get('/settings', need('system.settings'), route(async (req, res) => {
+    const rows = await q(
+      `SELECT s.*, u.full_name AS updated_by_name
+         FROM settings s LEFT JOIN users u ON u.id = s.updated_by
+        ORDER BY s.setting_key`,
+    );
+    res.json({ results: rows });
+  }));
+
+  api.patch('/settings/:key', need('system.settings'), route(async (req, res) => {
+    const existing = allSettings().find((s) => s.setting_key === req.params.key);
+    if (!existing) return res.status(404).json({ error: 'Unknown setting' });
+    const before = existing.setting_value;
+    const row = await setSetting(req.params.key, req.body?.value, req.user.id);
     audit({
       user_id: req.user.id, action: 'update', entity_type: 'settings', entity_id: null,
       old_values: { [req.params.key]: before }, new_values: { [req.params.key]: row.setting_value },
     });
     res.json({ setting: row });
-  });
+  }));
 
   /* ================================================================ */
   /* IoT - hardware not received yet                                  */
@@ -1210,7 +1446,7 @@ export function createApi() {
   });
 
   /** Everything the "open on your phone" screen needs. */
-  api.get('/connect', async (req, res) => {
+  api.get('/connect', route(async (req, res) => {
     const port = req.app.get('protoPort');
     const addrs = lanAddresses();
     const url = publicOrigin(req);
@@ -1229,8 +1465,6 @@ export function createApi() {
       url, png, port, scheme, hosted,
       addresses: hosted ? [] : addrs.map((a) => ({ ...a, url: `${scheme}://${a.address}:${port}` })),
       secure: scheme === 'https',
-      // Where a phone can download the local CA certificate to trust it. Only
-      // meaningful while the site is served from this machine.
       ca_url: hosted ? null : (req.app.get('protoCaPath') || null),
       note: hosted
         ? 'Open this address on your phone, or scan the code. The site has a real certificate, so there is nothing to accept and the camera scanner works straight away.'
@@ -1238,7 +1472,7 @@ export function createApi() {
           ? 'Your phone will warn about the local certificate. Accept it once and the in-app camera scanner will work; trust it (below) to remove the warning for good.'
           : 'Browsers only allow camera access over HTTPS or localhost, so the in-app scanner cannot open the camera on this plain-HTTP address. Run "npm run https" if you need the live camera on your phone.',
     });
-  });
+  }));
 
   api.use((req, res) => res.status(404).json({ error: 'No such endpoint: ' + req.path }));
 

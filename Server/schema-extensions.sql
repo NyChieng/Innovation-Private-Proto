@@ -99,7 +99,7 @@ INSERT INTO settings (setting_key, setting_value, value_type, description) VALUE
   ('park_name', 'Niah National Park', 'string',
    'The park this register covers, shown in headings and on printed tags'),
   ('public_base_url', '', 'string',
-   'Permanent public address of the site, e.g. https://florascan.sarawakforestry.com. Printed QR codes encode this: set it before printing tags for real. Leave blank to use this machine network address, which is right for a demo'),
+   'Permanent public address of the site, e.g. https://florascan.example.org. Printed QR codes encode it, so set it before printing any tag for real. Blank uses this machine network address, which suits a demo'),
   ('protect_locations', 'VU', 'string',
    'Hide exact locations from the public at this IUCN level and above (VU, EN, CR). Blank disables the protection')
 ON DUPLICATE KEY UPDATE description = VALUES(description);

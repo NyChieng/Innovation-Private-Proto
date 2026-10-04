@@ -17,7 +17,11 @@
     "test": "node tests/api.test.mjs && node tests/ui.test.mjs",
     "test:api": "node tests/api.test.mjs",
     "test:ui": "node tests/ui.test.mjs",
-    "dev:memory": "node Server/index.js --no-db"
+    "db:setup": "node scripts/db-setup.mjs",
+    "db:seed": "node scripts/seed-mysql.mjs",
+    "db:reset": "node scripts/db-setup.mjs --reset && node scripts/seed-mysql.mjs --reset",
+    "pretest": "node scripts/test-db.mjs",
+    "db:test": "node scripts/test-db.mjs"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

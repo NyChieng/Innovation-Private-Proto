@@ -138,7 +138,36 @@ async function newPage({ token, mobile = false, view } = {}) {
   return page;
 }
 
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+/**
+ * How much slower this run is than one against a database on the same machine.
+ *
+ * The waits below were tuned against a local MySQL, where a request settles in
+ * a few milliseconds. Pointed at Aiven in Singapore every request costs a real
+ * round trip, a page makes a dozen of them, and a fixed 1300ms wait after
+ * submitting a form stops being enough - which shows up as a different handful
+ * of failures on every run. Measuring once and scaling keeps the same numbers
+ * honest against either.
+ */
+const PACE = await (async () => {
+  const started = Date.now();
+  await fetch(BASE + '/api/bootstrap').catch(() => {});
+  const ms = Date.now() - started;
+  const factor = Math.min(6, Math.max(1, Math.round((ms / 120) * 10) / 10));
+  if (factor > 1) console.log(`\n  Bootstrap took ${ms}ms - waits scaled ${factor}x for a remote database.`);
+  return factor;
+})();
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, Math.round(ms * PACE)));
+
+/** Wait for a condition instead of guessing how long it takes. */
+async function waitFor(predicate, { timeout = 8000 * PACE, every = 100 } = {}) {
+  const deadline = Date.now() + timeout;
+  for (;;) {
+    try { if (await predicate()) return true; } catch { /* keep trying */ }
+    if (Date.now() > deadline) return false;
+    await new Promise((r) => setTimeout(r, every));
+  }
+}
 
 async function go(page, route) {
   await page.goto(BASE + route, { waitUntil: 'networkidle2', timeout: 30000 });
@@ -371,7 +400,9 @@ section('6. Registration form - input validation');
   await page.type('#morph', 'Entered by the automated browser test.');
   await page.evaluate(() => [...document.querySelectorAll('button')]
     .find((b) => /Submit for review/i.test(b.textContent))?.click());
-  await sleep(1300);
+  // Waiting for the navigation itself rather than for a duration: this is the
+  // assertion that cares, and the one that broke against a remote database.
+  await waitFor(() => /\/staff\/plants\/\d+/.test(page.url()));
 
   check('a valid submission navigates to the new record', /\/staff\/plants\/\d+/.test(page.url()), page.url());
   text = await bodyText(page);

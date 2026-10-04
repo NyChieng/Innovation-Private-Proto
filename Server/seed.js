@@ -497,7 +497,7 @@ export function seed() {
     ['site_name', 'FloraScan', 'string', 'Shown in headers and page titles'],
     ['park_name', 'Niah National Park', 'string', 'The site this register covers'],
     ['qr_base_url', '/p/', 'string', 'Plant page address the QR codes encode, before the token'],
-    ['public_base_url', '', 'string', 'Permanent public address of the site, e.g. https://florascan.sarawakforestry.com. Set this before printing tags for real: QR codes encode it, and a tag printed with the wrong address is useless. Leave blank to use this machine network address, which is right for a demo'],
+    ['public_base_url', '', 'string', 'Permanent public address of the site, e.g. https://florascan.example.org. Printed QR codes encode it, so set it before printing any tag for real. Blank uses this machine network address, which suits a demo'],
     ['plant_code_prefix', 'PLT', 'string', 'Prefix for generated Plant IDs'],
     ['require_approval', 'true', 'bool', 'true = ranger entries wait for botanist review; false = they publish immediately. Botanist entries always publish immediately'],
     ['max_upload_mb', '8', 'int', 'Maximum photo upload size'],

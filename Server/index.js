@@ -6,9 +6,9 @@ import { fileURLToPath } from 'node:url';
 import express from 'express';
 import qrTerminal from 'qrcode-terminal';
 
-import { seed } from './seed.js';
 import { createApi } from './api.js';
-import { initPersistence, closePersistence, persistenceMiddleware } from './persist.js';
+import { connect, close as closeDb, databaseUrl } from './sql.js';
+import { loadReference } from './db.js';
 import { resolvePort } from './port.js';
 import { lanAddresses } from './net.js';
 import { tlsOptions, caDer, CA_PATH } from './certs.js';
@@ -30,16 +30,30 @@ const prod = argv.includes('--prod') || process.env.NODE_ENV === 'production';
 
 /* ------------------------------------------------------------------ */
 
-seed();
+// The register lives in MySQL. There is no in-memory fallback: a prototype
+// that silently served empty, unsaved data would be worse than one that
+// refuses to start and says why.
+if (!databaseUrl()) {
+  console.error('\n  No database configured.');
+  console.error('  Copy .env.example to .env and set DB_HOST / DB_USER / DB_PASSWORD,');
+  console.error('  or DATABASE_URL. Then run "npm run db:setup" to create the schema.\n');
+  process.exit(1);
+}
 
-// With DATABASE_URL set, a saved snapshot replaces the seeded data. Without
-// it this does nothing and the prototype stays in memory, as before.
-let persistence = null;
+let dbSummary = '';
 try {
-  persistence = await initPersistence();
+  await connect();
+  await loadReference();
+  const { q } = await import('./sql.js');
+  const [{ n: plants }] = await q('SELECT COUNT(*) n FROM plants WHERE deleted_at IS NULL');
+  const [{ n: species }] = await q('SELECT COUNT(*) n FROM species WHERE deleted_at IS NULL');
+  const host = new URL(databaseUrl()).hostname;
+  dbSummary = `${plants} plants and ${species} species on ${host}`;
 } catch (err) {
   console.error(`\n  Could not reach the database: ${err.message}`);
-  console.error('  Carrying on in memory - the demo works, but nothing is saved.\n');
+  console.error('  Check the connection details in .env. If the schema has not been');
+  console.error('  created yet, run "npm run db:setup".\n');
+  process.exit(1);
 }
 
 const app = express();
@@ -51,7 +65,6 @@ app.disable('x-powered-by');
 // spoof the origin, so this is production only.
 if (prod) app.set('trust proxy', 1);
 
-app.use('/api', persistenceMiddleware);
 app.use('/api', createApi());
 
 /* ------------------------------------------------------------------ */
@@ -162,9 +175,7 @@ function footer(line) {
   line(process.env.PORT
     ? `\x1b[2mPort ${port} comes from the PORT variable and is not saved.\x1b[0m`
     : `\x1b[2mPort ${port} is saved in proto.config.json - "npm run port" picks a new one.\x1b[0m`);
-  line(persistence
-    ? `\x1b[2mSaved state: ${persistence}\x1b[0m`
-    : '\x1b[2mIn memory only - set DATABASE_URL in .env to keep data across restarts.\x1b[0m');
+  line(`\x1b[2mDatabase: ${dbSummary}\x1b[0m`);
   console.log('');
 }
 
@@ -175,7 +186,7 @@ for (const sig of ['SIGINT', 'SIGTERM']) {
   process.on(sig, async () => {
     if (closing) return;
     closing = true;
-    await closePersistence();
+    await closeDb();
     process.exit(0);
   });
 }

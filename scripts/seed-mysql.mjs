@@ -17,10 +17,37 @@
 
 import process from 'node:process';
 import mysql from 'mysql2/promise';
+import { URL as URL_PARSE } from 'node:url';
 import { seed } from '../Server/seed.js';
 import { store as db } from '../Server/seed-store.js';
 
-const URL = process.env.MYSQL_URL || process.env.DATABASE_URL || 'mysql://root@127.0.0.1:3306/plant_registry';
+// The connection lives in .env, the same file the server reads. Without this
+// the DB_* variables are simply absent and the fallback quietly targets
+// localhost - which looks like a successful run against the wrong database.
+{
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+  const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+  const envFile = path.join(root, '.env');
+  if (fs.existsSync(envFile)) process.loadEnvFile(envFile);
+}
+
+function connectionUri() {
+  if (process.env.MYSQL_URL) return process.env.MYSQL_URL;
+  if (process.env.DATABASE_URL) return process.env.DATABASE_URL;
+  const { DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME } = process.env;
+  if (!DB_HOST || !DB_USER) return 'mysql://root@127.0.0.1:3306/plant_registry';
+  const auth = `${encodeURIComponent(DB_USER)}:${encodeURIComponent(DB_PASSWORD || '')}`;
+  return `mysql://${auth}@${DB_HOST}:${DB_PORT || 3306}/${DB_NAME || 'defaultdb'}`;
+}
+const URL = connectionUri();
+const LOCAL = /^(localhost|127\.0\.0\.1|\[::1\]|::1)$/i;
+// Aiven and every managed MySQL require TLS; a local server usually has no
+// certificate at all and refuses the handshake.
+const SSL = process.env.MYSQL_SSL_CA
+  ? { ca: (await import('node:fs')).default.readFileSync(process.env.MYSQL_SSL_CA), rejectUnauthorized: true }
+  : (LOCAL.test(new URL_PARSE(URL).hostname) ? undefined : { rejectUnauthorized: false });
 const RESET = process.argv.includes('--reset');
 
 /** Parents before children, so the foreign keys hold at every step. */
@@ -49,7 +76,7 @@ function coerce(value, type) {
   return value;
 }
 
-const conn = await mysql.createConnection({ uri: URL, multipleStatements: false });
+const conn = await mysql.createConnection({ uri: URL, ssl: SSL, multipleStatements: false });
 const dbName = conn.config.database;
 
 seed();
