@@ -1,5 +1,7 @@
 import crypto from 'node:crypto';
-import { db, insert, nowIso, notify, notifyPermission, audit, activity } from './db.js';
+// The fixture store, not the database: this file generates the demo dataset,
+// and scripts/seed-mysql.mjs writes it into MySQL.
+import { db, insert, nowIso, notify, notifyPermission, audit, activity, reset } from './seed-store.js';
 import { SPECIES_DATA, photoExists, tintFor } from './species-data.js';
 import { hashPassword, DEMO_PASSWORD } from './passwords.js';
 
@@ -33,6 +35,10 @@ const SITES = [
 ];
 
 export function seed() {
+  // Calling this twice should produce one dataset, not two stacked on top of
+  // each other - which is what happened when the store was global.
+  reset();
+
   /* ---------------------------------------------------------------- */
   /* Roles, permissions, role_permissions  (schema section 8)          */
   /* ---------------------------------------------------------------- */

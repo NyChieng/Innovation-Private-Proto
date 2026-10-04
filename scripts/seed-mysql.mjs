@@ -18,9 +18,9 @@
 import process from 'node:process';
 import mysql from 'mysql2/promise';
 import { seed } from '../Server/seed.js';
-import { db } from '../Server/db.js';
+import { store as db } from '../Server/seed-store.js';
 
-const URL = process.env.MYSQL_URL || 'mysql://root@127.0.0.1:3306/florascan';
+const URL = process.env.MYSQL_URL || process.env.DATABASE_URL || 'mysql://root@127.0.0.1:3306/plant_registry';
 const RESET = process.argv.includes('--reset');
 
 /** Parents before children, so the foreign keys hold at every step. */

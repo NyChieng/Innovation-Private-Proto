@@ -18,6 +18,8 @@
 import zlib from 'node:zlib';
 
 import { db, loadSnapshot } from './db.js';
+// One copy of the connection logic, shared with the SQL layer.
+import { databaseUrl, tlsFor } from './sql.js';
 
 const TABLE = 'proto_state';
 const ROW_ID = 'florascan';
@@ -36,60 +38,6 @@ let failures = 0;
 
 export const persistenceEnabled = () => Boolean(pool);
 
-const LOCAL_HOST = /^(localhost|127\.0\.0\.1|\[::1\]|::1)$/i;
-
-/**
- * Where the database is, from either shape of configuration.
- *
- * DATABASE_URL is one string and is what Render wants. The rest of the group
- * shares the Aiven details as DB_HOST / DB_PORT / DB_USER / DB_PASSWORD /
- * DB_NAME, so those are accepted too and assembled here - one .env works for
- * everybody rather than each person translating it.
- *
- * The password is percent-encoded on the way in: an Aiven password containing
- * @ or / would otherwise break the URL it is being put into.
- */
-function databaseUrl() {
-  if (process.env.DATABASE_URL) return process.env.DATABASE_URL;
-
-  const { DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME } = process.env;
-  if (!DB_HOST || !DB_USER) return null;
-
-  const auth = `${encodeURIComponent(DB_USER)}:${encodeURIComponent(DB_PASSWORD || '')}`;
-  return `mysql://${auth}@${DB_HOST}:${DB_PORT || 3306}/${DB_NAME || 'defaultdb'}`;
-}
-
-/**
- * Whether to speak TLS to this database, and how.
- *
- * Aiven and every other managed MySQL require it. A local MySQL - XAMPP, or a
- * container on a laptop - usually has no certificate at all and refuses the
- * handshake outright ("Server does not support secure connection"), so asking
- * for TLS there breaks development for the sake of a hop that never leaves
- * the machine.
- *
- * MYSQL_SSL_CA points at the provider's CA file and gets a properly verified
- * connection, which is what a deployment should use. MYSQL_SSL=off forces it
- * off for an awkward case.
- */
-async function tlsFor(url) {
-  if (String(process.env.MYSQL_SSL || '').toLowerCase() === 'off') return undefined;
-  if (process.env.MYSQL_SSL_CA) {
-    const fs = await import('node:fs');
-    return { ca: fs.readFileSync(process.env.MYSQL_SSL_CA), rejectUnauthorized: true };
-  }
-  let host = '';
-  try { host = new URL(url).hostname; } catch { /* fall through to encrypted */ }
-  if (LOCAL_HOST.test(host)) return undefined;
-  // Remote without a CA bundle: encrypted, but the certificate is unverified.
-  return { rejectUnauthorized: false };
-}
-
-/**
- * Connect, make sure the table exists, and restore any saved snapshot.
- * Returns a short line about what happened, for the startup banner, or null
- * when persistence is switched off.
- */
 export async function initPersistence() {
   // The test suites register and archive real records to exercise the
   // workflow. Pointed at the live database they would leave that litter there
