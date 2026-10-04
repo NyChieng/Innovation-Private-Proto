@@ -34,21 +34,66 @@ export function databaseUrl() {
 
 const LOCAL_HOST = /^(localhost|127\.0\.0\.1|\[::1\]|::1)$/i;
 
+let warnedUnverified = false;
+
 /**
- * Whether to speak TLS, and how. Aiven and every managed MySQL require it; a
- * local MySQL usually has no certificate at all and refuses the handshake
- * outright, so asking for TLS there breaks development for a hop that never
- * leaves the machine. MYSQL_SSL_CA gets a properly verified connection.
+ * Whether to speak TLS to this database, and how.
+ *
+ * Aiven signs its servers with its own private certificate authority, not one
+ * in Node's trust store - verified without their CA the handshake fails, which
+ * is checked, not assumed. So ca.pem from the service page is what makes the
+ * connection genuinely verified rather than merely encrypted; without it
+ * nothing proves the server answering is the one we meant to reach.
+ *
+ * Looked for in this order: MYSQL_SSL_CA_CERT (the certificate inline, for a
+ * host where a long environment variable beats adding a file), MYSQL_SSL_CA
+ * (a path to it), then ca.pem beside package.json - where Aiven's own
+ * instructions tell you to put it.
+ *
+ * A local MySQL is the exception. XAMPP has no certificate at all and refuses
+ * the handshake outright ("Server does not support secure connection"), so
+ * TLS there breaks development for the sake of a hop that never leaves the
+ * machine. MYSQL_SSL=off forces it off for any other awkward case.
  */
+
 export async function tlsFor(url) {
   if (String(process.env.MYSQL_SSL || '').toLowerCase() === 'off') return undefined;
+
+  const fs = await import('node:fs');
+  const nodePath = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+
+  // Inline, for a host where a long environment variable is easier than a file.
+  if (process.env.MYSQL_SSL_CA_CERT) {
+    return { ca: process.env.MYSQL_SSL_CA_CERT, rejectUnauthorized: true };
+  }
   if (process.env.MYSQL_SSL_CA) {
-    const fs = await import('node:fs');
     return { ca: fs.readFileSync(process.env.MYSQL_SSL_CA), rejectUnauthorized: true };
   }
+  // ca.pem beside package.json, which is where Aiven's instructions put it,
+  // and /etc/secrets/ca.pem, which is where Render mounts a Secret File. The
+  // certificate is public, so either is fine - a Secret File just keeps it out
+  // of the repository.
+  const root = nodePath.dirname(nodePath.dirname(fileURLToPath(import.meta.url)));
+  for (const candidate of [nodePath.join(root, 'ca.pem'), '/etc/secrets/ca.pem']) {
+    if (fs.existsSync(candidate)) {
+      return { ca: fs.readFileSync(candidate), rejectUnauthorized: true };
+    }
+  }
+
   let host = '';
   try { host = new URL(url).hostname; } catch { /* fall through to encrypted */ }
   if (LOCAL_HOST.test(host)) return undefined;
+
+  // Remote with no certificate authority to check against. The connection is
+  // still encrypted, but nothing proves the server on the other end is the one
+  // we meant to reach - so say so rather than let it pass quietly.
+  if (!warnedUnverified) {
+    warnedUnverified = true;
+    console.warn(`\n  Connecting to ${host} without verifying its certificate.`);
+    console.warn('  Put ca.pem from the Aiven service page in the project root, or set');
+    console.warn('  MYSQL_SSL_CA_CERT, to make this a verified connection.\n');
+  }
   return { rejectUnauthorized: false };
 }
 

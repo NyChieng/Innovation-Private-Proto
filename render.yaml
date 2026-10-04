@@ -61,7 +61,8 @@ services:
         sync: false
       - key: PUBLIC_BASE_URL
         sync: false
-      # Set to the Aiven CA certificate path to verify TLS properly. Without
-      # it the connection is still encrypted, just unverified.
-      - key: MYSQL_SSL_CA
-        sync: false
+      # TLS verification needs Aiven's ca.pem. Add it under Advanced > Secret
+      # Files with the filename ca.pem and the server finds it on its own -
+      # Render mounts it at the app root and at /etc/secrets/ca.pem, and both
+      # are checked. No environment variable needed. Without it the connection
+      # is encrypted but unverified, and the log says so at startup.
