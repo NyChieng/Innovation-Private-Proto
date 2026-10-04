@@ -4,14 +4,14 @@ import { fileURLToPath } from 'node:url';
 import { SPECIES as CURATED } from './seed-species.js';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-export const PHOTO_DIR = path.join(ROOT, 'server', 'data', 'photos');
-const DATA_FILE = path.join(ROOT, 'server', 'data', 'species.json');
-const TINTS_FILE = path.join(ROOT, 'server', 'data', 'photo-tints.json');
+export const PHOTO_DIR = path.join(ROOT, 'Server', 'data', 'photos');
+const DATA_FILE = path.join(ROOT, 'Server', 'data', 'species.json');
+const TINTS_FILE = path.join(ROOT, 'Server', 'data', 'photo-tints.json');
 
 /**
  * The species list the demo is seeded from.
  *
- * Prefers `server/data/species.json`, which `npm run import:species` builds
+ * Prefers `Server/data/species.json`, which `npm run import:species` builds
  * from GBIF, iNaturalist and Wikipedia — real taxonomy, real IUCN categories,
  * real Sarawak coordinates and real Creative Commons photographs.
  *

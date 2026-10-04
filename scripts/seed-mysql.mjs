@@ -4,8 +4,8 @@
  *   node scripts/seed-mysql.mjs            # fill empty tables, refuse otherwise
  *   node scripts/seed-mysql.mjs --reset    # empty every table first
  *
- * The in-memory store in server/db.js is the shape the API has always used, and
- * server/schema.sql is its relational form. Rather than hand-write an INSERT per
+ * The in-memory store in Server/db.js is the shape the API has always used, and
+ * Server/schema.sql is its relational form. Rather than hand-write an INSERT per
  * table and let the two drift, this reads the live column list out of
  * information_schema and copies across whatever matches by name - so a column
  * added to the schema but not the seed, or the other way round, shows up as a
@@ -17,8 +17,8 @@
 
 import process from 'node:process';
 import mysql from 'mysql2/promise';
-import { seed } from '../server/seed.js';
-import { db } from '../server/db.js';
+import { seed } from '../Server/seed.js';
+import { db } from '../Server/db.js';
 
 const URL = process.env.MYSQL_URL || 'mysql://root@127.0.0.1:3306/florascan';
 const RESET = process.argv.includes('--reset');
@@ -67,7 +67,7 @@ for (const c of cols) {
   schema.get(c.TABLE_NAME).set(c.COLUMN_NAME, c.DATA_TYPE);
 }
 if (!schema.size) {
-  console.error(`No tables in "${dbName}". Apply server/schema.sql first.`);
+  console.error(`No tables in "${dbName}". Apply Server/schema.sql first.`);
   process.exit(1);
 }
 

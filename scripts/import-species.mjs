@@ -1,7 +1,7 @@
 /**
  * Species importer.
  *
- * Builds `server/data/species.json` from open biodiversity databases, and
+ * Builds `Server/data/species.json` from open biodiversity databases, and
  * caches the photographs locally so the prototype still works with no
  * internet.
  *
@@ -27,7 +27,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { SPECIES as CURATED } from '../server/seed-species.js';
+import { SPECIES as CURATED } from '../Server/seed-species.js';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const DATA_DIR = path.join(ROOT, 'server', 'data');
@@ -376,7 +376,7 @@ const withIucn = records.filter((r) => r.conservation_source.startsWith('IUCN'))
 const bytes = fs.readdirSync(PHOTO_DIR).reduce((n, f) => n + fs.statSync(path.join(PHOTO_DIR, f)).size, 0);
 
 console.log('\n' + '='.repeat(56));
-console.log(`${records.length} species written to server/data/species.json`);
+console.log(`${records.length} species written to Server/data/species.json`);
 console.log(`${photoCount} photographs cached (${(bytes / 1048576).toFixed(1)} MB)`);
 console.log(`${withIucn} with a real IUCN Red List assessment`);
 console.log(`${records.reduce((n, r) => n + r.occurrence_points.length, 0)} real Sarawak coordinates`);

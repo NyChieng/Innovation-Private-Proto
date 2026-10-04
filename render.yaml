@@ -1,0 +1,56 @@
+# Render deployment for FloraScan / Prototype X.
+#
+# Render reads this when the repository is connected as a Blueprint, so the
+# build and start commands live in version control rather than only in
+# somebody's dashboard.
+#
+# One service serves both halves: Server/ runs the Express API and also hands
+# out the built React app from dist/. That keeps the site on a single origin,
+# which is what makes the QR tags, the phone hand-off and the installable web
+# app work without CORS.
+#
+# Before the first deploy, set these two in the Render dashboard (they are
+# marked sync:false so they are never committed):
+#   DATABASE_URL      mysql://user:password@host:port/defaultdb   (Aiven)
+#   PUBLIC_BASE_URL   https://<this service>.onrender.com
+#
+# PUBLIC_BASE_URL is chicken-and-egg: deploy once, copy the URL Render gives
+# you, set it, redeploy. Printed QR tags encode it, so it must be right before
+# any tag is printed for real.
+
+services:
+  - type: web
+    name: florascan
+    runtime: node
+    plan: free
+
+    # Match this to wherever the Aiven database lives. A backend in one region
+    # and its database in another turns every query into an intercontinental
+    # round trip, and a page here makes a dozen of them.
+    region: singapore
+
+    buildCommand: npm install && npm run build
+
+    # --prod serves dist/ instead of running Vite.
+    # --http is deliberate: Render terminates TLS at its edge and speaks plain
+    # HTTP to the container, so serving HTTPS here would make its proxy
+    # unable to reach us. The app still knows the public scheme is HTTPS,
+    # because it trusts x-forwarded-proto in production.
+    startCommand: node Server/index.js --prod --http
+
+    healthCheckPath: /api/bootstrap
+
+    envVars:
+      # Server/index.js calls process.loadEnvFile, which needs Node 20.6+.
+      - key: NODE_VERSION
+        value: "24"
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: PUBLIC_BASE_URL
+        sync: false
+      # Set to the Aiven CA certificate path to verify TLS properly. Without
+      # it the connection is still encrypted, just unverified.
+      - key: MYSQL_SSL_CA
+        sync: false

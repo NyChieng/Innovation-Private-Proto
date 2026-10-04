@@ -100,7 +100,14 @@ if (prod) {
 } else {
   const { createServer } = await import('vite');
   const vite = await createServer({
-    root,
+    // Vite looks for its config inside `root` by default, and root is the web
+    // app folder - so without this it finds no config, loads no plugins, and
+    // the React JSX transform never runs. The page then dies on "React is not
+    // defined", which looks nothing like a missing config file.
+    configFile: path.join(root, 'vite.config.js'),
+    // The React app, not the repository root. Vite takes its index.html and
+    // its public/ folder from here.
+    root: path.join(root, 'FloraScan-Web-App'),
     appType: 'spa',
     server: {
       middlewareMode: true,

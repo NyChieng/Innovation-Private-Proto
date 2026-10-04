@@ -3,7 +3,7 @@
  *
  * A placeholder tinted like the photograph that is about to land reads as the
  * picture arriving; a grey rectangle reads as something broken. This produces
- * `server/data/photo-tints.json`, which the API hands to the client so each
+ * `Server/data/photo-tints.json`, which the API hands to the client so each
  * image can sit on its own colour while it loads.
  *
  * Chrome does the decoding, since there is no image library in this project.
@@ -19,8 +19,8 @@ import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-const PHOTOS = path.join(ROOT, 'server', 'data', 'photos');
-const OUT = path.join(ROOT, 'server', 'data', 'photo-tints.json');
+const PHOTOS = path.join(ROOT, 'Server', 'data', 'photos');
+const OUT = path.join(ROOT, 'Server', 'data', 'photo-tints.json');
 
 const CHROME = [
   process.env.CHROME_PATH,
@@ -113,7 +113,7 @@ try {
     tints,
   }, null, 1) + '\n');
 
-  console.log(`${count} of ${files.length} sampled -> server/data/photo-tints.json`);
+  console.log(`${count} of ${files.length} sampled -> Server/data/photo-tints.json`);
   const sample = Object.entries(tints).slice(0, 3);
   sample.forEach(([f, c]) => console.log(`  ${c}  ${f}`));
 } finally {

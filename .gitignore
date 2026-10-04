@@ -3,5 +3,5 @@ dist/
 proto.config.json
 .certs/
 *.log
-server/data/photos/
+Server/data/photos/
 .env
