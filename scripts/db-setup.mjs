@@ -19,6 +19,7 @@ import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import mysql from 'mysql2/promise';
+import { spawnSync } from 'node:child_process';
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const envFile = path.join(root, '.env');
@@ -79,8 +80,45 @@ function statements(text) {
   return out;
 }
 
-const conn = await mysql.createConnection({ uri, ssl, multipleStatements: false });
-const dbName = conn.config.database;
+const dbName = new URL(uri).pathname.replace(/^\//, '') || 'plant_registry';
+
+/**
+ * Create the database if it is not there yet.
+ *
+ * A managed service hands you one already made - Aiven calls it defaultdb -
+ * but a teammate running XAMPP has an empty server, and connecting straight to
+ * a database that does not exist fails with "Unknown database" before any of
+ * the schema is read. The schema file does create it, but with a DROP in front
+ * that would be wrong to run against a server that already holds data, so
+ * those statements are skipped and this does the job instead.
+ */
+{
+  const serverUri = uri.replace(/\/[^/]*$/, '/');
+  const admin = await mysql.createConnection({ uri: serverUri, ssl }).catch(() => null);
+  if (admin) {
+    try {
+      await admin.query(
+        `CREATE DATABASE IF NOT EXISTS \`${dbName}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
+      );
+    } catch (err) {
+      // A managed provider usually forbids this and has made the database
+      // already, so a refusal here is not a problem; a missing database is
+      // reported clearly by the connection below.
+      if (!/denied|not allowed/i.test(err.message)) throw err;
+    }
+    await admin.end();
+  }
+}
+
+const conn = await mysql.createConnection({ uri, ssl, multipleStatements: false })
+  .catch((err) => {
+    if (err.code === 'ER_BAD_DB_ERROR') {
+      console.error(`\n  The database "${dbName}" does not exist and could not be created.`);
+      console.error('  Check that MySQL is running and that the user in .env may create databases.\n');
+      process.exit(1);
+    }
+    throw err;
+  });
 console.log(`Target: ${dbName} on ${host}\n`);
 
 if (RESET) {
@@ -132,8 +170,22 @@ if (fs.existsSync(extensionsFile)) await run(extensionsFile, 'Extensions');
 const [[{ n: plants }]] = await conn.query('SELECT COUNT(*) n FROM plants');
 await conn.end();
 
-console.log(
-  plants > 0
-    ? `\nSchema ready. ${plants} plants already present.`
-    : '\nSchema ready and empty. Run "npm run db:seed" to load the demo dataset.',
-);
+// The schema file seeds its own roles, permissions, statuses and settings, and
+// the demo dataset contains all of those too - so loading one on top of the
+// other collides on the primary key. The seeder empties what it is about to
+// fill, which makes this one command rather than two that conflict.
+if (plants > 0 && !RESET) {
+  console.log(`\nSchema ready. ${plants} plants already present, so the data was left alone.`);
+  console.log('Re-run with --reset to rebuild it from the demo dataset.');
+  process.exit(0);
+}
+
+console.log('\nLoading the demo dataset...\n');
+const seeded = spawnSync(process.execPath, [path.join(root, 'scripts', 'seed-mysql.mjs'), '--reset'], {
+  cwd: root, stdio: 'inherit',
+});
+if (seeded.status !== 0) {
+  console.error('\nThe schema is in place but the demo data did not load.');
+  process.exit(1);
+}
+console.log('\nReady. Start the server with "npm run dev".');

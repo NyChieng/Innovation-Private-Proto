@@ -13,16 +13,53 @@ the person who made it.
 
 ## Run it
 
+The register lives in MySQL, so there is a database to set up before the server
+will start. Two branches, differing only in which database they point at:
+
+| Branch | Database | For |
+| --- | --- | --- |
+| `main` | the shared Aiven service | deployment, and anyone who wants the group's live data |
+| `local` | your own MySQL, usually XAMPP | developing and testing without touching the shared one |
+
+### On your own machine, with XAMPP
+
 ```bash
+git checkout local
 npm install
-npm run import:species   # optional: real species data and photographs
+
+# Start Apache and MySQL in the XAMPP control panel first.
+cp .env.example .env      # already points at mysql://root@127.0.0.1:3306/plant_registry
+npm run db:setup          # creates the database, applies the schema, loads the demo data
 npm run dev
 ```
 
-The import is optional but worth running once. Without it the prototype falls back to a
-hand-written list of 20 species with generated illustrations; with it you get 90 species
-from GBIF, real IUCN Red List categories, and real Creative Commons photographs. It takes
-about ten minutes and is safe to re-run.
+`db:setup` creates the database if it is not there, applies
+`plant_registry_schema.sql` and `Server/schema-extensions.sql`, and loads 5,856
+rows of demo data. Run it again and it leaves existing data alone; add
+`-- --reset` to rebuild from scratch.
+
+The database is then visible in phpMyAdmin at `http://localhost/phpmyadmin` as
+`plant_registry`, and anything you change there shows up in the app.
+
+### Against the shared database
+
+```bash
+git checkout main
+cp .env.example .env      # then fill in DB_HOST / DB_USER / DB_PASSWORD from Aiven
+npm run dev
+```
+
+The schema and data are already there, so there is nothing to set up. Note that
+`npm test` refuses to run against a remote database, by design: the suites
+create and archive real records and would leave that litter for everybody else.
+
+### Photographs
+
+A fresh clone has no local photograph cache - `Server/data/photos/` is 28 MB and
+gitignored - so images are fetched from iNaturalist instead, using the
+`remote_url` each record carries. They still appear, but you need to be online.
+`npm run import:species` rebuilds the cache locally; it takes about ten minutes
+and is safe to re-run.
 
 The terminal prints two addresses and a QR code:
 
