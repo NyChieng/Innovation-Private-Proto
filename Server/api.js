@@ -412,6 +412,57 @@ function validatePlant(body) {
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 /* ------------------------------------------------------------------ */
+/* Uploaded photographs                                                */
+/* ------------------------------------------------------------------ */
+
+/**
+ * A photograph arrives from the camera or the file picker as a data URL.
+ *
+ * It used to be written straight into plant_photos.file_path, which is
+ * VARCHAR(255) - a 400KB photograph is about 409,000 characters. MariaDB
+ * truncated it silently and stored a corrupt image; MySQL 8 in strict mode,
+ * which is what Aiven runs, refuses the row and the registration fails with a
+ * 500. Either way the upload never worked.
+ *
+ * So the bytes are decoded here, checked against max_upload_mb and
+ * allowed_image_types - two settings the schema defines and nothing was
+ * reading - and stored in plant_photo_data, with file_path holding the address
+ * they are served from, as the schema intends.
+ */
+const DATA_URL = /^data:([a-z0-9.+-]+\/[a-z0-9.+-]+);base64,(.+)$/i;
+
+function decodeUpload(photo, index) {
+  const raw = typeof photo?.data_url === 'string' ? photo.data_url : '';
+  if (!raw) return { skip: true };
+
+  const match = DATA_URL.exec(raw.trim());
+  if (!match) {
+    return { error: `Photograph ${index + 1} is not an image the app can read.` };
+  }
+  const [, mime, base64] = match;
+
+  const allowed = getSetting('allowed_image_types') || ['image/jpeg', 'image/png', 'image/webp'];
+  if (Array.isArray(allowed) && !allowed.includes(mime.toLowerCase())) {
+    return { error: `Photograph ${index + 1} is a ${mime} file. Accepted types: ${allowed.join(', ')}.` };
+  }
+
+  let bytes;
+  try {
+    bytes = Buffer.from(base64, 'base64');
+  } catch {
+    return { error: `Photograph ${index + 1} could not be decoded.` };
+  }
+  if (!bytes.length) return { error: `Photograph ${index + 1} is empty.` };
+
+  const maxMb = Number(getSetting('max_upload_mb')) || 8;
+  if (bytes.length > maxMb * 1024 * 1024) {
+    const mb = (bytes.length / 1048576).toFixed(1);
+    return { error: `Photograph ${index + 1} is ${mb} MB. The limit is ${maxMb} MB.` };
+  }
+  return { mime, bytes };
+}
+
+/* ------------------------------------------------------------------ */
 /* Search                                                              */
 /* ------------------------------------------------------------------ */
 
@@ -820,6 +871,17 @@ export function createApi() {
     const invalid = validatePlant(b);
     if (invalid) return res.status(400).json({ error: invalid });
 
+    // Decode and check the photographs before writing anything, so an
+    // oversized one is refused with a reason rather than failing halfway
+    // through creating the record.
+    const incoming = Array.isArray(b.photos) ? b.photos.slice(0, 6) : [];
+    const decoded = [];
+    for (const [i, p] of incoming.entries()) {
+      const result = decodeUpload(p, i);
+      if (result.error) return res.status(400).json({ error: result.error });
+      decoded.push({ source: p, ...result });
+    }
+
     const requireApproval = getSetting('require_approval');
     const canPublish = req.can('plant.approve');
     // Botanist entries publish immediately. Ranger entries follow the setting,
@@ -854,23 +916,28 @@ export function createApi() {
         updated_at: nowIso(), deleted_at: null,
       });
 
-      // Photographs. The prototype accepts data URLs from the camera / file
-      // picker; the real API writes files to disk and keeps only the path,
-      // exactly as plant_photos.file_path implies.
-      const photos = Array.isArray(b.photos) ? b.photos.slice(0, 6) : [];
-      for (const [i, p] of photos.entries()) {
-        await t.insert('plant_photos', {
+      // Photographs. The row goes in first so the bytes have an id to hang
+      // off, then file_path is set to the address they are served from -
+      // a path, which is what plant_photos.file_path is for.
+      for (const [i, p] of decoded.entries()) {
+        const row = await t.insert('plant_photos', {
           plant_id: plant.id,
-          file_path: p.data_url || p.file_path,
-          thumbnail_path: p.data_url || p.file_path,
-          file_name: p.file_name || 'capture-' + (i + 1) + '.jpg',
-          mime_type: p.mime_type || 'image/jpeg',
-          size_bytes: p.size_bytes || 0,
+          file_path: p.skip ? (p.source.file_path || null) : null,
+          thumbnail_path: p.skip ? (p.source.file_path || null) : null,
+          file_name: p.source.file_name || 'capture-' + (i + 1) + '.jpg',
+          mime_type: p.skip ? (p.source.mime_type || 'image/jpeg') : p.mime,
+          size_bytes: p.skip ? (p.source.size_bytes || 0) : p.bytes.length,
           width_px: null, height_px: null,
-          caption: p.caption || null,
+          caption: p.source.caption || null,
           is_primary: i === 0 ? 1 : 0,
           uploaded_by: req.user.id, deleted_at: null,
         });
+        if (p.skip) continue;
+        await t.q('INSERT INTO plant_photo_data (photo_id, bytes, byte_length) VALUES (?, ?, ?)',
+          [row.id, p.bytes, p.bytes.length]);
+        const servedAt = `/api/photos/upload/${row.id}`;
+        await t.q('UPDATE plant_photos SET file_path = ?, thumbnail_path = ? WHERE id = ?',
+          [servedAt, servedAt, row.id]);
       }
 
       let submission = null;
@@ -1439,6 +1506,35 @@ export function createApi() {
     res.sendFile(path.join(PHOTO_DIR, name));
   });
 
+  /**
+   * A photograph somebody uploaded in the field.
+   *
+   * Public, like the record it belongs to - a visitor scanning a tag has to be
+   * able to see it - but only for a record that is actually published. An
+   * unapproved or archived plant's photographs stay out of sight, or the
+   * publication rule leaks through the image URLs.
+   */
+  api.get('/photos/upload/:id', route(async (req, res) => {
+    const row = await one(
+      `SELECT d.bytes, d.byte_length, ph.mime_type, p.status, p.deleted_at, p.registered_by
+         FROM plant_photo_data d
+         JOIN plant_photos ph ON ph.id = d.photo_id
+         JOIN plants p        ON p.id  = ph.plant_id
+        WHERE d.photo_id = ? AND ph.deleted_at IS NULL
+        LIMIT 1`,
+      [req.params.id],
+    );
+    if (!row || row.deleted_at) return res.status(404).json({ error: 'No such photograph' });
+
+    const visible = row.status === 'approved' || req.can('plant.view_all')
+      || (req.user && row.registered_by === req.user.id);
+    if (!visible) return res.status(404).json({ error: 'No such photograph' });
+
+    res.set('Cache-Control', 'public, max-age=604800, immutable');
+    res.type(row.mime_type || 'image/jpeg');
+    res.send(row.bytes);
+  }));
+
   api.get('/photos/:name', (req, res) => {
     res.type('image/svg+xml');
     res.set('Cache-Control', 'public, max-age=86400');
@@ -1479,6 +1575,19 @@ export function createApi() {
   // Always answer the client in JSON - an HTML error page would surface in the
   // UI as an unhelpful parse failure.
   api.use((err, req, res, _next) => {
+    // A photograph larger than the body limit is refused by the JSON parser
+    // before any handler sees it. That is the caller's mistake, not the
+    // server's, so it gets a 400 saying what the limit is rather than a 500
+    // saying "request entity too large".
+    if (err?.type === 'entity.too.large' || err?.status === 413) {
+      const maxMb = Number(getSetting('max_upload_mb')) || 8;
+      return res.status(400).json({
+        error: `That is too much data to send at once. Photographs are limited to ${maxMb} MB each, and a few at a time.`,
+      });
+    }
+    if (err?.type === 'entity.parse.failed') {
+      return res.status(400).json({ error: 'The request body was not valid JSON.' });
+    }
     console.error('API error on ' + req.method + ' ' + req.path + ':', err);
     res.status(500).json({ error: err.message || 'Unexpected server error' });
   });

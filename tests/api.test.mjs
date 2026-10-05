@@ -988,7 +988,83 @@ section('31. Archiving a record that was still awaiting review');
 }
 
 /* ------------------------------------------------------------------ */
-section('32. Tidying up after the run');
+section('32. Uploading a photograph');
+{
+  // A photograph used to be written straight into plant_photos.file_path,
+  // which is VARCHAR(255). MariaDB truncated a 400KB image to 255 characters
+  // and stored the wreckage; MySQL 8 in strict mode refused the row and the
+  // registration failed with a 500. Neither was noticed because nothing tested
+  // it end to end.
+  const fs = await import('node:fs');
+  const crypto = await import('node:crypto');
+  const dir = new URL('../Server/data/photos/', import.meta.url);
+  const name = fs.existsSync(dir) ? fs.readdirSync(dir).find((f) => f.endsWith('.jpg')) : null;
+
+  if (!name) {
+    check('a cached photograph is available to upload', false,
+      'Server/data/photos is empty - run "npm run import:species"');
+  } else {
+    const original = fs.readFileSync(new URL(name, dir));
+    const dataUrl = 'data:image/jpeg;base64,' + original.toString('base64');
+    const species = (await get('/species')).body.results[0];
+
+    const made = await post('/plants', {
+      site_name: 'Debug plot, photo upload',
+      species_id: species.id,
+      photos: [{ data_url: dataUrl, file_name: name, caption: 'Round trip' }],
+    }, botT);
+    eq('a plant with a photograph is accepted', made.status, 201);
+    check('the photograph is served from a path, not stored as a data URL',
+      /^\/api\/photos\/upload\/\d+$/.test(made.body.plant.photo || ''), made.body.plant.photo);
+
+    const served = await fetch(ORIGIN + made.body.plant.photo);
+    eq('...and it can be fetched back', served.status, 200);
+    check('...as an image', (served.headers.get('content-type') || '').startsWith('image/'));
+
+    const back = Buffer.from(await served.arrayBuffer());
+    const hash = (b) => crypto.createHash('sha256').update(b).digest('hex');
+    check('...byte for byte identical to what was uploaded', hash(back) === hash(original),
+      `sent ${original.length} bytes, got ${back.length}`);
+
+    // Refusals, each with a reason the person can act on.
+    const tooBig = await post('/plants', {
+      site_name: 'Debug plot, oversized', species_id: species.id,
+      photos: [{ data_url: 'data:image/jpeg;base64,' + Buffer.alloc(9 * 1024 * 1024).toString('base64') }],
+    }, botT);
+    eq('an oversized photograph is refused, not truncated', tooBig.status, 400);
+    check('...and the message says what the limit is', /MB/.test(tooBig.body.error || ''), tooBig.body.error);
+
+    const wrongType = await post('/plants', {
+      site_name: 'Debug plot, wrong type', species_id: species.id,
+      photos: [{ data_url: 'data:application/pdf;base64,JVBERi0=' }],
+    }, botT);
+    eq('a file that is not an image is refused', wrongType.status, 400);
+
+    const notADataUrl = await post('/plants', {
+      site_name: 'Debug plot, bad url', species_id: species.id,
+      photos: [{ data_url: 'https://example.org/photo.jpg' }],
+    }, botT);
+    eq('something that is not a data URL is refused', notADataUrl.status, 400);
+
+    // A pending record's photograph must not be public, or the publication
+    // rule leaks through the image addresses.
+    const pending = await post('/plants', {
+      site_name: 'Debug plot, pending photo',
+      proposed_species_name: 'Unconfirmed', species_not_listed: true,
+      photos: [{ data_url: dataUrl }],
+    }, rangerT);
+    eq('a ranger entry with a photograph is accepted', pending.status, 201);
+    const anon = await fetch(ORIGIN + pending.body.plant.photo);
+    eq('its photograph is not public while the record is pending', anon.status, 404);
+    const asStaff = await fetch(ORIGIN + pending.body.plant.photo, {
+      headers: { Authorization: 'Bearer ' + rangerT },
+    });
+    eq('...but the ranger who took it can still see it', asStaff.status, 200);
+  }
+}
+
+/* ------------------------------------------------------------------ */
+section('33. Tidying up after the run');
 {
   // These suites create records to exercise the workflow. Left behind, they
   // sit at the top of the public register and make a demo look broken, so

@@ -103,3 +103,31 @@ INSERT INTO settings (setting_key, setting_value, value_type, description) VALUE
   ('protect_locations', 'VU', 'string',
    'Hide exact locations from the public at this IUCN level and above (VU, EN, CR). Blank disables the protection')
 ON DUPLICATE KEY UPDATE description = VALUES(description);
+
+
+-- ---------------------------------------------------------------------
+-- 5. Uploaded photographs
+-- ---------------------------------------------------------------------
+-- The schema says photographs are files on the API server and MySQL stores
+-- only their paths, which is right for a deployment with somewhere to put
+-- files. This prototype has nowhere: Render's free tier has no persistent
+-- disk, so anything written there is gone on the next deploy, and the imported
+-- reference photographs live in the repository rather than in a bucket.
+--
+-- So an uploaded photograph goes here until there is object storage to put it
+-- in - Cloudflare R2 or similar - at which point this table is dropped and
+-- plant_photos.remote_url carries the address instead.
+--
+-- It is a table of its own, not a column on plant_photos, because the API
+-- reads plant_photos for every card on every list page and must not drag a
+-- megabyte of JPEG through each one.
+
+CREATE TABLE IF NOT EXISTS plant_photo_data (
+  photo_id    INT UNSIGNED NOT NULL,
+  bytes       LONGBLOB     NOT NULL,
+  byte_length INT UNSIGNED NOT NULL,
+  created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (photo_id),
+  CONSTRAINT fk_photo_data_photo
+    FOREIGN KEY (photo_id) REFERENCES plant_photos(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

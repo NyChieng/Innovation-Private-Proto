@@ -151,6 +151,10 @@ export function toDb(value) {
     if (!Number.isNaN(d.getTime())) return d.toISOString().slice(0, 19).replace('T', ' ');
   }
   if (typeof value === 'boolean') return value ? 1 : 0;
+  // A Buffer is an object, and stringifying one turns an uploaded photograph
+  // into {"type":"Buffer","data":[...]} - which stores and reads back without
+  // complaint, and is not an image. Binary goes to the driver untouched.
+  if (Buffer.isBuffer(value)) return value;
   if (typeof value === 'object') return JSON.stringify(value);
   return value;
 }

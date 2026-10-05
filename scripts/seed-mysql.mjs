@@ -54,7 +54,11 @@ const RESET = process.argv.includes('--reset');
 const ORDER = [
   'roles', 'permissions', 'role_permissions', 'users', 'password_resets',
   'refresh_tokens', 'user_activity_logs', 'conservation_statuses', 'species',
-  'plants', 'plant_photos', 'plant_submissions', 'plant_revisions',
+  // plant_photo_data holds uploaded image bytes and is never seeded, but it
+  // has to be listed so a reset empties it. Truncating plant_photos with the
+  // foreign key checks off does not cascade, so its rows would survive as
+  // orphans and then collide with the reset auto-increment.
+  'plants', 'plant_photos', 'plant_photo_data', 'plant_submissions', 'plant_revisions',
   'plant_reports', 'qr_codes', 'qr_scans', 'notifications', 'audit_logs',
   'settings', 'sensor_devices', 'sensor_readings', 'sensor_alerts',
 ];
