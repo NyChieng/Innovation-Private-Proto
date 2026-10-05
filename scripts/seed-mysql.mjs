@@ -39,11 +39,11 @@ function connectionUri() {
   const { DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME } = process.env;
   if (!DB_HOST || !DB_USER) return 'mysql://root@127.0.0.1:3306/plant_registry';
   const auth = `${encodeURIComponent(DB_USER)}:${encodeURIComponent(DB_PASSWORD || '')}`;
-  return `mysql://${auth}@${DB_HOST}:${DB_PORT || 3306}/${DB_NAME || 'defaultdb'}`;
+  return `mysql://${auth}@${DB_HOST}:${DB_PORT || 3306}/${DB_NAME || 'plant_registry'}`;
 }
 const URL = connectionUri();
 const LOCAL = /^(localhost|127\.0\.0\.1|\[::1\]|::1)$/i;
-// Aiven and every managed MySQL require TLS; a local server usually has no
+// A hosted MySQL generally requires TLS; a local server usually has no
 // certificate at all and refuses the handshake.
 const SSL = process.env.MYSQL_SSL_CA
   ? { ca: (await import('node:fs')).default.readFileSync(process.env.MYSQL_SSL_CA), rejectUnauthorized: true }

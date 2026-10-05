@@ -5,7 +5,7 @@
  *   npm run db:setup -- --reset # empty every table first, then seed
  *
  * Reads the connection from .env, the same one the server uses, so this works
- * against a local MySQL or against Aiven without changing anything but .env.
+ * against a local MySQL or a hosted one without changing anything but .env.
  *
  * plant_registry_schema.sql is the submitted design and begins by dropping and
  * recreating its own database, which is wrong for a managed service where the
@@ -32,7 +32,7 @@ function connectionUri() {
   const { DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME } = process.env;
   if (!DB_HOST || !DB_USER) return null;
   const auth = `${encodeURIComponent(DB_USER)}:${encodeURIComponent(DB_PASSWORD || '')}`;
-  return `mysql://${auth}@${DB_HOST}:${DB_PORT || 3306}/${DB_NAME || 'defaultdb'}`;
+  return `mysql://${auth}@${DB_HOST}:${DB_PORT || 3306}/${DB_NAME || 'plant_registry'}`;
 }
 
 const uri = connectionUri();
@@ -85,7 +85,7 @@ const dbName = new URL(uri).pathname.replace(/^\//, '') || 'plant_registry';
 /**
  * Create the database if it is not there yet.
  *
- * A managed service hands you one already made - Aiven calls it defaultdb -
+ * A hosted service usually hands you one already made -
  * but a teammate running XAMPP has an empty server, and connecting straight to
  * a database that does not exist fails with "Unknown database" before any of
  * the schema is read. The schema file does create it, but with a DROP in front
