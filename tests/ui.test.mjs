@@ -142,11 +142,11 @@ async function newPage({ token, mobile = false, view } = {}) {
  * How much slower this run is than one against a database on the same machine.
  *
  * The waits below were tuned against a local MySQL, where a request settles in
- * a few milliseconds. Pointed at Aiven in Singapore every request costs a real
- * round trip, a page makes a dozen of them, and a fixed 1300ms wait after
- * submitting a form stops being enough - which shows up as a different handful
- * of failures on every run. Measuring once and scaling keeps the same numbers
- * honest against either.
+ * a few milliseconds. Against a database in another country every request costs
+ * a real round trip, a page makes a dozen of them, and a fixed 1300ms wait
+ * after submitting a form stops being enough - which shows up as a different
+ * handful of failures on every run. Measuring once and scaling keeps the same
+ * numbers honest against either.
  */
 const PACE = await (async () => {
   const started = Date.now();
@@ -504,6 +504,25 @@ section('8. Review queue - approve and return');
   });
   await sleep(400);
   check('the return dialog opens', opened && await page.evaluate(() => !!document.querySelector('.modal')));
+
+  // The backdrop is position: fixed, so it should cover the whole viewport and
+  // sit directly under <body>. Rendered in place it lands inside a page wrapper
+  // carrying will-change: transform, which becomes its containing block - and
+  // the overlay is then clipped to that element. Checking only that .modal
+  // exists does not catch it, which is how this went unnoticed.
+  const overlay = await page.evaluate(() => {
+    const b = document.querySelector('.backdrop');
+    if (!b) return null;
+    const r = b.getBoundingClientRect();
+    return {
+      parent: b.parentElement?.tagName || '',
+      coversWidth: Math.abs(r.width - window.innerWidth) <= 1 && Math.abs(r.left) <= 1,
+      coversHeight: Math.abs(r.height - window.innerHeight) <= 1 && Math.abs(r.top) <= 1,
+    };
+  });
+  check('the dialog is portalled out to <body>', overlay?.parent === 'BODY', 'parent ' + overlay?.parent);
+  check('the backdrop covers the viewport width', overlay?.coversWidth === true, JSON.stringify(overlay));
+  check('the backdrop covers the viewport height', overlay?.coversHeight === true, JSON.stringify(overlay));
 
   await page.evaluate(() => [...document.querySelectorAll('.modal button')]
     .find((b) => /Return to ranger/i.test(b.textContent))?.click());

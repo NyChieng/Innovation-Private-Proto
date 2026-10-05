@@ -29,7 +29,7 @@ export function databaseUrl() {
   const { DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME } = process.env;
   if (!DB_HOST || !DB_USER) return null;
   const auth = `${encodeURIComponent(DB_USER)}:${encodeURIComponent(DB_PASSWORD || '')}`;
-  return `mysql://${auth}@${DB_HOST}:${DB_PORT || 3306}/${DB_NAME || 'defaultdb'}`;
+  return `mysql://${auth}@${DB_HOST}:${DB_PORT || 3306}/${DB_NAME || 'plant_registry'}`;
 }
 
 const LOCAL_HOST = /^(localhost|127\.0\.0\.1|\[::1\]|::1)$/i;
@@ -39,34 +39,29 @@ let warnedUnverified = false;
 /**
  * Whether to speak TLS to this database, and how.
  *
- * Aiven signs its servers with its own private certificate authority, not one
- * in Node's trust store - verified without their CA the handshake fails, which
- * is checked, not assumed. So ca.pem from the service page is what makes the
- * connection genuinely verified rather than merely encrypted; without it
- * nothing proves the server answering is the one we meant to reach.
+ * A local MySQL is the normal case here, and wants no TLS at all. XAMPP is
+ * built without it and refuses the handshake outright ("Server does not
+ * support secure connection"), so attempting one breaks development for the
+ * sake of a hop that never leaves the machine.
  *
- * Looked for in this order: MYSQL_SSL_CA_CERT (the certificate inline, for a
- * host where a long environment variable beats adding a file), MYSQL_SSL_CA
- * (a path to it), then ca.pem beside package.json - where Aiven's own
- * instructions tell you to put it.
+ * A hosted MySQL is the other case, and most of them sign their servers with
+ * a private certificate authority rather than one in Node's trust store.
+ * Verification then needs that CA supplied: MYSQL_SSL_CA_CERT holds the
+ * certificate inline, MYSQL_SSL_CA a path to it. Both are configuration, so
+ * pointing this at a hosted database is never a code change - and no
+ * certificate is kept in the repository.
  *
- * A local MySQL is the exception. XAMPP has no certificate at all and refuses
- * the handshake outright ("Server does not support secure connection"), so
- * TLS there breaks development for the sake of a hop that never leaves the
- * machine. MYSQL_SSL=off forces it off for any other awkward case.
+ * With neither set a remote connection is still encrypted but unverified, and
+ * says so. MYSQL_SSL=off forces TLS off for any other awkward case.
  */
 
 export async function tlsFor(url) {
   if (String(process.env.MYSQL_SSL || '').toLowerCase() === 'off') return undefined;
 
-  const fs = await import('node:fs');
-  const nodePath = await import('node:path');
-  const { fileURLToPath } = await import('node:url');
-
-  // A local MySQL first, before looking for any certificate. XAMPP is built
-  // without TLS and refuses the handshake outright, so finding a ca.pem in the
-  // project root - put there for Aiven - must not drag it into a connection
-  // that never leaves the machine.
+  // A local database first, before anything else is considered. Nothing about
+  // a certificate found lying around should be able to reach a connection that
+  // never leaves this machine - a stray ca.pem in the project root did exactly
+  // that once, and broke every local checkout until it was removed.
   let host = '';
   try { host = new URL(url).hostname; } catch { /* fall through */ }
   if (LOCAL_HOST.test(host)) return undefined;
@@ -76,17 +71,8 @@ export async function tlsFor(url) {
     return { ca: process.env.MYSQL_SSL_CA_CERT, rejectUnauthorized: true };
   }
   if (process.env.MYSQL_SSL_CA) {
+    const fs = await import('node:fs');
     return { ca: fs.readFileSync(process.env.MYSQL_SSL_CA), rejectUnauthorized: true };
-  }
-  // ca.pem beside package.json, which is where Aiven's instructions put it,
-  // and /etc/secrets/ca.pem, which is where Render mounts a Secret File. The
-  // certificate is public, so either is fine - a Secret File just keeps it out
-  // of the repository.
-  const root = nodePath.dirname(nodePath.dirname(fileURLToPath(import.meta.url)));
-  for (const candidate of [nodePath.join(root, 'ca.pem'), '/etc/secrets/ca.pem']) {
-    if (fs.existsSync(candidate)) {
-      return { ca: fs.readFileSync(candidate), rejectUnauthorized: true };
-    }
   }
 
   // Remote with no certificate authority to check against. The connection is
@@ -95,8 +81,8 @@ export async function tlsFor(url) {
   if (!warnedUnverified) {
     warnedUnverified = true;
     console.warn(`\n  Connecting to ${host} without verifying its certificate.`);
-    console.warn('  Put ca.pem from the Aiven service page in the project root, or set');
-    console.warn('  MYSQL_SSL_CA_CERT, to make this a verified connection.\n');
+    console.warn("  Set MYSQL_SSL_CA_CERT to the provider's CA certificate, or");
+    console.warn('  MYSQL_SSL_CA to a path, to make this a verified connection.\n');
   }
   return { rejectUnauthorized: false };
 }

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { CONSERVATION, STATUS, initials, relativeTime, titleCase } from '../lib/format.js';
 import { useApp } from '../lib/store.jsx';
@@ -120,7 +121,12 @@ export function Modal({ title, onClose, children, footer, wide }) {
     };
   }, [onClose]);
 
-  return (
+  // Rendered into document.body rather than in place. The backdrop is
+  // position: fixed, and an ancestor carrying a transform or will-change:
+  // transform - which the page wrappers do, for the enter animation - becomes
+  // the containing block for it. Left in place, the backdrop is clipped to
+  // that page element instead of covering the viewport.
+  return createPortal(
     <div className="backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose?.()}>
       <div className={'modal' + (wide ? ' modal-wide' : '')} role="dialog" aria-modal="true" aria-label={title} ref={ref}>
         <div className="modal-head">
@@ -130,7 +136,8 @@ export function Modal({ title, onClose, children, footer, wide }) {
         <div className="modal-body">{children}</div>
         {footer && <div className="modal-foot">{footer}</div>}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

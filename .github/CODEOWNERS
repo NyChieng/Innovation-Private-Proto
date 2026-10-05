@@ -1,0 +1,37 @@
+# Who reviews what.
+#
+# The repository is split by layer and so are the branches: FloraScan-Web-App/
+# is the frontend's, Server/ is the backend's, and the schema and scripts/
+# belong to whoever owns the data model. Those folders are independent -
+# nothing in one imports anything from another - so work in them does not
+# need a gatekeeper.
+#
+# The files below are the exception. They are shared by every layer, and a
+# change to one of them can break a branch whose owner never touched it, so
+# they get a review from the person doing the connectivity checks.
+#
+# Note: on GitHub Free, CODEOWNERS only requests reviews automatically for
+# PUBLIC repositories. On a private repository it needs Pro, Team or
+# Enterprise. Either way this file still records who owns what, which is most
+# of the point.
+
+# Build and dependency configuration. Two branches each adding a package
+# produce a package-lock.json conflict that is miserable to resolve by hand.
+/package.json           @NyChieng
+/package-lock.json      @NyChieng
+/vite.config.js         @NyChieng
+
+# How the project is set up and run, which everybody follows.
+/README.md              @NyChieng
+/.env.example           @NyChieng
+/.gitignore             @NyChieng
+
+# Both suites test the whole stack, so they belong to nobody in particular.
+/tests/                 @NyChieng
+
+# The layer folders. Uncomment and add handles as people take ownership, so
+# GitHub requests the right reviewer instead of nobody.
+# /FloraScan-Web-App/           @handle
+# /Server/                      @handle
+# /scripts/                     @handle
+# /plant_registry_schema.sql    @handle

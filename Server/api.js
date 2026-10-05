@@ -420,9 +420,9 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
  *
  * It used to be written straight into plant_photos.file_path, which is
  * VARCHAR(255) - a 400KB photograph is about 409,000 characters. MariaDB
- * truncated it silently and stored a corrupt image; MySQL 8 in strict mode,
- * which is what Aiven runs, refuses the row and the registration fails with a
- * 500. Either way the upload never worked.
+ * truncated it silently and stored a corrupt image; MySQL 8 in strict mode
+ * refuses the row outright and the registration fails with a 500. Either way
+ * the upload never worked.
  *
  * So the bytes are decoded here, checked against max_upload_mb and
  * allowed_image_types - two settings the schema defines and nothing was
