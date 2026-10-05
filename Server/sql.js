@@ -63,6 +63,14 @@ export async function tlsFor(url) {
   const nodePath = await import('node:path');
   const { fileURLToPath } = await import('node:url');
 
+  // A local MySQL first, before looking for any certificate. XAMPP is built
+  // without TLS and refuses the handshake outright, so finding a ca.pem in the
+  // project root - put there for Aiven - must not drag it into a connection
+  // that never leaves the machine.
+  let host = '';
+  try { host = new URL(url).hostname; } catch { /* fall through */ }
+  if (LOCAL_HOST.test(host)) return undefined;
+
   // Inline, for a host where a long environment variable is easier than a file.
   if (process.env.MYSQL_SSL_CA_CERT) {
     return { ca: process.env.MYSQL_SSL_CA_CERT, rejectUnauthorized: true };
@@ -80,10 +88,6 @@ export async function tlsFor(url) {
       return { ca: fs.readFileSync(candidate), rejectUnauthorized: true };
     }
   }
-
-  let host = '';
-  try { host = new URL(url).hostname; } catch { /* fall through to encrypted */ }
-  if (LOCAL_HOST.test(host)) return undefined;
 
   // Remote with no certificate authority to check against. The connection is
   // still encrypted, but nothing proves the server on the other end is the one
