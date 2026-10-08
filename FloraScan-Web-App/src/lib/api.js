@@ -73,6 +73,7 @@ export const api = {
   createPlant: (body) => request('POST', '/plants', body),
   updatePlant: (id, body) => request('PATCH', '/plants/' + id, body),
   approve: (id, note) => request('POST', `/plants/${id}/approve`, { note }),
+  identify: (id) => request('POST', `/plants/${id}/identify`, {}),
   reject: (id, note) => request('POST', `/plants/${id}/reject`, { note }),
   archive: (id, reason) => request('POST', `/plants/${id}/archive`, { reason }),
   restore: (id) => request('POST', `/plants/${id}/restore`, {}),
