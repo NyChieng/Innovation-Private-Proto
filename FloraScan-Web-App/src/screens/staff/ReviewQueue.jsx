@@ -142,6 +142,82 @@ function RejectDialog({ plant, onClose, onDone }) {
 
 /* ------------------------------------------------------------------ */
 
+function PlantNetPanel({ plant, onChanged }) {
+  const { toast } = useApp();
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [data, setData] = useState(null);
+
+  const identify = async () => {
+    setOpen(true);
+    setBusy(true);
+    try {
+      setData(await api.identify(plant.id));
+    } catch (e) {
+      setData({ error: e.message });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const useSuggestion = async (suggestion) => {
+    if (!suggestion.matched_species_id) {
+      toast('This PlantNet result is not in the FloraScan species list. Confirm it manually or add it first.', 'err');
+      return;
+    }
+    setBusy(true);
+    try {
+      await api.updatePlant(plant.id, {
+        species_id: suggestion.matched_species_id,
+        change_reason: 'Species suggested by PlantNet and confirmed by botanist',
+      });
+      toast('Species set from the PlantNet suggestion. Review the record before publishing.');
+      onChanged();
+      setOpen(false);
+    } catch (e) {
+      toast(e.message, 'err');
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <div className="inset" style={{ marginTop: 14 }}>
+      <div className="row row-wrap" style={{ gap: 9 }}>
+        <div className="grow">
+          <strong>AI identification assistance</strong>
+          <div className="tiny mute">PlantNet ranks possible species from the submitted photographs.</div>
+        </div>
+        <button className="btn btn-sm btn-soft" onClick={identify} disabled={busy}>
+          {busy && <span className="spinner" />} {open ? 'Run again' : 'Check with PlantNet'}
+        </button>
+      </div>
+      {open && (
+        <div style={{ marginTop: 12 }}>
+          {busy && <div className="small mute">Sending photographs to PlantNet...</div>}
+          {data?.error && <Notice kind="warn">{data.error}</Notice>}
+          {data?.suggestions?.length === 0 && <div className="small mute">PlantNet returned no suggestions for these photographs.</div>}
+          {data?.suggestions?.map((s, i) => (
+            <div key={`${s.scientific_name}-${i}`} className="row row-wrap" style={{ gap: 9, padding: '9px 0', borderTop: '1px solid var(--border)' }}>
+              <div className="grow" style={{ minWidth: 0 }}>
+                <div className="sci"><strong>{i + 1}. {s.scientific_name || 'Unknown species'}</strong></div>
+                <div className="tiny mute">
+                  {[s.common_names?.join(', '), s.family, s.genus].filter(Boolean).join(' · ') || 'No additional taxonomy returned'}
+                </div>
+              </div>
+              <span className="badge badge-info">{s.score === null ? 'No score' : `${Math.round(s.score * 100)}% match`}</span>
+              {s.matched_species_id && (
+                <button className="btn btn-sm" disabled={busy} onClick={() => useSuggestion(s)}>Use for review</button>
+              )}
+            </div>
+          ))}
+          {data && <div className="hint" style={{ marginTop: 8 }}>{data.disclaimer}</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+
 function SubmissionCard({ sub, onChanged }) {
   const { toast, refreshCounts } = useApp();
   const [busy, setBusy] = useState(false);
@@ -216,6 +292,7 @@ function SubmissionCard({ sub, onChanged }) {
                 </Notice>
               </div>
             )}
+            <PlantNetPanel plant={p} onChanged={onChanged} />
           </div>
         </div>
       </div>
