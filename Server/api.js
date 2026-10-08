@@ -420,9 +420,9 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
  *
  * It used to be written straight into plant_photos.file_path, which is
  * VARCHAR(255) - a 400KB photograph is about 409,000 characters. MariaDB
- * truncated it silently and stored a corrupt image; MySQL 8 in strict mode
- * refuses the row outright and the registration fails with a 500. Either way
- * the upload never worked.
+ * truncated it silently and stored a corrupt image; MySQL 8 in strict mode,
+ * which is what Aiven runs, refuses the row and the registration fails with a
+ * 500. Either way the upload never worked.
  *
  * So the bytes are decoded here, checked against max_upload_mb and
  * allowed_image_types - two settings the schema defines and nothing was
@@ -1070,6 +1070,101 @@ export function createApi() {
     });
     const joined = (await plantsWhere('p.id = ?', [before.id]))[0];
     res.json({ plant: await shapeOne(joined, { full: true, viewer: req.user }) });
+  }));
+
+  api.post('/plants/:id/identify', need('plant.approve'), route(async (req, res) => {
+    const plant = await byId('plants', req.params.id);
+    if (!plant || plant.deleted_at) return res.status(404).json({ error: 'Not found' });
+
+    const apiKey = process.env.PLANTNET_API_KEY;
+    if (!apiKey) {
+      return res.status(503).json({
+        error: 'PlantNet identification is not configured. Add PLANTNET_API_KEY to the server environment.',
+      });
+    }
+
+    const photos = await q(
+      `SELECT ph.id, ph.mime_type, ph.file_name, d.bytes
+         FROM plant_photos ph
+         JOIN plant_photo_data d ON d.photo_id = ph.id
+        WHERE ph.plant_id = ? AND ph.deleted_at IS NULL
+        ORDER BY ph.is_primary DESC, ph.id ASC
+        LIMIT 5`,
+      [plant.id],
+    );
+    if (!photos.length) {
+      return res.status(400).json({
+        error: 'This record has no uploaded photographs that PlantNet can analyse.',
+      });
+    }
+
+    const form = new FormData();
+    for (const photo of photos) {
+      form.append(
+        'images',
+        new Blob([photo.bytes], { type: photo.mime_type || 'image/jpeg' }),
+        photo.file_name || `plant-${photo.id}.jpg`,
+      );
+      form.append('organs', 'auto');
+    }
+
+    const endpoint = process.env.PLANTNET_API_URL || 'https://my-api.plantnet.org/v2/identify/all';
+    const query = new URLSearchParams({ 'api-key': apiKey });
+    let response;
+    try {
+      response = await fetch(`${endpoint}?${query}`, { method: 'POST', body: form });
+    } catch (error) {
+      console.error(`PlantNet request failed: ${error.message}`);
+      return res.status(502).json({ error: 'PlantNet could not be reached. Try again later.' });
+    }
+
+    const body = await response.json().catch(() => null);
+    if (!response.ok) {
+      const reason = body?.message || body?.error;
+      console.error(`PlantNet returned ${response.status}${reason ? `: ${reason}` : ''}`);
+      return res.status(502).json({ error: 'PlantNet could not identify these photographs.' });
+    }
+
+    const candidates = Array.isArray(body?.results) ? body.results.slice(0, 5) : [];
+    const suggestions = await Promise.all(candidates.map(async (candidate) => {
+      const species = candidate.species || {};
+      const scientificName = species.scientificName || species.scientificNameWithoutAuthor || null;
+      const catalogue = scientificName
+        ? await one(
+          `SELECT id FROM species
+            WHERE deleted_at IS NULL
+              AND LOWER(TRIM(scientific_name)) = LOWER(TRIM(?))
+            LIMIT 1`,
+          [scientificName],
+        )
+        : null;
+      return {
+        scientific_name: scientificName,
+        scientific_name_author: species.scientificNameAuthorship || null,
+        common_names: Array.isArray(species.commonNames) ? species.commonNames.slice(0, 3) : [],
+        family: species.family?.scientificName || species.family?.name || null,
+        genus: species.genus?.scientificName || species.genus?.name || null,
+        score: Number.isFinite(Number(candidate.score)) ? Number(candidate.score) : null,
+        matched_species_id: catalogue?.id || null,
+      };
+    }));
+
+    audit({
+      user_id: req.user.id,
+      action: 'identify',
+      entity_type: 'plants',
+      entity_id: plant.id,
+      new_values: {
+        provider: 'PlantNet',
+        photos_analyzed: photos.length,
+        suggestions: suggestions.map((s) => ({ scientific_name: s.scientific_name, score: s.score })),
+      },
+    });
+    res.json({
+      provider: 'PlantNet',
+      disclaimer: 'AI suggestions are advisory. A botanist must verify the species before publication.',
+      suggestions,
+    });
   }));
 
   api.post('/plants/:id/reject', need('plant.approve'), route(async (req, res) => {
