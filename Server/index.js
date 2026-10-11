@@ -12,6 +12,7 @@ import { loadReference } from './db.js';
 import { resolvePort } from './port.js';
 import { lanAddresses } from './net.js';
 import { tlsOptions, caDer, CA_PATH } from './certs.js';
+import { startMqttSubscriber, stopMqttSubscriber } from './mqtt.js';
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 
@@ -55,6 +56,8 @@ try {
   console.error('  created yet, run "npm run db:setup".\n');
   process.exit(1);
 }
+
+const mqttClient = startMqttSubscriber();
 
 const app = express();
 app.disable('x-powered-by');
@@ -186,6 +189,7 @@ for (const sig of ['SIGINT', 'SIGTERM']) {
   process.on(sig, async () => {
     if (closing) return;
     closing = true;
+    await stopMqttSubscriber(mqttClient); 
     await closeDb();
     process.exit(0);
   });
