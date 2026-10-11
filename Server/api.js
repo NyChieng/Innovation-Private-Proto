@@ -1501,6 +1501,14 @@ export function createApi() {
     temperature_c: num(r.temperature_c),
     humidity_pct: num(r.humidity_pct),
     light_lux: num(r.light_lux),
+    // From the rest of the kit (section 6 of schema-extensions.sql). A
+    // database set up before those columns existed has none of them, so they
+    // come back undefined and are sent as null.
+    rain_pct: num(r.rain_pct),
+    is_raining: r.is_raining === null || r.is_raining === undefined ? null : !!r.is_raining,
+    motion_events: num(r.motion_events),
+    sound_peak_pct: num(r.sound_peak_pct),
+    wifi_rssi_dbm: num(r.wifi_rssi_dbm),
   });
 
   /**
@@ -1544,9 +1552,9 @@ export function createApi() {
              ON m.id = r.id`),
 
       // Recent history for the charts. At one reading every 10 s that is 720
-      // rows an hour per device, so it is capped.
-      q(`SELECT id, device_id, plant_id, recorded_at,
-                soil_moisture_pct, temperature_c, humidity_pct, light_lux
+      // rows an hour per device, so it is capped. SELECT * rather than a
+      // column list, so a database without the newer columns still works.
+      q(`SELECT *
            FROM sensor_readings
           WHERE recorded_at >= UTC_TIMESTAMP() - INTERVAL ${hours} HOUR
             ${deviceId ? 'AND device_id = ?' : ''}
@@ -1724,4 +1732,4 @@ export function createApi() {
   });
 
   return api;
-}
+}

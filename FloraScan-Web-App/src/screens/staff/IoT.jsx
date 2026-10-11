@@ -20,6 +20,14 @@ const METRICS = [
   { key: 'temperature_c', limit: 'temperature', label: 'Temperature', unit: '°C', decimals: 1 },
   { key: 'humidity_pct', limit: 'humidity', label: 'Humidity', unit: '%', decimals: 1 },
   { key: 'light_lux', limit: null, label: 'Light', unit: 'lx', decimals: 0 },
+  // The rest of the kit, and the node's own Wi-Fi signal. No safe range is
+  // set for these, so they never raise an alert; they give context (rain
+  // explains a soil reading, motion and noise show visitors near the plant)
+  // and help diagnose a node that goes quiet.
+  { key: 'rain_pct', limit: null, label: 'Rain', unit: '%', decimals: 1 },
+  { key: 'motion_events', limit: null, label: 'Motion', unit: 'events', decimals: 0, nonNegative: true },
+  { key: 'sound_peak_pct', limit: null, label: 'Sound (peak)', unit: '%', decimals: 1 },
+  { key: 'wifi_rssi_dbm', limit: null, label: 'Wi-Fi signal', unit: 'dBm', decimals: 0 },
 ];
 
 const ALERT_METRIC = {
@@ -158,7 +166,7 @@ export default function IoT() {
       <div className="wrap" style={{ maxWidth: 1100 }}>
         <PageHead
           title="IoT plant monitoring"
-          sub="Soil moisture, temperature and humidity on monitored plants, with alerts when a reading leaves its safe range."
+          sub="Soil, temperature, humidity, light, rain, motion and sound around monitored plants, with alerts when a reading leaves its safe range."
         >
           <span className="badge badge-ok"><span className="dot" />Live</span>
           {updatedAt && <span className="tiny mute">Updated {updatedAt.toLocaleTimeString()}</span>}
@@ -319,6 +327,9 @@ function DeviceCard({ device: d, selected, selectable, onSelect }) {
                     {out === 'low' ? 'Low' : 'High'}
                   </span>
                 )}
+                {m.key === 'rain_pct' && d.latest?.is_raining && (
+                  <span className="badge badge-info">Raining</span>
+                )}
               </div>
             </div>
           );
@@ -402,7 +413,7 @@ function LineChart({ points, metric, limits, hours }) {
   const step = niceStep(hi - lo, 4);
   lo = Math.floor(lo / step) * step;
   hi = Math.ceil(hi / step) * step;
-  if (metric.unit === '%' || metric.unit === 'lx') lo = Math.max(0, lo);
+  if (metric.unit === '%' || metric.unit === 'lx' || metric.nonNegative) lo = Math.max(0, lo);
 
   const x = (t) => pad.left + ((t - start) / (end - start)) * innerW;
   const y = (v) => pad.top + innerH - ((v - lo) / (hi - lo)) * innerH;
@@ -673,4 +684,4 @@ function ResolveModal({ alert: a, onClose, onDone }) {
       {error && <div style={{ marginTop: 10 }}><Notice kind="danger">{error}</Notice></div>}
     </Modal>
   );
-}
+}
