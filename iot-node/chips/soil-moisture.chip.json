@@ -1,0 +1,23 @@
+{
+  "name": "Rain Sensor",
+  "author": "FloraScan",
+  "pins": ["", "", "", "", "VCC", "GND", "DO", "AO"],
+  "controls": [
+    {
+      "id": "rain",
+      "label": "Water on the plate (%)",
+      "type": "range",
+      "min": 0,
+      "max": 100,
+      "step": 1
+    },
+    {
+      "id": "threshold",
+      "label": "Blue knob: DO goes LOW above (%)",
+      "type": "range",
+      "min": 0,
+      "max": 100,
+      "step": 1
+    }
+  ]
+}

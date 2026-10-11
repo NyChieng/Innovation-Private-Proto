@@ -1,0 +1,23 @@
+{
+  "name": "Sound KY-037",
+  "author": "FloraScan",
+  "pins": ["", "", "", "", "DO", "VCC", "GND", "AO"],
+  "controls": [
+    {
+      "id": "level",
+      "label": "Sound level (%)",
+      "type": "range",
+      "min": 0,
+      "max": 100,
+      "step": 1
+    },
+    {
+      "id": "threshold",
+      "label": "Blue knob: DO pulses HIGH above (%)",
+      "type": "range",
+      "min": 0,
+      "max": 100,
+      "step": 1
+    }
+  ]
+}

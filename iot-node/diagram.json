@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "author": "FloraScan (COS30049)",
+  "editor": "wokwi",
+  "parts": [
+    { "type": "board-esp32-devkit-c-v4", "id": "esp", "top": 0, "left": 0, "attrs": {} },
+    { "type": "chip-soil-moisture", "id": "soil", "top": 58.65, "left": -195, "attrs": {} },
+    { "type": "chip-rain-sensor", "id": "rain", "top": 118, "left": -195, "attrs": {} },
+    { "type": "chip-sound-sensor", "id": "sound", "top": 177.35, "left": -195, "attrs": {} },
+    { "type": "wokwi-photoresistor-sensor", "id": "ldr", "top": 240, "left": -262, "attrs": { "lux": "2000", "rl10": "150", "gamma": "0.6" } },
+    { "type": "wokwi-pir-motion-sensor", "id": "pir", "top": 305, "left": -50, "rotate": 180, "attrs": {} },
+    { "type": "wokwi-dht22", "id": "dht", "top": -40, "left": 150, "attrs": { "temperature": "28", "humidity": "72" } },
+    { "type": "wokwi-text", "id": "title", "top": -110, "left": -215, "attrs": { "text": "FloraScan plant sensor node\nClick a sensor while the simulation runs to change its reading" } },
+    { "type": "wokwi-text", "id": "lbl_dht", "top": -62, "left": 140, "attrs": { "text": "DHT11 (Wokwi: DHT22)" } },
+    { "type": "wokwi-text", "id": "lbl_ldr", "top": 305, "left": -262, "attrs": { "text": "Light sensor (LDR)" } },
+    { "type": "wokwi-text", "id": "lbl_pir", "top": 402, "left": -50, "attrs": { "text": "PIR motion HC-SR501" } }
+  ],
+    "serialMonitor": {
+    "display": "terminal",
+    "convertEol": true
+  },
+  "connections": [
+    [ "esp:TX", "$serialMonitor:RX", "", [] ],
+    [ "esp:RX", "$serialMonitor:TX", "", [] ],
+
+    [ "soil:AO", "esp:34", "green", [] ],
+    [ "soil:GND", "esp:GND.1", "black", [ "h26.45", "v67.2" ] ],
+    [ "soil:VCC", "esp:3V3", "red", [ "h6", "v14", "h-129.55", "v-81.2" ] ],
+
+    [ "rain:AO", "esp:35", "blue", [ "h46.45", "v-49.75" ] ],
+    [ "rain:GND", "esp:GND.1", "black", [ "h26.45", "v7.85" ] ],
+    [ "rain:VCC", "esp:3V3", "red", [ "h6", "v14", "h-129.55", "v-140.55" ] ],
+
+    [ "sound:AO", "esp:32", "orange", [ "h56.45", "v-99.5" ] ],
+    [ "sound:GND", "esp:GND.1", "black", [ "h26.45", "v-51.5" ] ],
+    [ "sound:VCC", "esp:3V3", "red", [ "h6", "v24", "h-129.55", "v-209.9" ] ],
+
+    [ "ldr:AO", "esp:33", "limegreen", [ "h67.7", "v-189.47" ] ],
+    [ "ldr:GND", "esp:GND.1", "black", [ "h30.04", "v-112.37" ] ],
+    [ "ldr:VCC", "esp:3V3", "red", [ "h9.59", "v-17.27", "h-129.55", "v-209.9" ] ],
+
+    [ "pir:OUT", "esp:27", "violet", [ "v-180.6" ] ],
+    [ "pir:VCC", "esp:5V", "red", [ "v-103.8" ] ],
+    [ "pir:GND", "esp:GND.1", "black", [ "v-151.8" ] ],
+
+    [ "dht:SDA", "esp:4", "gold", [ "v69.1" ] ],
+    [ "dht:GND", "esp:GND.3", "black", [ "v11.5" ] ],
+    [ "dht:VCC", "esp:3V3", "red", [ "v6", "h-39", "v-96.9", "*", "v-44.8", "h-14.61" ] ]
+  ],
+  "dependencies": {}
+}
