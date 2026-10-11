@@ -13,14 +13,28 @@ const MQTT_TOPIC = `${TOPIC_PREFIX}/+/readings`;
 const MAX_MESSAGE_BYTES = 2048;
 
 // Fields saved into sensor_readings, with their allowed ranges.
-// If the table also has columns for rain_pct, motion_events, sound_peak_pct
-// etc., add them here and they will be saved too.
+// integer: the column is a whole-number type, so fractions are refused.
+// To save another field the node sends, add its column to sensor_readings
+// (see section 6 of schema-extensions.sql) and list it here.
 const FIELDS = {
-  soil_moisture_pct: [0, 100],
-  temperature_c: [-40, 80],
-  humidity_pct: [0, 100],
-  light_lux: [0, 4294967295],
+  soil_moisture_pct: { range: [0, 100] },
+  temperature_c: { range: [-40, 80] },
+  humidity_pct: { range: [0, 100] },
+  light_lux: { range: [0, 4294967295], integer: true },
+  rain_pct: { range: [0, 100] },
+  motion_events: { range: [0, 65535], integer: true },
+  sound_peak_pct: { range: [0, 100] },
+  wifi_rssi_dbm: { range: [-127, 0], integer: true },
+  uptime_s: { range: [0, 4294967295], integer: true },
 };
+
+// Fields that are true/false in the JSON and stored as 1/0.
+const FLAGS = ['is_raining'];
+
+// The sensor readings proper. The extra fields above are context (rain,
+// motion, sound, Wi-Fi signal, uptime): a message carrying only those is
+// not a reading worth saving.
+const MEASUREMENTS = ['soil_moisture_pct', 'temperature_c', 'humidity_pct', 'light_lux'];
 
 function sha256(value) {
   return createHash('sha256').update(value).digest();
@@ -110,7 +124,7 @@ async function handleMessage(topic, message) {
 
   const reading = {};
 
-  for (const [field, [min, max]] of Object.entries(FIELDS)) {
+  for (const [field, { range: [min, max], integer }] of Object.entries(FIELDS)) {
     const value = data[field];
 
     if (value === undefined || value === null) {
@@ -118,10 +132,7 @@ async function handleMessage(topic, message) {
       continue;
     }
 
-    if (
-      !validNumber(value, min, max) ||
-      (field === 'light_lux' && !Number.isInteger(value))
-    ) {
+    if (!validNumber(value, min, max) || (integer && !Number.isInteger(value))) {
       console.warn(`[MQTT] Ignored message: invalid ${field}`);
       return;
     }
@@ -129,7 +140,23 @@ async function handleMessage(topic, message) {
     reading[field] = value;
   }
 
-  if (Object.values(reading).every((value) => value === null)) {
+  for (const field of FLAGS) {
+    const value = data[field];
+
+    if (value === undefined || value === null) {
+      reading[field] = null;
+      continue;
+    }
+
+    if (typeof value !== 'boolean') {
+      console.warn(`[MQTT] Ignored message: invalid ${field}`);
+      return;
+    }
+
+    reading[field] = value ? 1 : 0;
+  }
+
+  if (MEASUREMENTS.every((field) => reading[field] === null)) {
     console.warn('[MQTT] Ignored message: no supported readings');
     return;
   }

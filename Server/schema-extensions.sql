@@ -131,3 +131,28 @@ CREATE TABLE IF NOT EXISTS plant_photo_data (
   CONSTRAINT fk_photo_data_photo
     FOREIGN KEY (photo_id) REFERENCES plant_photos(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- ---------------------------------------------------------------------
+-- 6. Extra fields from the sensor node
+-- ---------------------------------------------------------------------
+-- The ESP32 node (iot-node/src/main.cpp) sends more than the four readings
+-- the schema stores: the kit also has a raindrop plate, a PIR motion sensor
+-- and a sound sensor, and the node reports its Wi-Fi signal and uptime.
+-- These columns keep them, so a dry spell, a visitor near a protected plant
+-- or a weak-signal node can be seen later rather than lost on arrival.
+-- Server/mqtt.js saves every field listed in its FIELDS and FLAGS.
+--
+-- All are NULL-able: older messages and the real board's first readings may
+-- leave some out. wifi_rssi_dbm and uptime_s describe the node rather than
+-- the plant; they sit here because they arrive with each reading.
+
+ALTER TABLE sensor_readings
+  ADD COLUMN rain_pct       DECIMAL(5,2)      NULL AFTER light_lux,  -- % of the plate wet
+  ADD COLUMN is_raining     TINYINT(1)        NULL AFTER rain_pct,   -- 1 = raining
+  ADD COLUMN motion_events  SMALLINT UNSIGNED NULL AFTER is_raining, -- PIR triggers since the last reading
+  ADD COLUMN sound_peak_pct DECIMAL(5,2)      NULL AFTER motion_events,
+  ADD COLUMN wifi_rssi_dbm  SMALLINT          NULL AFTER sound_peak_pct, -- e.g. -70; closer to 0 is stronger
+  ADD COLUMN uptime_s       INT UNSIGNED      NULL AFTER wifi_rssi_dbm,  -- seconds since the node started
+  ADD CONSTRAINT chk_sr_rain  CHECK (rain_pct BETWEEN 0 AND 100),
+  ADD CONSTRAINT chk_sr_sound CHECK (sound_peak_pct BETWEEN 0 AND 100);

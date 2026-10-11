@@ -31,7 +31,7 @@
 #if SIMULATION
 const char *WIFI_SSID = "Wokwi-GUEST";  // Wokwi's built-in open Wi-Fi
 const char *WIFI_PASSWORD = "";
-const unsigned long REPORT_INTERVAL_MS = 10UL * 1000;     // every 10 s for demos
+const unsigned long REPORT_INTERVAL_MS = 20UL * 1000;     // every 10 s for demos
 #else
 const char *WIFI_SSID = "YOUR-WIFI-NAME";
 const char *WIFI_PASSWORD = "YOUR-WIFI-PASSWORD";
