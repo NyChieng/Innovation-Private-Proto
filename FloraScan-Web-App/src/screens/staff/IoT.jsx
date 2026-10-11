@@ -684,4 +684,4 @@ function ResolveModal({ alert: a, onClose, onDone }) {
       {error && <div style={{ marginTop: 10 }}><Notice kind="danger">{error}</Notice></div>}
     </Modal>
   );
-}
+}
