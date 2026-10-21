@@ -1,4 +1,4 @@
-# FloraScan — Prototype X
+# FloraScan 
 
 Clickable prototype for the **Smart Ground-Truthing and Digital Biodiversity System**
 (COS30049 Computing Technology Innovation Project — NeuonAI / Sarawak Forestry Corporation,
