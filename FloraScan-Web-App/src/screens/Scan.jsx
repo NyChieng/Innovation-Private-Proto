@@ -5,6 +5,7 @@ import { api } from '../lib/api.js';
 import { useApp } from '../lib/store.jsx';
 import { Notice, Empty, PageHead } from '../components/ui.jsx';
 import * as I from '../lib/icons.jsx';
+import { t } from '../lib/i18n.js';
 
 /**
  * In-app QR scanner.
@@ -57,7 +58,7 @@ export default function Scan() {
       const m = u.pathname.match(/\/p\/([^/?#]+)/);
       token = m?.[1] || null;
       if (!token && u.origin !== window.location.origin) {
-        setMessage('That QR code points somewhere else: ' + u.origin);
+        setMessage(t('That QR code points somewhere else: {origin}', { origin: u.origin }));
         handledRef.current = false;
         setState('scanning');
         return;
@@ -67,7 +68,7 @@ export default function Scan() {
     }
 
     if (!token) {
-      setMessage('That code is not a FloraScan plant tag.');
+      setMessage(t('That code is not a FloraScan plant tag.'));
       handledRef.current = false;
       return;
     }
@@ -171,7 +172,7 @@ export default function Scan() {
       img.decoding = 'async';
       await new Promise((res, rej) => {
         img.onload = res;
-        img.onerror = () => rej(new Error('That file could not be opened as an image.'));
+        img.onerror = () => rej(new Error(t('That file could not be opened as an image.')));
         img.src = url;
       });
 
@@ -179,13 +180,13 @@ export default function Scan() {
       URL.revokeObjectURL(url);
 
       if (!found) {
-        setMessage('No QR code found in that picture. Try a straighter, closer shot with the whole code visible.');
+        setMessage(t('No QR code found in that picture. Try a straighter, closer shot with the whole code visible.'));
         return;
       }
       handledRef.current = false;
       handleResult(found);
     } catch (e) {
-      setMessage(e.message || 'That file could not be read.');
+      setMessage(e.message || t('That file could not be read.'));
     } finally {
       setReading(false);
     }
@@ -194,7 +195,7 @@ export default function Scan() {
   return (
     <div className="page" style={{ paddingTop: 18 }}>
       <div className="wrap wrap-narrow">
-        <PageHead title="Scan a plant tag" sub="Point the camera at the QR code on the tag beside the plant." />
+        <PageHead title={t('Scan a plant tag')} sub={t('Point the camera at the QR code on the tag beside the plant.')} />
 
         {state === 'scanning' || state === 'starting' ? (
           <div className="scan-stage">
@@ -211,52 +212,52 @@ export default function Scan() {
             <I.Scan style={{ width: 46, height: 46, margin: '0 auto 14px', color: 'var(--text-faint)' }} />
             {state === 'unsupported' && (
               <>
-                <h3 style={{ marginBottom: 6 }}>Camera not available here</h3>
+                <h3 style={{ marginBottom: 6 }}>{t('Camera not available here')}</h3>
                 <p className="small mute" style={{ maxWidth: '46ch', marginInline: 'auto' }}>
                   {secure
-                    ? 'This browser did not offer a camera.'
-                    : 'Browsers only allow camera access on HTTPS or localhost. This page is on plain http:// over the network, so the live scanner is blocked.'}
-                  {' '}Any phone camera app still opens the tags directly &mdash; the in-app scanner is only a shortcut.
+                    ? t('This browser did not offer a camera.')
+                    : t('Browsers only allow camera access on HTTPS or localhost. This page is on plain http:// over the network, so the live scanner is blocked.')}
+                  {' '}{t('Any phone camera app still opens the tags directly — the in-app scanner is only a shortcut.')}
                 </p>
                 {!secure && (
                   <p className="small mute" style={{ marginTop: 10 }}>
-                    To use the live camera, restart the server with <span className="mono">npm run https</span>.
+                    {t('To use the live camera, restart the server with {command}.', { command: <span className="mono">npm run https</span> })}
                   </p>
                 )}
               </>
             )}
             {state === 'denied' && (
               <>
-                <h3 style={{ marginBottom: 6 }}>Camera permission was refused</h3>
-                <p className="small mute">Allow camera access for this site in your browser settings, then try again.</p>
+                <h3 style={{ marginBottom: 6 }}>{t('Camera permission was refused')}</h3>
+                <p className="small mute">{t('Allow camera access for this site in your browser settings, then try again.')}</p>
               </>
             )}
             {state === 'idle' && (
               <>
-                <h3 style={{ marginBottom: 6 }}>Ready when you are</h3>
-                <p className="small mute">The camera opens only while this screen is on top.</p>
+                <h3 style={{ marginBottom: 6 }}>{t('Ready when you are')}</h3>
+                <p className="small mute">{t('The camera opens only while this screen is on top.')}</p>
               </>
             )}
             <div className="row row-wrap" style={{ justifyContent: 'center', gap: 9, marginTop: 18 }}>
               <button className="btn btn-primary" onClick={start}>
-                <I.Camera /> {state === 'idle' ? 'Start camera' : 'Try again'}
+                <I.Camera /> {state === 'idle' ? t('Start camera') : t('Try again')}
               </button>
               <button className="btn" onClick={() => fileRef.current?.click()} disabled={reading}>
                 {reading ? <span className="spinner" /> : <I.Image />}
-                {reading ? 'Reading…' : 'Upload a photo'}
+                {reading ? t('Reading…') : t('Upload a photo')}
               </button>
             </div>
             <div className="tiny faint" style={{ marginTop: 10 }}>
-              Already have a picture of the tag? Pick it from your gallery and we will read the code from it.
+              {t('Already have a picture of the tag? Pick it from your gallery and we will read the code from it.')}
             </div>
           </div>
         )}
 
         {state === 'scanning' && (
           <div className="row row-wrap" style={{ justifyContent: 'center', gap: 9, marginTop: 14 }}>
-            <button className="btn" onClick={() => { stop(); setState('idle'); }}><I.X /> Stop camera</button>
+            <button className="btn" onClick={() => { stop(); setState('idle'); }}><I.X /> {t('Stop camera')}</button>
             <button className="btn" onClick={() => fileRef.current?.click()} disabled={reading}>
-              {reading ? <span className="spinner" /> : <I.Image />} Upload a photo instead
+              {reading ? <span className="spinner" /> : <I.Image />} {t('Upload a photo instead')}
             </button>
           </div>
         )}
@@ -276,16 +277,15 @@ export default function Scan() {
         {/* Fallback / demo shortcut */}
         <div className="card" style={{ marginTop: 22 }}>
           <div className="card-head">
-            <h3 className="grow">Or open a tag directly</h3>
-            <span className="badge badge-warn">Demo</span>
+            <h3 className="grow">{t('Or open a tag directly')}</h3>
+            <span className="badge badge-warn">{t('Demo')}</span>
           </div>
           <div className="card-body">
             <div className="small mute" style={{ marginBottom: 12 }}>
-              These are real tokens from the register, so they follow exactly the same path as a scanned tag.
-              Useful on a laptop, or when the camera is unavailable.
+              {t('These are real tokens from the register, so they follow exactly the same path as a scanned tag. Useful on a laptop, or when the camera is unavailable.')}
             </div>
             {samples.length === 0 ? (
-              <Empty icon={I.QrIcon} title="No published tags yet" />
+              <Empty icon={I.QrIcon} title={t('No published tags yet')} />
             ) : (
               <div style={{ display: 'grid', gap: 7 }}>
                 {samples.map((p) => (

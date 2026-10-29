@@ -6,6 +6,7 @@ import { SmartImage } from '../components/motion.jsx';
 import { installAdvice, onInstallChange, promptInstall, isStandalone, platform } from '../lib/install.js';
 import { markIntroSeen } from '../lib/intro.js';
 import * as I from '../lib/icons.jsx';
+import { t } from '../lib/i18n.js';
 
 /**
  * First run.
@@ -71,37 +72,35 @@ export default function Welcome() {
             <h1>FloraScan</h1>
             <p className="welcome-place">
               <I.MapPin style={{ width: 13, height: 13 }} />
-              {boot?.park_name || 'Niah National Park'}, Sarawak
+              {t('{park}, Sarawak', { park: boot?.park_name ? t(boot.park_name) : t('Niah National Park') })}
             </p>
           </div>
         </div>
 
         <p className="welcome-lead">
-          A field guide to every tagged plant in the park. Scan the QR code on a
-          trailside tag and read what a botanist has confirmed about that exact
-          specimen &mdash; no app to install, no account to create.
+          {t('A field guide to every tagged plant in the park. Scan the QR code on a trailside tag and read what a botanist recorded about that exact specimen — no app to install, no account to create.')}
         </p>
 
         <ul className="welcome-points">
           <li>
             <I.Scan />
             <div>
-              <strong>Scan a tag</strong>
-              <span>Any phone camera opens the plant&rsquo;s page.</span>
+              <strong>{t('Scan a tag')}</strong>
+              <span>{t('Any phone camera opens the plant’s page.')}</span>
             </div>
           </li>
           <li>
             <I.Shield />
             <div>
-              <strong>Checked by a botanist</strong>
-              <span>Rangers record what they find; nothing is published until it is verified.</span>
+              <strong>{t('Checked twice')}</strong>
+              <span>{t('Botanists record what they find; nothing is published until a reviewer has checked it.')}</span>
             </div>
           </li>
           <li>
             <I.Leaf />
             <div>
-              <strong>Search the whole register</strong>
-              <span>By name, family, conservation status or where you are standing.</span>
+              <strong>{t('Search the whole register')}</strong>
+              <span>{t('By name, family, conservation status or where you are standing.')}</span>
             </div>
           </li>
         </ul>
@@ -119,18 +118,18 @@ export default function Welcome() {
           <div className="welcome-actions">
             {advice?.kind === 'prompt' && !installed && (
               <button className="btn btn-primary btn-lg btn-block" onClick={install}>
-                <I.Download /> Add to home screen
+                <I.Download /> {t('Add to home screen')}
               </button>
             )}
 
             {advice?.kind === 'ios' && (
               <div className="welcome-ios">
                 <div className="welcome-ios-head">
-                  <I.Phone /> Keep it one tap away
+                  <I.Phone /> {t('Keep it one tap away')}
                 </div>
                 <ol>
-                  <li>Tap <strong>Share</strong> in Safari&rsquo;s toolbar</li>
-                  <li>Choose <strong>Add to Home Screen</strong></li>
+                  <li>{t('Tap {button} in Safari’s toolbar', { button: <strong>{t('Share')}</strong> })}</li>
+                  <li>{t('Choose {item}', { item: <strong>{t('Add to Home Screen')}</strong> })}</li>
                 </ol>
               </div>
             )}
@@ -138,41 +137,41 @@ export default function Welcome() {
             {advice?.kind === 'android' && (
               <div className="welcome-ios">
                 <div className="welcome-ios-head">
-                  <I.Phone /> Keep it one tap away
+                  <I.Phone /> {t('Keep it one tap away')}
                 </div>
                 <ol>
-                  <li>Open the browser menu (&#8942;)</li>
-                  <li>Choose <strong>Add to Home screen</strong></li>
+                  <li>{t('Open the browser menu (⋮)')}</li>
+                  <li>{t('Choose {item}', { item: <strong>{t('Add to Home screen')}</strong> })}</li>
                 </ol>
               </div>
             )}
 
             {installed && (
               <div className="welcome-ios">
-                <div className="welcome-ios-head"><I.Check /> Added to your home screen</div>
+                <div className="welcome-ios-head"><I.Check /> {t('Added to your home screen')}</div>
               </div>
             )}
 
             <button className="btn btn-lg btn-block welcome-ghost" onClick={() => enter()}>
-              Continue in the browser <I.ChevronRight />
+              {t('Continue in the browser')} <I.ChevronRight />
             </button>
           </div>
         ) : (
           <div className="welcome-actions">
             <button className="btn btn-primary btn-lg" onClick={() => enter()}>
-              Start exploring <I.ChevronRight />
+              {t('Start exploring')} <I.ChevronRight />
             </button>
             <button className="btn btn-lg welcome-ghost" onClick={() => enter('/scan')}>
-              <I.Scan /> I have a tag to scan
+              <I.Scan /> {t('I have a tag to scan')}
             </button>
           </div>
         )}
 
         <div className="welcome-foot">
           {p === 'desktop' && !mobile && (
-            <>Built for the trail &mdash; open it on your phone from <button className="linkish" onClick={() => enter('/connect')}>Open on phone</button>. </>
+            <>{t('Built for the trail — open it on your phone from {link}.', { link: <button className="linkish" onClick={() => enter('/connect')}>{t('Open on phone')}</button> })} </>
           )}
-          Park staff can <button className="linkish" onClick={() => enter('/login')}>sign in</button> to register and verify plants.
+          {t('Park staff can {link} to register and verify plants.', { link: <button className="linkish" onClick={() => enter('/login')}>{t('sign in')}</button> })}
         </div>
       </div>
 

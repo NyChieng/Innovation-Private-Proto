@@ -4,10 +4,11 @@ Clickable prototype for the **Smart Ground-Truthing and Digital Biodiversity Sys
 (COS30049 Computing Technology Innovation Project — NeuonAI / Sarawak Forestry Corporation,
 framed around Niah National Park).
 
-It runs the whole chain end to end: a ranger registers a plant in the field, a botanist
-verifies it, the record is published with a QR tag, and a visitor scans that tag and reads
-the page. Administrators manage accounts and roles, and every change is recorded against
-the person who made it.
+It runs the whole chain end to end: a botanist ground-truths a plant in the field, a
+reviewer double-checks it, the record is published with a QR tag, and a visitor scans that
+tag and reads the page. Rangers take charge when an IoT sensor raises an alert.
+Administrators manage accounts and roles, and every change is recorded against the person
+who made it. The interface is in **English, Bahasa Melayu and 中文**.
 
 Everything is stored in **MySQL**, in the schema defined by
 [`plant_registry_schema.sql`](plant_registry_schema.sql) — 24 tables and one view. There is
@@ -19,7 +20,9 @@ would be worse than one that stops.
 
 ## Run it
 
-You need **Node 20.12 or newer** and a **MySQL** server. XAMPP is what the team uses, so
+You need **Node 22.12 or newer** and a **MySQL** server (or MariaDB, which is what XAMPP ships).
+Node 22.12 is the floor because the browser tests' `puppeteer-core` will not load on
+anything older. XAMPP is what the team uses, so
 that is what these instructions assume.
 
 ### 1. Start MySQL
@@ -91,7 +94,8 @@ and survive a reseed only if you reseed without `--reset`.
 | `npm run db:setup` | Create the database and schema, then load the demo data |
 | `npm run db:setup -- --reset` | The same, but rebuild from scratch |
 | `npm run db:seed` | Reload the demo data only, leaving the schema alone |
-| `npm test` | Both test suites — reseeds the database first |
+| `npm test` | All three test suites (translations, API, browser) — reseeds the database first |
+| `npm run test:i18n` | Translation completeness only — no server needed |
 | `npm run test:api` | API checks only, no browser needed |
 | `npm run test:ui` | Browser checks only |
 | `npm run port` | Assign a new random port |
@@ -291,7 +295,7 @@ A floating control, bottom right, present on every screen:
 
 - jumps straight into the public visitor or any staff account, no password
 - **Ctrl/Cmd + K** opens it; **0** is the visitor, **1–9** are the listed accounts
-- also carries the theme and website/phone layout toggles
+- also carries the theme, language and website/phone layout toggles
 - shows the deactivated account as unselectable, which is the same check the API applies
 
 This is scaffolding for the demo. It calls `POST /api/auth/switch`, which is clearly marked
@@ -303,13 +307,25 @@ too — every demo account uses the password `demo1234`, stored bcrypt-hashed li
 | Role | Who | Can |
 | --- | --- | --- |
 | Administrator | Neng Yi Chieng | Accounts, roles, activity log, audit trail, settings |
-| Botanist | Dr Sue Han Lee, Hans Jia Syn Yee | Publish, verify, edit, archive, species list, visitor reports |
-| Ranger | Edmund Guo Qian Yu, Lim Yon, Edward Ngie Jie Ling, Darren Chong Yue Yang | Register plants, track own submissions, print tags |
+| Botanist | Dr Sue Han Lee, Hans Jia Syn Yee | Ground-truthing: register, edit, archive and resubmit plants, species list, print tags, visitor reports, sensor set-up |
+| Reviewer | Dr Mei Ling Wong | Double-checks every botanist submission: correct it in place, approve it, or return it with a note |
+| Ranger | Edmund Guo Qian Yu, Lim Yon, Edward Ngie Jie Ling, Darren Chong Yue Yang | IoT alerts only — no plant registration or editing |
 | Administrator | Jiaqi Hu | Deactivated, to demonstrate the check |
 
 Roles are **permission sets**, not hard-coded names. The API checks codes such as
-`plant.approve`, so a superuser can be added later as one more role holding every
-permission — no new tables, no fourth dashboard.
+`plant.approve`, which is how the Reviewer role was added (issue #8): one more row in
+`roles` and its grants, no new tables and no API change. A superuser can be added the same
+way later.
+
+**Nobody publishes their own record.** No role holds both `plant.create` and
+`plant.approve`, and the API refuses a reviewer deciding on a submission they made
+themselves. Approve and return only act on a record that is still awaiting review, so an
+archived or already-published record cannot be republished by accident.
+
+**An existing database picks the new roles up on `npm run db:setup`**: section 6 of
+`Server/schema-extensions.sql` adds the Reviewer role and rebuilds the ranger, botanist and
+reviewer grants, and is safe to re-run. It does not add the demo reviewer account — run
+`npm run db:setup -- --reset` for the full demo dataset, or create one under Staff accounts.
 
 ---
 
@@ -329,28 +345,61 @@ not an introduction. Replay it any time from the role switcher (**Intro**).
 
 1. **The QR journey.** Sign in as a botanist → open any published record → **QR tag** tab →
    download or print it. Scan it with your phone, or open `/scan` and pick a tag from the list.
-2. **The verification workflow.** Switch to a ranger → **Register a plant** → submit it.
-   Switch to a botanist → **Review queue** → approve it, or return it with a note. Switch
-   back to the ranger → **My submissions** shows what happened.
+2. **The verification workflow.** Switch to a botanist → **Register a plant** → submit it.
+   Switch to the reviewer → **Review queue** → **Correct details** to fix a field in place,
+   then approve it, or return it with a note. Back as the botanist, **My submissions** shows
+   what happened; a returned record has **Fix and resubmit**, and the reviewer then sees
+   their earlier note beside the botanist's reply.
 3. **Species not listed.** Register a plant without choosing a species. It always goes to a
-   botanist, whatever the approval setting says, and Approve stays disabled until the
-   botanist confirms a species.
+   reviewer, whatever the approval setting says, and Approve stays disabled until a species
+   is set.
 4. **The approval switch.** Admin → **System settings** → turn `require_approval` off, then
-   register as a ranger again. The entry publishes immediately.
+   register as a botanist again. The entry publishes immediately.
 5. **Archiving.** Archive a published record, then scan its tag: "no longer on display".
    Restore it and the same printed tag works again.
-6. **Access control.** As a ranger, open `/staff/users` directly. The screen explains which
-   permission is missing — and the API refuses the request regardless.
+6. **Access control.** As a ranger, open `/staff/register` directly. The screen explains
+   which permission is missing — and the API refuses the request regardless. A ranger lands
+   on IoT monitoring and gets an **Alerts** tab on the phone.
 7. **The audit trail.** Admin → **Audit trail**. Every change carries actor, field, old
    value, new value and timestamp. **Activity log** has sign-ins, failed attempts and
    refused requests.
 8. **Protected locations.** Open a critically endangered plant as a visitor: the location is
    withheld. Switch to a botanist and the real coordinates appear. Searching the trail name
    does not reveal it either.
-9. **Printing tags.** Botanist or ranger → **Print QR tags** → select all → print. Three tags
-   per row on A4, ready to cut out.
+9. **Printing tags.** Botanist → **Print QR tags** → select all → print. Three tags per row
+   on A4, ready to cut out.
 10. **Upload a photograph.** Register a plant with a photo from your phone's camera. It is
     stored in the database and served back, so it survives a restart.
+11. **Languages.** Pick **BM** or **中文** from the globe in the header (or the role
+    switcher, or Account on the phone). Every screen switches at once and the choice is
+    remembered per browser.
+
+---
+
+## Languages
+
+The interface is in English, Bahasa Melayu and Simplified Chinese (issue #5). A component
+writes its English text through `t()` from `FloraScan-Web-App/src/lib/i18n.js`:
+
+```jsx
+<h1>{t('Plant register')}</h1>
+toast(t('{code} published.', { code: plant.plant_code }))
+t('{name} submitted {code}', { name: <strong>{who}</strong>, code })  // placeholders may be elements
+```
+
+The English is the key; the Malay and Chinese live in `lib/locales.js` as
+`'English': ['Melayu', '中文']`. Use a `{placeholder}` rather than joining strings, so each
+language can put the name or number where its own grammar wants it. A label kept in a table
+and translated later is marked with `msg('...')` so the checker can find it.
+
+`npm run test:i18n` fails if any string has no Malay or Chinese entry, if a translation
+drops a `{placeholder}`, or if a key is built at run time. `node tests/i18n.test.mjs
+--report` also lists JSX text that was never wrapped in `t()`.
+
+What is translated is the interface. Records — species descriptions from Wikipedia, field
+notes, staff names — are shown as written. Fixed server messages (common errors, the
+withheld-location notice, notification titles) are translated in the client; any other
+server text appears in English.
 
 ---
 
@@ -461,7 +510,8 @@ all carry over unchanged; only the component library differs.
 ## Tests
 
 ```bash
-npm test             # both suites
+npm test             # all three suites
+npm run test:i18n    # translations only, no server needed
 npm run test:api     # no browser needed
 npm run test:ui      # drives headless Chrome or Edge
 ```
@@ -493,7 +543,7 @@ The UI tests find Chrome or Edge automatically; set `CHROME_PATH` if yours is el
 ### Three faults worth knowing about, because all three are easy to reintroduce
 
 - A grid track written as `1fr` keeps an implicit `min-width: auto`, so a single unbroken
-  string — a pasted URL in a ranger's field note — widens the track and drags the whole
+  string — a pasted URL in a botanist's field note — widens the track and drags the whole
   page sideways. The review queue overflowed by nearly 6,000 px this way. Value lists and
   free-text insets now use `minmax(0, 1fr)` with `overflow-wrap: anywhere`, and the UI
   suite registers a record with a 900-character unbroken note to keep it that way.

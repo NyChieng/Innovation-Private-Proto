@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "description": "Prototype X / FloraScan - Smart Ground-Truthing & Digital Biodiversity System (COS30049)",
   "scripts": {
     "dev": "node Server/index.js",
@@ -14,9 +17,10 @@
     "port": "node Server/port.js",
     "import:species": "node scripts/import-species.mjs",
     "import:tints": "node scripts/photo-tints.mjs",
-    "test": "node tests/api.test.mjs && node tests/ui.test.mjs",
+    "test": "node tests/i18n.test.mjs && node tests/api.test.mjs && node tests/ui.test.mjs",
     "test:api": "node tests/api.test.mjs",
     "test:ui": "node tests/ui.test.mjs",
+    "test:i18n": "node tests/i18n.test.mjs",
     "db:setup": "node scripts/db-setup.mjs",
     "db:seed": "node scripts/seed-mysql.mjs",
     "db:reset": "node scripts/db-setup.mjs --reset && node scripts/seed-mysql.mjs --reset",
