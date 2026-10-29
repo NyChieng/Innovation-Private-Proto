@@ -1,0 +1,5 @@
+# Large binaries go through Git LFS. Everything else (code, csv, yaml, json, plots) is normal git.
+*.onnx                 filter=lfs diff=lfs merge=lfs -text
+*.pt                   filter=lfs diff=lfs merge=lfs -text
+*.mp4                  filter=lfs diff=lfs merge=lfs -text
+data/touch/**/*.jpg    filter=lfs diff=lfs merge=lfs -text

@@ -1,0 +1,85 @@
+{
+  "models": {
+    "det": {
+      "onnx": "det.onnx",
+      "weights": "runs/detect/det_B/weights/best.pt",
+      "names": [
+        "person",
+        "animal",
+        "plant"
+      ],
+      "imgsz": [
+        480,
+        288
+      ]
+    },
+    "pose": {
+      "onnx": "pose.onnx",
+      "weights": "models/yolo26n-pose.pt",
+      "names": [
+        "person"
+      ],
+      "imgsz": [
+        320,
+        320
+      ]
+    },
+    "touch": {
+      "onnx": "touch.onnx",
+      "weights": "runs/classify/touch_B/weights/best.pt",
+      "names": [
+        "no_touch",
+        "touch"
+      ],
+      "imgsz": [
+        224,
+        224
+      ]
+    }
+  },
+  "cuda_4t": {
+    "det_ms": 7.518099999288097,
+    "pose_ms": 4.076199998962693,
+    "touch_ms": 2.5199500014423393,
+    "frame_ms": 14.61669999116566,
+    "max_fps": 48.91599305900704,
+    "cpu_cores_busy": 0.942651949574615,
+    "hands_per_frame": 1
+  },
+  "openvino_4t": {
+    "det_ms": 27.058899999246933,
+    "pose_ms": 10.787599996547215,
+    "touch_ms": 8.309599994390737,
+    "frame_ms": 46.91645000275457,
+    "max_fps": 18.42210212585004,
+    "cpu_cores_busy": 3.103932311308587,
+    "hands_per_frame": 1
+  },
+  "openvino_2t": {
+    "det_ms": 43.56655000447063,
+    "pose_ms": 16.084949995274656,
+    "touch_ms": 11.894050003320444,
+    "frame_ms": 73.13114999851678,
+    "max_fps": 12.895377651903384,
+    "cpu_cores_busy": 1.7529653995556165,
+    "hands_per_frame": 1
+  },
+  "onnxruntime_4t": {
+    "det_ms": 48.66845000651665,
+    "pose_ms": 17.49105000635609,
+    "touch_ms": 12.361700006294996,
+    "frame_ms": 80.19819999753963,
+    "max_fps": 11.641144266276033,
+    "cpu_cores_busy": 9.752489870992186,
+    "hands_per_frame": 1
+  },
+  "onnxruntime_2t": {
+    "det_ms": 77.3367999936454,
+    "pose_ms": 25.391299997863825,
+    "touch_ms": 18.183899999712594,
+    "frame_ms": 123.96119999903021,
+    "max_fps": 7.732172394034845,
+    "cpu_cores_busy": 3.378798249268352,
+    "hands_per_frame": 1
+  }
+}

@@ -1,0 +1,11 @@
+# Needed for training, evaluation, exporting, downloading datasets, and the cuda backend.
+# Install PyTorch first from https://pytorch.org (pick the CUDA build for your GPU), then this file.
+-r requirements.txt
+torch==2.14.1
+torchvision==0.29.1
+ultralytics==8.4.183
+onnx==1.23.2
+onnxslim==0.1.98
+requests==2.34.2
+tqdm==4.70.1
+pyyaml==6.0.3

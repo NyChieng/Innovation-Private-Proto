@@ -1,0 +1,7 @@
+path: D:/Innovation_AI_Vision/data/floraguard_det
+train: D:/Innovation_AI_Vision/reports/lists/test_openimages.txt
+val: D:/Innovation_AI_Vision/reports/lists/test_openimages.txt
+names:
+  0: person
+  1: animal
+  2: plant

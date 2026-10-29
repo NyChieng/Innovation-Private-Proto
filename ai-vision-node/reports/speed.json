@@ -1,0 +1,85 @@
+{
+  "models": {
+    "det": {
+      "onnx": "det.onnx",
+      "weights": "runs/detect/det_B/weights/best.pt",
+      "names": [
+        "person",
+        "animal",
+        "plant"
+      ],
+      "imgsz": [
+        640,
+        384
+      ]
+    },
+    "pose": {
+      "onnx": "pose.onnx",
+      "weights": "models/yolo26s-pose.pt",
+      "names": [
+        "person"
+      ],
+      "imgsz": [
+        320,
+        320
+      ]
+    },
+    "touch": {
+      "onnx": "touch.onnx",
+      "weights": "runs/classify/touch_B/weights/best.pt",
+      "names": [
+        "no_touch",
+        "touch"
+      ],
+      "imgsz": [
+        224,
+        224
+      ]
+    }
+  },
+  "cuda_4t": {
+    "det_ms": 8.316549996379763,
+    "pose_ms": 4.281350004021078,
+    "touch_ms": 2.2402500035241246,
+    "frame_ms": 15.35765000153333,
+    "max_fps": 51.639293681488354,
+    "cpu_cores_busy": 0.9682367565279066,
+    "hands_per_frame": 1
+  },
+  "openvino_4t": {
+    "det_ms": 44.26490000332706,
+    "pose_ms": 24.465399998007342,
+    "touch_ms": 13.78619999741204,
+    "frame_ms": 82.93604999926174,
+    "max_fps": 10.426001195884284,
+    "cpu_cores_busy": 2.913307104995791,
+    "hands_per_frame": 1
+  },
+  "openvino_2t": {
+    "det_ms": 73.23099999484839,
+    "pose_ms": 36.9769000026281,
+    "touch_ms": 18.401900000753812,
+    "frame_ms": 129.95689999661408,
+    "max_fps": 7.398124040412732,
+    "cpu_cores_busy": 1.7994395452462217,
+    "hands_per_frame": 1
+  },
+  "onnxruntime_4t": {
+    "det_ms": 89.69244999752846,
+    "pose_ms": 46.249300001363736,
+    "touch_ms": 12.988250004127622,
+    "frame_ms": 148.25494999968214,
+    "max_fps": 6.585971321276509,
+    "cpu_cores_busy": 8.088396028942713,
+    "hands_per_frame": 1
+  },
+  "onnxruntime_2t": {
+    "det_ms": 143.70255000540055,
+    "pose_ms": 65.55094999930589,
+    "touch_ms": 17.811650002840906,
+    "frame_ms": 230.09389999788254,
+    "max_fps": 4.287537744889985,
+    "cpu_cores_busy": 2.8092304599331253,
+    "hands_per_frame": 1
+  }
+}

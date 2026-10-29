@@ -1,0 +1,9 @@
+path: D:/Innovation_AI_Vision/data/floraguard_det
+train: images/train
+val: images/val
+test: images/test
+
+names:
+  0: person
+  1: animal
+  2: plant

@@ -1,0 +1,6 @@
+# Needed to run the app on a CPU (OpenVINO, falls back to ONNX Runtime)
+gradio==6.30.0
+opencv-python==5.0.0.93
+numpy==2.5.2
+openvino==2026.4.1
+onnxruntime==1.31.0
