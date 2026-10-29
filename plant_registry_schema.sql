@@ -377,7 +377,7 @@ CREATE TABLE plant_revisions (
 -- Public "report incorrect information". Not in this release's delivered
 -- list; the table stays so the feature can be switched on later without a
 -- schema change. reported_by is NULL for anonymous visitors.
-CREATE TABLE plant_reports (
+ CREATE TABLE plant_reports (
   id               INT UNSIGNED NOT NULL AUTO_INCREMENT,
   plant_id         INT UNSIGNED NOT NULL,
   reported_by      INT UNSIGNED NULL,
