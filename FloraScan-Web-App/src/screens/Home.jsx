@@ -6,6 +6,7 @@ import { PlantCard, SearchInput, Skeleton } from '../components/ui.jsx';
 import { Reveal, CountUp, SmartImage } from '../components/motion.jsx';
 import { num } from '../lib/format.js';
 import * as I from '../lib/icons.jsx';
+import { t } from '../lib/i18n.js';
 
 export default function Home() {
   const { boot, mobile } = useApp();
@@ -62,13 +63,12 @@ export default function Home() {
           <div className="hero-in">
             <div className="hero-place">
               <I.MapPin style={{ width: 13, height: 13 }} />
-              {boot?.park_name || 'Niah National Park'}, Sarawak
+              {t('{park}, Sarawak', { park: boot?.park_name ? t(boot.park_name) : t('Niah National Park') })}
             </div>
 
-            <h1>Every plant on the trail, explained.</h1>
+            <h1>{t('Every plant on the trail, explained.')}</h1>
             <p>
-              Scan the tag beside a plant, or search the register by name, family or location.
-              Nothing appears here until a botanist has confirmed it.
+              {t('Scan the tag beside a plant, or search the register by name, family or location. Nothing appears here until a botanist has recorded it and a reviewer has checked it.')}
             </p>
 
             <form onSubmit={submit} className="hero-search">
@@ -76,21 +76,21 @@ export default function Home() {
                 value={q}
                 onChange={setQ}
                 large
-                placeholder={mobile ? 'Search the register' : 'Try "Belian", "Nepenthes", "Dipterocarpaceae" or a Plant ID'}
+                placeholder={mobile ? t('Search the register') : t('Try "Belian", "Nepenthes", "Dipterocarpaceae" or a Plant ID')}
               />
             </form>
 
             <div className="hero-actions">
-              <Link to="/scan" className="hero-btn hero-btn-solid"><I.Scan /> Scan a tag</Link>
-              <Link to="/browse" className="hero-btn"><I.Grid /> Browse all plants</Link>
+              <Link to="/scan" className="hero-btn hero-btn-solid"><I.Scan /> {t('Scan a tag')}</Link>
+              <Link to="/browse" className="hero-btn"><I.Grid /> {t('Browse all plants')}</Link>
             </div>
 
             {stats && (
               <div className="hero-figures">
-                <span><strong><CountUp value={stats.published_plants} /></strong> plants</span>
-                <span><strong><CountUp value={stats.species} /></strong> species</span>
-                <span><strong><CountUp value={stats.families} /></strong> families</span>
-                <span><strong><CountUp value={stats.threatened} /></strong> threatened</span>
+                <span>{t('{n} plants', { n: <strong><CountUp value={stats.published_plants} /></strong> })}</span>
+                <span>{t('{n} species', { n: <strong><CountUp value={stats.species} /></strong> })}</span>
+                <span>{t('{n} families', { n: <strong><CountUp value={stats.families} /></strong> })}</span>
+                <span>{t('{n} threatened', { n: <strong><CountUp value={stats.threatened} /></strong> })}</span>
               </div>
             )}
           </div>
@@ -103,8 +103,8 @@ export default function Home() {
           {places.length > 0 && (
             <Reveal className="section">
               <div className="section-head">
-                <h2>Start from where you are</h2>
-                <p>Published records, grouped by where they stand in the park.</p>
+                <h2>{t('Start from where you are')}</h2>
+                <p>{t('Published records, grouped by where they stand in the park.')}</p>
               </div>
               <div className="place-list">
                 {places.map(([site, count], i) => (
@@ -122,8 +122,8 @@ export default function Home() {
           <Reveal className="section">
             <div className="section-head">
               <div className="grow">
-                <h2>Recently verified</h2>
-                <p>The newest records to pass botanist review.</p>
+                <h2>{t('Recently verified')}</h2>
+                <p>{t('The newest records to pass review.')}</p>
               </div>
               <Link to="/browse" className="btn btn-sm">All {num(stats?.published_plants || 0)} <I.ChevronRight /></Link>
             </div>
@@ -147,8 +147,8 @@ export default function Home() {
             <Reveal className="section">
               <div className="section-head">
                 <div className="grow">
-                  <h2>Under pressure</h2>
-                  <p>Specimens of species assessed as vulnerable or worse on the IUCN Red List.</p>
+                  <h2>{t('Under pressure')}</h2>
+                  <p>{t('Specimens of species assessed as vulnerable or worse on the IUCN Red List.')}</p>
                 </div>
               </div>
 
@@ -159,7 +159,7 @@ export default function Home() {
                     <span className="ramp-code">{c}</span>
                   </Link>
                 ))}
-                <span className="ramp-caption">least concern &rarr; critically endangered</span>
+                <span className="ramp-caption">{t('least concern → critically endangered')}</span>
               </div>
 
               <div className="plant-grid">
@@ -172,14 +172,14 @@ export default function Home() {
           {families.length > 0 && (
             <Reveal className="section">
               <div className="section-head">
-                <h2>By family</h2>
-                <p>Taxonomy is held once per species, so a correction reaches every specimen at once.</p>
+                <h2>{t('By family')}</h2>
+                <p>{t('Taxonomy is held once per species, so a correction reaches every specimen at once.')}</p>
               </div>
               <div className="row row-wrap" style={{ gap: 7 }}>
                 {families.map((f) => (
                   <Link key={f} className="chip" to={'/browse?family=' + encodeURIComponent(f)}>{f}</Link>
                 ))}
-                <Link className="chip" to="/species">All species <I.ChevronRight style={{ width: 13, height: 13 }} /></Link>
+                <Link className="chip" to="/species">{t('All species')} <I.ChevronRight style={{ width: 13, height: 13 }} /></Link>
               </div>
             </Reveal>
           )}
@@ -187,16 +187,15 @@ export default function Home() {
           {/* ---------------- Provenance + reporting ---------------- */}
           <Reveal className="colophon">
             <div>
-              <strong>Where this comes from.</strong>{' '}
-              Taxonomy and Red List categories are drawn from{' '}
-              <a href="https://www.gbif.org" target="_blank" rel="noreferrer">GBIF</a>; photographs are
-              contributed to <a href="https://www.inaturalist.org" target="_blank" rel="noreferrer">iNaturalist</a>{' '}
-              under Creative Commons licences and credited on each plant page. Specimen records are
-              entered by park rangers and verified by a botanist before they appear.
+              <strong>{t('Where this comes from.')}</strong>{' '}
+              {t('Taxonomy and Red List categories are drawn from {gbif}; photographs are contributed to {inat} under Creative Commons licences and credited on each plant page. Specimen records are entered by park botanists and checked by a reviewer before they appear.', {
+                gbif: <a href="https://www.gbif.org" target="_blank" rel="noreferrer">GBIF</a>,
+                inat: <a href="https://www.inaturalist.org" target="_blank" rel="noreferrer">iNaturalist</a>,
+              })}
             </div>
             <div style={{ marginTop: 10 }}>
-              <strong>Spotted something wrong?</strong>{' '}
-              Open any plant page and use <em>Report incorrect information</em>. No account needed.
+              <strong>{t('Spotted something wrong?')}</strong>{' '}
+              {t('Open any plant page and use {action}. No account needed.', { action: <em>{t('Report incorrect information')}</em> })}
             </div>
           </Reveal>
         </div>

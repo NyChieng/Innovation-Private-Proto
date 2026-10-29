@@ -6,12 +6,13 @@ import { PlantCard, SearchInput, Empty, LoadingBlock, ChipRow } from '../compone
 import { Reveal } from '../components/motion.jsx';
 import { CONSERVATION, GROWTH_FORM, num, titleCase } from '../lib/format.js';
 import * as I from '../lib/icons.jsx';
+import { msg, t } from '../lib/i18n.js';
 
 const SORTS = [
-  { value: 'recent', label: 'Newest' },
-  { value: 'name', label: 'Scientific name' },
-  { value: 'code', label: 'Plant ID' },
-  { value: 'popular', label: 'Most viewed' },
+  { value: 'recent', label: msg('Newest') },
+  { value: 'name', label: msg('Scientific name') },
+  { value: 'code', label: msg('Plant ID') },
+  { value: 'popular', label: msg('Most viewed') },
 ];
 
 export default function Browse() {
@@ -41,12 +42,12 @@ export default function Browse() {
   useEffect(() => {
     let live = true;
     setLoading(true);
-    const t = setTimeout(() => {
+    const timer = setTimeout(() => {
       api.publicPlants({ q, family, genus, conservation, site, growth_form, sort, limit: PAGE, offset: 0 })
         .then((r) => { if (live) { setData(r); setLoading(false); } })
         .catch(() => { if (live) setLoading(false); });
     }, q ? 180 : 0); // debounce typing, but filters apply at once
-    return () => { live = false; clearTimeout(t); };
+    return () => { live = false; clearTimeout(timer); };
   }, [q, family, genus, conservation, site, growth_form, sort]);
 
   /** Appends the next page rather than replacing, so scroll position holds. */
@@ -78,39 +79,39 @@ export default function Browse() {
   const Filters = (
     <div className="stack" style={{ '--gap': '16px' }}>
       <div className="field">
-        <label>Conservation status</label>
+        <label>{t('Conservation status')}</label>
         <ChipRow
           options={['LC', 'NT', 'VU', 'EN', 'CR'].map((c) => ({ value: c, label: c }))}
           value={conservation}
           onChange={(v) => set('conservation', v)}
-          allLabel="Any"
+          allLabel={t('Any')}
         />
       </div>
       <div className="field">
-        <label htmlFor="f-family">Family</label>
+        <label htmlFor="f-family">{t('Family')}</label>
         <select id="f-family" className="select" value={family} onChange={(e) => set('family', e.target.value)}>
-          <option value="">All families</option>
+          <option value="">{t('All families')}</option>
           {(boot?.families || []).map((f) => <option key={f} value={f}>{f}</option>)}
         </select>
       </div>
       <div className="field">
-        <label htmlFor="f-genus">Genus</label>
+        <label htmlFor="f-genus">{t('Genus')}</label>
         <select id="f-genus" className="select" value={genus} onChange={(e) => set('genus', e.target.value)}>
-          <option value="">All genera</option>
+          <option value="">{t('All genera')}</option>
           {(boot?.genera || []).map((f) => <option key={f} value={f}>{f}</option>)}
         </select>
       </div>
       <div className="field">
-        <label htmlFor="f-gf">Growth form</label>
+        <label htmlFor="f-gf">{t('Growth form')}</label>
         <select id="f-gf" className="select" value={growth_form} onChange={(e) => set('growth_form', e.target.value)}>
-          <option value="">Any growth form</option>
+          <option value="">{t('Any growth form')}</option>
           {(boot?.growth_forms || []).map((f) => <option key={f} value={f}>{GROWTH_FORM[f] || titleCase(f)}</option>)}
         </select>
       </div>
       <div className="field">
-        <label htmlFor="f-site">Location</label>
+        <label htmlFor="f-site">{t('Location')}</label>
         <select id="f-site" className="select" value={site} onChange={(e) => set('site', e.target.value)}>
-          <option value="">Anywhere in the park</option>
+          <option value="">{t('Anywhere in the park')}</option>
           {(boot?.sites || []).map((f) => <option key={f} value={f}>{f}</option>)}
         </select>
       </div>
@@ -126,11 +127,11 @@ export default function Browse() {
     <div className="page">
       <div className="wrap">
         <div style={{ marginBottom: 18 }}>
-          <h1 style={{ marginBottom: 10 }}>Browse the plant register</h1>
+          <h1 style={{ marginBottom: 10 }}>{t('Browse the plant register')}</h1>
           <SearchInput
             value={q}
             onChange={(v) => set('q', v)}
-            placeholder="Common name, scientific name, Plant ID, family, genus or location"
+            placeholder={t('Common name, scientific name, Plant ID, family, genus or location')}
           />
         </div>
 
@@ -139,7 +140,7 @@ export default function Browse() {
             <aside style={{ width: 236, flex: 'none', position: 'sticky', top: 'calc(var(--header-h) + 18px)' }}>
               <div className="card card-pad">
                 <div className="row row-between" style={{ marginBottom: 14 }}>
-                  <strong style={{ fontSize: '0.9rem' }}>Filters</strong>
+                  <strong style={{ fontSize: '0.9rem' }}>{t('Filters')}</strong>
                   <I.Filter style={{ width: 15, height: 15, color: 'var(--text-faint)' }} />
                 </div>
                 {Filters}
@@ -150,13 +151,12 @@ export default function Browse() {
           <div className="grow">
             <div className="row row-between row-wrap" style={{ marginBottom: 14, gap: 10 }}>
               <div className="small mute">
-                {loading ? 'Searching...' : (
-                  <>
-                    <strong style={{ color: 'var(--text)' }}>{num(data?.total || 0)}</strong>
-                    {' '}published record{data?.total === 1 ? '' : 's'}
-                    {q && <> matching &ldquo;{q}&rdquo;</>}
-                  </>
-                )}
+                {loading ? t('Searching...') : (() => {
+                  const vars = { n: <strong style={{ color: 'var(--text)' }}>{num(data?.total || 0)}</strong>, q: <>&ldquo;{q}&rdquo;</> };
+                  const one = data?.total === 1;
+                  if (q) return one ? t('{n} published record matching {q}', vars) : t('{n} published records matching {q}', vars);
+                  return one ? t('{n} published record', vars) : t('{n} published records', vars);
+                })()}
               </div>
               <div className="row" style={{ gap: 8 }}>
                 {mobile && (
@@ -164,8 +164,8 @@ export default function Browse() {
                     <I.Filter /> Filters{active.length ? ` (${active.length})` : ''}
                   </button>
                 )}
-                <select className="select" style={{ width: 'auto' }} value={sort} onChange={(e) => set('sort', e.target.value)} aria-label="Sort by">
-                  {SORTS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+                <select className="select" style={{ width: 'auto' }} value={sort} onChange={(e) => set('sort', e.target.value)} aria-label={t('Sort by')}>
+                  {SORTS.map((s) => <option key={s.value} value={s.value}>{t(s.label)}</option>)}
                 </select>
               </div>
             </div>
@@ -176,22 +176,21 @@ export default function Browse() {
               <div className="row row-wrap" style={{ gap: 7, marginBottom: 16 }}>
                 {active.map((a) => (
                   <button key={a.key} className="chip active" onClick={() => set(a.key, '')}>
-                    {a.label} <span className="chip-x">&times;</span>
+                    {a.label} <span className="chip-x">×</span>
                   </button>
                 ))}
               </div>
             )}
 
-            {loading && !data && <LoadingBlock label="Searching the register" />}
+            {loading && !data && <LoadingBlock label={t('Searching the register')} />}
 
             {data && data.results.length === 0 && (
               <Empty
                 icon={I.Search}
-                title="No records match"
-                action={<button className="btn" onClick={() => setParams({}, { replace: true })}>Clear search and filters</button>}
+                title={t('No records match')}
+                action={<button className="btn" onClick={() => setParams({}, { replace: true })}>{t('Clear search and filters')}</button>}
               >
-                Try a shorter search term, or a different family or conservation status.
-                Only approved records appear on the public site.
+                {t('Try a shorter search term, or a different family or conservation status. Only approved records appear on the public site.')}
               </Empty>
             )}
 
@@ -208,12 +207,12 @@ export default function Browse() {
                     <button className="btn btn-lg" onClick={loadMore} disabled={more}>
                       {more && <span className="spinner" />}
                       {more
-                        ? 'Loading…'
-                        : <>Load more <span className="mute">({num(data.total - data.results.length)} left)</span></>}
+                        ? t('Loading') + '…'
+                        : <>{t('Load more')} <span className="mute">({t('{n} left', { n: num(data.total - data.results.length) })})</span></>}
                     </button>
                   ) : (
                     data.total > PAGE && (
-                      <span className="small faint">That is all {num(data.total)} records.</span>
+                      <span className="small faint">{t('That is all {n} records.', { n: num(data.total) })}</span>
                     )
                   )}
                 </div>

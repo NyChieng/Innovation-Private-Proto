@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { api, setToken, getToken, ApiError } from './api.js';
+import { getLang, setLang as storeLang, t } from './i18n.js';
 
 const AppCtx = createContext(null);
 export const useApp = () => useContext(AppCtx);
@@ -29,6 +30,13 @@ export function AppProvider({ children }) {
   const [ready, setReady] = useState(false);
   const [toasts, setToasts] = useState([]);
   const [theme, setThemeState] = useState(() => localStorage.getItem(THEME_KEY) || 'system');
+  // The module in i18n.js holds the language; this copy is what makes every
+  // screen re-render with the new strings when it changes.
+  const [lang, setLangState] = useState(getLang);
+  const setLang = useCallback((code) => {
+    storeLang(code);
+    setLangState(getLang());
+  }, []);
 
   /**
    * View mode decides which shell renders: the desktop website or the
@@ -47,9 +55,9 @@ export function AppProvider({ children }) {
 
   useEffect(() => applyTheme(theme), [theme]);
 
-  const setTheme = useCallback((t) => {
-    localStorage.setItem(THEME_KEY, t);
-    setThemeState(t);
+  const setTheme = useCallback((next) => {
+    localStorage.setItem(THEME_KEY, next);
+    setThemeState(next);
   }, []);
 
   const setView = useCallback((v) => {
@@ -63,10 +71,10 @@ export function AppProvider({ children }) {
   const seq = useRef(0);
   const toast = useCallback((message, kind = 'ok') => {
     const id = ++seq.current;
-    setToasts((t) => [...t, { id, message, kind }]);
-    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), kind === 'err' ? 6000 : 3800);
+    setToasts((list) => [...list, { id, message, kind }]);
+    setTimeout(() => setToasts((list) => list.filter((x) => x.id !== id)), kind === 'err' ? 6000 : 3800);
   }, []);
-  const dismissToast = useCallback((id) => setToasts((t) => t.filter((x) => x.id !== id)), []);
+  const dismissToast = useCallback((id) => setToasts((list) => list.filter((x) => x.id !== id)), []);
 
   /* ---------------- bootstrap ---------------- */
   const refreshCounts = useCallback(async () => {
@@ -132,7 +140,7 @@ export function AppProvider({ children }) {
       if (success) toast(success, 'ok');
       return out;
     } catch (e) {
-      toast(e instanceof ApiError ? e.message : 'Something went wrong.', 'err');
+      toast(e instanceof ApiError ? e.message : t('Something went wrong.'), 'err');
       throw e;
     }
   }, [toast]);
@@ -141,9 +149,11 @@ export function AppProvider({ children }) {
     boot, setBoot, user, setUser, counts, refreshCounts, ready,
     toasts, toast, dismissToast,
     theme, setTheme, viewPref, setView, mobile, narrow,
+    lang, setLang,
     signIn, signOut, switchRole, can, run,
   }), [boot, user, counts, refreshCounts, ready, toasts, toast, dismissToast,
-       theme, setTheme, viewPref, setView, mobile, narrow, signIn, signOut, switchRole, can, run]);
+       theme, setTheme, viewPref, setView, mobile, narrow, lang, setLang,
+       signIn, signOut, switchRole, can, run]);
 
   return <AppCtx.Provider value={value}>{children}</AppCtx.Provider>;
 }

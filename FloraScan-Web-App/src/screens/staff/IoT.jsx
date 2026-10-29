@@ -1,5 +1,6 @@
 import { ComingSoon, Notice, PageHead } from '../../components/ui.jsx';
 import * as I from '../../lib/icons.jsx';
+import { t } from '../../lib/i18n.js';
 
 /**
  * IoT monitoring is designed but not built: the sensor kit has not arrived.
@@ -10,23 +11,23 @@ export default function IoT() {
   const planned = [
     {
       icon: I.Sensor,
-      title: 'Live status cards',
-      body: 'One card per monitored plant showing the latest soil moisture, temperature and humidity, marked OK, Warning or Offline.',
+      title: t('Live status cards'),
+      body: t('One card per monitored plant showing the latest soil moisture, temperature and humidity, marked OK, Warning or Offline.'),
     },
     {
       icon: I.Activity,
-      title: '24-hour and 7-day charts',
-      body: 'Readings arrive about every five minutes. The 7-day view averages them by hour so the trend stays readable.',
+      title: t('24-hour and 7-day charts'),
+      body: t('Readings arrive about every five minutes. The 7-day view averages them by hour so the trend stays readable.'),
     },
     {
       icon: I.Alert,
-      title: 'Alerts a ranger resolves',
-      body: 'When a reading leaves the safe range the API opens an alert and notifies the rangers. At most one open alert per sensor and reading type.',
+      title: t('Alerts a ranger resolves'),
+      body: t('When a reading leaves the safe range the API opens an alert and notifies the rangers - this is where a ranger takes charge of a plant. At most one open alert per sensor and reading type.'),
     },
     {
       icon: I.Settings,
-      title: 'Sensor set-up by botanists',
-      body: 'Link a sensor to a plant, set the safe ranges agreed with the botanists, and issue the device key that authenticates its readings.',
+      title: t('Sensor set-up by botanists'),
+      body: t('Link a sensor to a plant, set the safe ranges agreed with the botanists, and issue the device key that authenticates its readings.'),
     },
   ];
 
@@ -34,23 +35,21 @@ export default function IoT() {
     <div className="page">
       <div className="wrap" style={{ maxWidth: 1000 }}>
         <PageHead
-          title="IoT plant monitoring"
-          sub="Soil moisture, temperature and humidity on selected plants, with alerts when a reading leaves its safe range."
+          title={t('IoT plant monitoring')}
+          sub={t('Soil moisture, temperature and humidity on selected plants, with alerts when a reading leaves its safe range.')}
         >
-          <span className="badge badge-warn"><span className="dot" />Not built yet</span>
+          <span className="badge badge-warn"><span className="dot" />{t('Not built yet')}</span>
         </PageHead>
 
         <div style={{ marginBottom: 22 }}>
-          <ComingSoon icon={I.Sensor} title="Coming soon" note="Waiting on the sensor kit">
-            The ESP32 nodes and the soil-moisture and DHT22 sensors have not arrived, so there is nothing
-            real to show here yet. The database tables, the readings endpoint and the device-key check are
-            already in the schema, so this dashboard can be built without changing anything else.
+          <ComingSoon icon={I.Sensor} title={t('Coming soon')} note={t('Waiting on the sensor kit')}>
+            {t('The ESP32 nodes and the soil-moisture and DHT22 sensors have not arrived, so there is nothing real to show here yet. The database tables, the readings endpoint and the device-key check are already in the schema, so this dashboard can be built without changing anything else.')}
           </ComingSoon>
         </div>
 
-        <h2 style={{ fontSize: '1.05rem', marginBottom: 4 }}>What will go here</h2>
+        <h2 style={{ fontSize: '1.05rem', marginBottom: 4 }}>{t('What will go here')}</h2>
         <div className="small mute" style={{ marginBottom: 16 }}>
-          From the release plan: items 15, 23, 24 and 27.
+          {t('From the release plan: items 15, 23, 24 and 27.')}
         </div>
 
         <div className="grid grid-2" style={{ marginBottom: 22 }}>
@@ -63,10 +62,8 @@ export default function IoT() {
           ))}
         </div>
 
-        <Notice kind="plain" title="How it will be built">
-          A simulator script posts readings to the same API the real nodes will use, so the dashboard can be
-          finished and tested before any hardware is connected. One real sensor is planned for the final weeks
-          if time allows.
+        <Notice kind="plain" title={t('How it will be built')}>
+          {t('A simulator script posts readings to the same API the real nodes will use, so the dashboard can be finished and tested before any hardware is connected. One real sensor is planned for the final weeks if time allows.')}
         </Notice>
       </div>
     </div>

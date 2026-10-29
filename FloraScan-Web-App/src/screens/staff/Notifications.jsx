@@ -5,14 +5,36 @@ import { useApp } from '../../lib/store.jsx';
 import { Empty, LoadingBlock, PageHead } from '../../components/ui.jsx';
 import { formatDateTime, relativeTime } from '../../lib/format.js';
 import * as I from '../../lib/icons.jsx';
+import { msg, t } from '../../lib/i18n.js';
 
 const TYPES = {
-  'submission.new': { icon: I.Clock, cls: 'badge-warn', label: 'New submission' },
-  'submission.approved': { icon: I.CheckCircle, cls: 'badge-ok', label: 'Approved' },
-  'submission.rejected': { icon: I.XCircle, cls: 'badge-danger', label: 'Returned' },
-  'report.new': { icon: I.Flag, cls: 'badge-info', label: 'Visitor report' },
-  'sensor.alert': { icon: I.Alert, cls: 'badge-danger', label: 'Sensor alert' },
+  'submission.new': { icon: I.Clock, cls: 'badge-warn', label: msg('New submission') },
+  'submission.approved': { icon: I.CheckCircle, cls: 'badge-ok', label: msg('Approved') },
+  'submission.rejected': { icon: I.XCircle, cls: 'badge-danger', label: msg('Returned') },
+  'report.new': { icon: I.Flag, cls: 'badge-info', label: msg('Visitor report') },
+  'sensor.alert': { icon: I.Alert, cls: 'badge-danger', label: msg('Sensor alert') },
 };
+
+/**
+ * Notification titles are written by the server in English, in a handful of
+ * fixed shapes. Those are translated here; anything else shows as written.
+ */
+const TITLES = [
+  [/^New submission awaiting review$/, () => t('New submission awaiting review')],
+  [/^Resubmitted for review$/, () => t('Resubmitted for review')],
+  [/^Visitor reported incorrect information$/, () => t('Visitor reported incorrect information')],
+  [/^Submission published(?:: (.+))?$/, (code) => (code ? t('Submission published: {code}', { code }) : t('Submission published'))],
+  [/^Submission returned: (.+)$/, (code) => t('Submission returned: {code}', { code })],
+  [/^Submission withdrawn: (.+)$/, (code) => t('Submission withdrawn: {code}', { code })],
+];
+
+function noticeTitle(title) {
+  for (const [re, fn] of TITLES) {
+    const m = re.exec(title || '');
+    if (m) return fn(m[1]);
+  }
+  return title;
+}
 
 export default function Notifications() {
   const { refreshCounts, toast } = useApp();
@@ -35,29 +57,29 @@ export default function Notifications() {
     await api.readAllNotifications();
     await refreshCounts();
     load();
-    toast('All notifications marked as read.');
+    toast(t('All notifications marked as read.'));
   };
 
-  if (!data) return <LoadingBlock label="Loading notifications" />;
+  if (!data) return <LoadingBlock label={t('Loading notifications')} />;
 
   return (
     <div className="page">
       <div className="wrap" style={{ maxWidth: 820 }}>
         <PageHead
-          title="Notifications"
-          sub="New submissions, approvals, returns and visitor reports."
+          title={t('Notifications')}
+          sub={t('New submissions, approvals, returns and visitor reports.')}
         >
-          {data.unread > 0 && <button className="btn btn-sm" onClick={readAll}><I.Check /> Mark all read</button>}
+          {data.unread > 0 && <button className="btn btn-sm" onClick={readAll}><I.Check /> {t('Mark all read')}</button>}
         </PageHead>
 
         {data.results.length === 0 ? (
-          <Empty icon={I.Bell} title="Nothing to catch up on">
-            You will be notified here when a submission needs your attention, or when one of yours is reviewed.
+          <Empty icon={I.Bell} title={t('Nothing to catch up on')}>
+            {t('You will be notified here when a submission needs your attention, or when one of yours is reviewed.')}
           </Empty>
         ) : (
           <div style={{ display: 'grid', gap: 8 }}>
             {data.results.map((n) => {
-              const t = TYPES[n.type] || { icon: I.Bell, cls: 'badge-neutral', label: n.type };
+              const kind = TYPES[n.type] || { icon: I.Bell, cls: 'badge-neutral', label: n.type };
               return (
                 <button
                   key={n.id}
@@ -69,11 +91,11 @@ export default function Notifications() {
                   }}
                   onClick={() => open(n)}
                 >
-                  <span className="avatar" style={{ flex: 'none' }}><t.icon style={{ width: 15, height: 15 }} /></span>
+                  <span className="avatar" style={{ flex: 'none' }}><kind.icon style={{ width: 15, height: 15 }} /></span>
                   <span className="grow" style={{ minWidth: 0 }}>
                     <span className="row row-wrap" style={{ gap: 8, marginBottom: 2 }}>
-                      <span className="strong small">{n.title}</span>
-                      {!n.is_read && <span className="badge badge-ok" style={{ fontSize: '0.62rem' }}>New</span>}
+                      <span className="strong small">{noticeTitle(n.title)}</span>
+                      {!n.is_read && <span className="badge badge-ok" style={{ fontSize: '0.62rem' }}>{t('New')}</span>}
                     </span>
                     {n.body && <span className="small mute" style={{ display: 'block' }}>{n.body}</span>}
                     <span className="tiny faint" style={{ display: 'block', marginTop: 4 }}>

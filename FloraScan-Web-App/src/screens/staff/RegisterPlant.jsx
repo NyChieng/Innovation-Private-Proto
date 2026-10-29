@@ -3,8 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../../lib/api.js';
 import { useApp } from '../../lib/store.jsx';
 import { ConservationBadge, Notice, PageHead, Modal, SearchInput } from '../../components/ui.jsx';
-import { coords } from '../../lib/format.js';
+import { coords, roleLabel } from '../../lib/format.js';
 import * as I from '../../lib/icons.jsx';
+import { t } from '../../lib/i18n.js';
 
 /* ------------------------------------------------------------------ */
 
@@ -28,7 +29,7 @@ function SpeciesPicker({ value, proposed, onPick, onPropose }) {
 
   return (
     <div className="field">
-      <label>Species <span className="req">*</span></label>
+      <label>{t('Species')} <span className="req">*</span></label>
 
       {!notListed ? (
         <>
@@ -42,7 +43,7 @@ function SpeciesPicker({ value, proposed, onPick, onPropose }) {
                 <ConservationBadge code={selected.conservation_code} showLabel={false} />
               </>
             ) : (
-              <span className="grow faint">Choose a species from the list</span>
+              <span className="grow faint">{t('Choose a species from the list')}</span>
             )}
             <I.ChevronDown style={{ width: 16, height: 16, color: 'var(--text-faint)', flex: 'none' }} />
           </button>
@@ -50,7 +51,7 @@ function SpeciesPicker({ value, proposed, onPick, onPropose }) {
             type="button" className="btn btn-ghost btn-sm" style={{ alignSelf: 'flex-start', marginLeft: -10 }}
             onClick={() => { setNotListed(true); onPick(null); }}
           >
-            <I.Plus /> The species is not in the list
+            <I.Plus /> {t('The species is not in the list')}
           </button>
         </>
       ) : (
@@ -59,24 +60,24 @@ function SpeciesPicker({ value, proposed, onPick, onPropose }) {
             className="input"
             value={proposed || ''}
             onChange={(e) => onPropose(e.target.value)}
-            placeholder="e.g. Hoya sp. (waxy leaves, pale globe flowers)"
+            placeholder={t('e.g. Hoya sp. (waxy leaves, pale globe flowers)')}
           />
           <div className="hint">
-            Describe what you saw as precisely as you can. A botanist will confirm the name before it is published.
+            {t('Describe what you saw as precisely as you can. A reviewer will confirm the name before it is published.')}
           </div>
           <button
             type="button" className="btn btn-ghost btn-sm" style={{ alignSelf: 'flex-start', marginLeft: -10 }}
             onClick={() => { setNotListed(false); onPropose(''); }}
           >
-            <I.ArrowLeft /> Choose from the species list instead
+            <I.ArrowLeft /> {t('Choose from the species list instead')}
           </button>
         </>
       )}
 
       {open && (
-        <Modal title="Choose a species" onClose={() => setOpen(false)}>
+        <Modal title={t('Choose a species')} onClose={() => setOpen(false)}>
           <div style={{ marginBottom: 14 }}>
-            <SearchInput value={q} onChange={setQ} placeholder="Scientific, common or local name" autoFocus />
+            <SearchInput value={q} onChange={setQ} placeholder={t('Scientific, common or local name')} autoFocus />
           </div>
           <div style={{ display: 'grid', gap: 6 }}>
             {filtered.map((s) => (
@@ -125,17 +126,17 @@ function PhotoCapture({ photos, setPhotos }) {
 
   return (
     <div className="field">
-      <label>Photographs</label>
+      <label>{t('Photographs')}</label>
       <div className="row row-wrap" style={{ gap: 9 }}>
         {photos.map((p, i) => (
           <div key={i} style={{ position: 'relative', width: 92, height: 72, borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border)' }}>
             <img src={p.data_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-            {i === 0 && <span className="badge badge-ok" style={{ position: 'absolute', bottom: 3, left: 3, fontSize: '0.6rem', padding: '0 5px' }}>Main</span>}
+            {i === 0 && <span className="badge badge-ok" style={{ position: 'absolute', bottom: 3, left: 3, fontSize: '0.6rem', padding: '0 5px' }}>{t('Main')}</span>}
             <button
               type="button" className="btn btn-icon"
               style={{ position: 'absolute', top: 2, right: 2, width: 22, height: 22, padding: 0, borderRadius: 99, background: 'rgba(0,0,0,0.6)', color: '#fff', border: 0 }}
               onClick={() => setPhotos(photos.filter((_, k) => k !== i))}
-              aria-label="Remove photograph"
+              aria-label={t('Remove photograph')}
             >
               <I.X style={{ width: 12, height: 12 }} />
             </button>
@@ -151,7 +152,7 @@ function PhotoCapture({ photos, setPhotos }) {
             }}
           >
             {busy ? <span className="spinner" /> : <I.Camera style={{ width: 19, height: 19 }} />}
-            <span className="tiny">Add</span>
+            <span className="tiny">{t('Add')}</span>
           </button>
         )}
       </div>
@@ -161,7 +162,7 @@ function PhotoCapture({ photos, setPhotos }) {
         onChange={(e) => { add(e.target.files); e.target.value = ''; }}
       />
       <div className="hint">
-        Up to six. On a phone this opens the camera. The first photograph becomes the main image on the plant page.
+        {t('Up to six. On a phone this opens the camera. The first photograph becomes the main image on the plant page.')}
       </div>
     </div>
   );
@@ -190,7 +191,7 @@ export default function RegisterPlant() {
   const up = (patch) => setForm((f) => ({ ...f, ...patch }));
 
   const locate = () => {
-    if (!navigator.geolocation) { setGps('error'); setGpsError('This browser has no location support.'); return; }
+    if (!navigator.geolocation) { setGps('error'); setGpsError(t('This browser has no location support.')); return; }
     setGps('locating'); setGpsError(null);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
@@ -206,10 +207,10 @@ export default function RegisterPlant() {
         setGps('error');
         setGpsError(
           err.code === 1
-            ? 'Location permission was refused.'
+            ? t('Location permission was refused.')
             : window.isSecureContext
               ? err.message
-              : 'Browsers only give location on HTTPS or localhost. Run "npm run https" to test this on a phone.',
+              : t('Browsers only give location on HTTPS or localhost. Run "npm run https" to test this on a phone.'),
         );
       },
       { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 },
@@ -223,15 +224,15 @@ export default function RegisterPlant() {
 
   const validate = () => {
     const e = {};
-    if (!form.species_id && !form.proposed_species_name.trim()) e.species = 'Choose a species, or describe one that is not listed.';
-    if (!form.site_name.trim()) e.site = 'Give the location or trail marker.';
+    if (!form.species_id && !form.proposed_species_name.trim()) e.species = t('Choose a species, or describe one that is not listed.');
+    if (!form.site_name.trim()) e.site = t('Give the location or trail marker.');
     setErrors(e);
     return Object.keys(e).length === 0;
   };
 
   const submit = async (e) => {
     e.preventDefault();
-    if (!validate()) { toast('Some required fields are missing.', 'err'); return; }
+    if (!validate()) { toast(t('Some required fields are missing.'), 'err'); return; }
     setBusy(true);
     try {
       const payload = {
@@ -245,8 +246,8 @@ export default function RegisterPlant() {
       await refreshCounts();
       toast(
         plant.status === 'approved'
-          ? `${plant.plant_code} published. Its QR tag is ready to print.`
-          : `${plant.plant_code} submitted for botanist review.`,
+          ? t('{code} published. Its QR tag is ready to print.', { code: plant.plant_code })
+          : t('{code} submitted for review.', { code: plant.plant_code }),
       );
       navigate('/staff/plants/' + plant.id);
     } catch (err) {
@@ -258,24 +259,24 @@ export default function RegisterPlant() {
     <div className="page">
       <div className="wrap wrap-narrow">
         <PageHead
-          back={{ to: '/staff/plants', label: 'Plant register' }}
-          title="Register a plant"
-          sub="One form for rangers and botanists. Everything except the species and the location can be filled in later."
+          back={{ to: '/staff/plants', label: t('Plant register') }}
+          title={t('Register a plant')}
+          sub={t('The ground-truthing form. Everything except the species and the location can be filled in later.')}
         />
 
         <div style={{ marginBottom: 18 }}>
-          <Notice kind={willPublish ? 'ok' : 'info'} title={willPublish ? 'This will publish immediately' : 'This will go to the review queue'}>
-            {publishesImmediately && <>You hold <span className="mono">plant.approve</span>, so your own entries are published as soon as they are saved.</>}
-            {!publishesImmediately && willPublish && <>The <span className="mono">require_approval</span> setting is off, so ranger entries publish straight away.</>}
-            {!willPublish && !form.species_id && form.proposed_species_name && <>A record with no confirmed species always needs a botanist, whatever the approval setting.</>}
-            {!willPublish && (form.species_id || !form.proposed_species_name) && <>A botanist will check it and either publish it or return it with a note.</>}
+          <Notice kind={willPublish ? 'ok' : 'info'} title={willPublish ? t('This will publish immediately') : t('This will go to the review queue')}>
+            {publishesImmediately && t('You hold {permission}, so your own entries are published as soon as they are saved.', { permission: <span className="mono">plant.approve</span> })}
+            {!publishesImmediately && willPublish && t('The {setting} setting is off, so new entries publish straight away.', { setting: <span className="mono">require_approval</span> })}
+            {!willPublish && !form.species_id && form.proposed_species_name && t('A record with no confirmed species always goes to a reviewer, whatever the approval setting.')}
+            {!willPublish && (form.species_id || !form.proposed_species_name) && t('A reviewer will check it and either publish it or return it with a note.')}
           </Notice>
         </div>
 
         <form onSubmit={submit} className="stack" style={{ '--gap': '18px' }}>
           {/* Identification */}
           <div className="card">
-            <div className="card-head"><h3>Identification</h3></div>
+            <div className="card-head"><h3>{t('Identification')}</h3></div>
             <div className="card-body stack" style={{ '--gap': '16px' }}>
               <SpeciesPicker
                 value={form.species_id}
@@ -289,26 +290,26 @@ export default function RegisterPlant() {
 
           {/* Location */}
           <div className="card">
-            <div className="card-head"><h3>Location</h3></div>
+            <div className="card-head"><h3>{t('Location')}</h3></div>
             <div className="card-body stack" style={{ '--gap': '16px' }}>
               <div className="field">
-                <label htmlFor="site">Site or trail marker <span className="req">*</span></label>
+                <label htmlFor="site">{t('Site or trail marker')} <span className="req">*</span></label>
                 <input
                   id="site" className={'input' + (errors.site ? ' input-invalid' : '')}
                   list="sites" value={form.site_name}
                   onChange={(e) => { up({ site_name: e.target.value }); setErrors({ ...errors, site: null }); }}
-                  placeholder="e.g. Great Cave Trail, marker 11"
+                  placeholder={t('e.g. Great Cave Trail, marker 11')}
                 />
                 <datalist id="sites">{(boot?.sites || []).map((s) => <option key={s} value={s} />)}</datalist>
                 {errors.site && <div className="err">{errors.site}</div>}
               </div>
 
               <div className="field">
-                <label>GPS coordinates</label>
+                <label>{t('GPS coordinates')}</label>
                 <div className="row row-wrap" style={{ gap: 10 }}>
                   <button type="button" className="btn" onClick={locate} disabled={gps === 'locating'}>
                     {gps === 'locating' ? <span className="spinner" /> : <I.MapPin />}
-                    {gps === 'locating' ? 'Locating...' : form.latitude ? 'Update location' : 'Use my location'}
+                    {gps === 'locating' ? t('Locating...') : form.latitude ? t('Update location') : t('Use my location')}
                   </button>
                   {form.latitude != null && (
                     <span className="badge badge-ok">
@@ -320,16 +321,16 @@ export default function RegisterPlant() {
                 </div>
                 {gps === 'error' && <div className="hint" style={{ color: 'var(--warn-fg)' }}>{gpsError}</div>}
                 {form.latitude == null && gps !== 'error' && (
-                  <div className="hint">Captured automatically in the field. You can also leave it blank and add it later.</div>
+                  <div className="hint">{t('Captured automatically in the field. You can also leave it blank and add it later.')}</div>
                 )}
               </div>
 
               <div className="field">
-                <label htmlFor="locnotes">How to find it</label>
+                <label htmlFor="locnotes">{t('How to find it')}</label>
                 <textarea
                   id="locnotes" className="textarea" style={{ minHeight: 66 }}
                   value={form.location_notes} onChange={(e) => up({ location_notes: e.target.value })}
-                  placeholder="Left of the boardwalk, 3 m in from the handrail."
+                  placeholder={t('Left of the boardwalk, 3 m in from the handrail.')}
                 />
               </div>
             </div>
@@ -337,7 +338,7 @@ export default function RegisterPlant() {
 
           {/* Photographs */}
           <div className="card">
-            <div className="card-head"><h3>Photographs</h3></div>
+            <div className="card-head"><h3>{t('Photographs')}</h3></div>
             <div className="card-body">
               <PhotoCapture photos={photos} setPhotos={setPhotos} />
             </div>
@@ -345,69 +346,69 @@ export default function RegisterPlant() {
 
           {/* Specimen */}
           <div className="card">
-            <div className="card-head"><h3>This specimen</h3></div>
+            <div className="card-head"><h3>{t('This specimen')}</h3></div>
             <div className="card-body stack" style={{ '--gap': '16px' }}>
               <div className="grid grid-2" style={{ gap: 14 }}>
                 <div className="field">
-                  <label htmlFor="height">Height (m)</label>
+                  <label htmlFor="height">{t('Height (m)')}</label>
                   <input id="height" className="input" type="number" step="0.1" min="0"
                     value={form.height_m} onChange={(e) => up({ height_m: e.target.value })} placeholder="e.g. 18.5" />
                 </div>
                 <div className="field">
-                  <label htmlFor="dbh">Trunk diameter (cm)</label>
+                  <label htmlFor="dbh">{t('Trunk diameter (cm)')}</label>
                   <input id="dbh" className="input" type="number" step="0.1" min="0"
-                    value={form.trunk_diameter_cm} onChange={(e) => up({ trunk_diameter_cm: e.target.value })} placeholder="measured at breast height" />
+                    value={form.trunk_diameter_cm} onChange={(e) => up({ trunk_diameter_cm: e.target.value })} placeholder={t('measured at breast height')} />
                 </div>
                 <div className="field">
-                  <label htmlFor="life">Life stage</label>
+                  <label htmlFor="life">{t('Life stage')}</label>
                   <select id="life" className="select" value={form.life_stage} onChange={(e) => up({ life_stage: e.target.value })}>
-                    <option value="seedling">Seedling</option>
-                    <option value="sapling">Sapling</option>
-                    <option value="mature">Mature</option>
+                    <option value="seedling">{t('Seedling')}</option>
+                    <option value="sapling">{t('Sapling')}</option>
+                    <option value="mature">{t('Mature')}</option>
                   </select>
                 </div>
                 <div className="field">
-                  <label htmlFor="health">Condition</label>
+                  <label htmlFor="health">{t('Condition')}</label>
                   <select id="health" className="select" value={form.health_status} onChange={(e) => up({ health_status: e.target.value })}>
-                    <option value="healthy">Healthy</option>
-                    <option value="fair">Fair</option>
-                    <option value="poor">Poor</option>
-                    <option value="dead">Dead</option>
+                    <option value="healthy">{t('Healthy')}</option>
+                    <option value="fair">{t('Fair')}</option>
+                    <option value="poor">{t('Poor')}</option>
+                    <option value="dead">{t('Dead')}</option>
                   </select>
                 </div>
               </div>
 
               <div className="field">
-                <label htmlFor="morph">Field notes</label>
+                <label htmlFor="morph">{t('Field notes')}</label>
                 <textarea
                   id="morph" className="textarea" value={form.morphology_notes}
                   onChange={(e) => up({ morphology_notes: e.target.value })}
-                  placeholder="Bole straight and clear to the first branch. Epiphytes on the upper limbs."
+                  placeholder={t('Bole straight and clear to the first branch. Epiphytes on the upper limbs.')}
                 />
-                <div className="hint">Shown on the public plant page.</div>
+                <div className="hint">{t('Shown on the public plant page.')}</div>
               </div>
 
               <div className="field">
-                <label htmlFor="notes">Internal notes</label>
+                <label htmlFor="notes">{t('Internal notes')}</label>
                 <textarea
                   id="notes" className="textarea" style={{ minHeight: 60 }}
                   value={form.notes} onChange={(e) => up({ notes: e.target.value })}
-                  placeholder="Anything the botanist should know. Never shown to visitors."
+                  placeholder={t('Anything the reviewer should know. Never shown to visitors.')}
                 />
               </div>
             </div>
           </div>
 
           <div className="row row-wrap row-end" style={{ gap: 10 }}>
-            <button type="button" className="btn" onClick={() => navigate('/staff/plants')}>Cancel</button>
+            <button type="button" className="btn" onClick={() => navigate('/staff/plants')}>{t('Cancel')}</button>
             <button className="btn btn-primary btn-lg" disabled={busy}>
               {busy && <span className="spinner" />}
-              {willPublish ? 'Save and publish' : 'Submit for review'}
+              {willPublish ? t('Save and publish') : t('Submit for review')}
             </button>
           </div>
 
           <div className="tiny faint center">
-            Registering as {user?.full_name} ({user?.role_label}). The API records who created every record.
+            {t('Registering as {name} ({role}). The API records who created every record.', { name: user?.full_name, role: roleLabel(user?.role_label) })}
           </div>
         </form>
       </div>
