@@ -116,7 +116,12 @@ export function AppProvider({ children }) {
 
   const signIn = useCallback(async (email, password) => {
     const res = await api.login(email, password);
+    if (res.requires_totp) return res;
     return applySession(res);
+  }, [applySession]);
+
+  const verifyTotp = useCallback(async (challenge, code) => {
+    return applySession(await api.verifyTotp(challenge, code));
   }, [applySession]);
 
   const switchRole = useCallback(async (userId) => {
@@ -150,10 +155,10 @@ export function AppProvider({ children }) {
     toasts, toast, dismissToast,
     theme, setTheme, viewPref, setView, mobile, narrow,
     lang, setLang,
-    signIn, signOut, switchRole, can, run,
+    signIn, verifyTotp, signOut, switchRole, can, run,
   }), [boot, user, counts, refreshCounts, ready, toasts, toast, dismissToast,
        theme, setTheme, viewPref, setView, mobile, narrow, lang, setLang,
-       signIn, signOut, switchRole, can, run]);
+       signIn, verifyTotp, signOut, switchRole, can, run]);
 
   return <AppCtx.Provider value={value}>{children}</AppCtx.Provider>;
 }

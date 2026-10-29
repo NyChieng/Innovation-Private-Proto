@@ -76,6 +76,24 @@ phpMyAdmin use the same database, so a change in one shows up in the other strai
 
 **Never commit `.env`** or paste it anywhere public. It is already in `.gitignore`.
 
+### Authenticator two-step verification
+
+Staff can enable Google Authenticator-compatible TOTP from the desktop **My account**
+screen (`/staff/account`) or the mobile **Me** screen (`/staff/me`). Scan the displayed QR code, enter the six-digit code to confirm setup,
+and future password logins require a current authenticator code before a session is
+created. The setup key is also shown for manual entry. Disabling the feature requires
+the current authenticator code.
+
+The same account-security screens also provide **Change password**. The current
+password is required, the new password must be at least eight characters and match its
+confirmation, and all active sessions are revoked after a successful change. The user
+must sign in again with the new password.
+
+Set `TOTP_ENCRYPTION_KEY` in `.env` to a long, random, stable secret. Authenticator
+secrets are encrypted before they are stored in MySQL; changing this key makes existing
+enrolments unreadable and requires users to enrol again. Run `npm run db:setup` once on
+an existing database to add the TOTP columns.
+
 ### Photos
 
 - **Species photos** come from iNaturalist. A fresh clone does not have them saved locally

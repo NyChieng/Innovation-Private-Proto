@@ -36,6 +36,7 @@ import Audit from './screens/staff/Audit.jsx';
 import SettingsScreen from './screens/staff/Settings.jsx';
 import Notifications from './screens/staff/Notifications.jsx';
 import Me from './screens/staff/Me.jsx';
+import Account from './screens/staff/Account.jsx';
 
 /* ------------------------------------------------------------------ */
 
@@ -139,6 +140,7 @@ export default function App() {
             <Route path="/staff/settings" element={<Guard need="system.settings"><SettingsScreen /></Guard>} />
             <Route path="/staff/notifications" element={<Guard><Notifications /></Guard>} />
             <Route path="/staff/me" element={<Guard><Me /></Guard>} />
+            <Route path="/staff/account" element={<Guard><Account /></Guard>} />
 
             <Route
               path="*"

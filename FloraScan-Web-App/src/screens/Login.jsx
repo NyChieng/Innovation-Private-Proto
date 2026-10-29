@@ -7,13 +7,15 @@ import * as I from '../lib/icons.jsx';
 import { t } from '../lib/i18n.js';
 
 export default function Login() {
-  const { boot, signIn, switchRole, toast, user } = useApp();
+  const { boot, signIn, verifyTotp, switchRole, toast, user } = useApp();
   const navigate = useNavigate();
   const loc = useLocation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  const [challenge, setChallenge] = useState(null);
+  const [code, setCode] = useState('');
 
   const land = (u) => navigate(loc.state?.from || homeFor(u), { replace: true });
 
@@ -21,7 +23,15 @@ export default function Login() {
     e.preventDefault();
     setBusy(true); setError(null);
     try {
-      const u = await signIn(email, password);
+      const result = challenge
+        ? await verifyTotp(challenge, code)
+        : await signIn(email, password);
+      if (result?.requires_totp) {
+        setChallenge(result.challenge);
+        setCode('');
+        return;
+      }
+      const u = result;
       toast(t('Signed in as {name}', { name: u.full_name }));
       land(u);
     } catch (err) {
@@ -66,6 +76,25 @@ export default function Login() {
             </div>
 
             <form onSubmit={submit} className="stack" style={{ '--gap': '14px' }}>
+              {challenge ? (
+                <>
+                  <Notice kind="plain" title={t('Authenticator verification')}>
+                    {t('Open Google Authenticator or another compatible app and enter the six-digit code for this account.')}
+                  </Notice>
+                  <div className="field">
+                    <label htmlFor="totp-code">{t('Authenticator code')}</label>
+                    <input
+                      id="totp-code" className={'input' + (error ? ' input-invalid' : '')}
+                      value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      inputMode="numeric" autoComplete="one-time-code" pattern="\d{6}" required autoFocus
+                    />
+                  </div>
+                  <button type="button" className="btn btn-ghost" onClick={() => { setChallenge(null); setCode(''); setError(null); }}>
+                    {t('Back to password')}
+                  </button>
+                </>
+              ) : (
+                <>
               <div className="field">
                 <label htmlFor="email">{t('Email address')}</label>
                 <input
@@ -83,11 +112,13 @@ export default function Login() {
                 />
                 <div className="hint">{t('Demo password for every account: {password}', { password: <span className="mono">demo1234</span> })}</div>
               </div>
+                </>
+              )}
 
               {error && <div className="err" role="alert">{error}</div>}
 
               <button className="btn btn-primary btn-lg btn-block" disabled={busy}>
-                {busy && <span className="spinner" />} {t('Sign in')}
+                {busy && <span className="spinner" />} {challenge ? t('Verify and sign in') : t('Sign in')}
               </button>
             </form>
 

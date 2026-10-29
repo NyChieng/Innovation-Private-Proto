@@ -1,6 +1,8 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useApp } from '../../lib/store.jsx';
 import { Avatar, Notice } from '../../components/ui.jsx';
+import TwoFactorSettings from '../../components/TwoFactorSettings.jsx';
+import PasswordSettings from '../../components/PasswordSettings.jsx';
 import { staffNav } from '../../components/Shell.jsx';
 import { relativeTime, roleLabel } from '../../lib/format.js';
 import * as I from '../../lib/icons.jsx';
@@ -41,6 +43,9 @@ export default function Me() {
           {!!counts?.unread_notifications && <span className="badge badge-danger">{counts.unread_notifications}</span>}
           <I.ChevronRight style={{ width: 16, height: 16, color: 'var(--text-faint)' }} />
         </Link>
+
+        <div style={{ marginBottom: 18 }}><TwoFactorSettings /></div>
+        <div style={{ marginBottom: 18 }}><PasswordSettings /></div>
 
         {groups.map((g) => (
           <div className="card" key={g.title} style={{ marginBottom: 14 }}>

@@ -27,6 +27,18 @@ ALTER TABLE users
 
 
 -- ---------------------------------------------------------------------
+-- 1b. Authenticator-based two-step verification
+-- ---------------------------------------------------------------------
+-- The secret is encrypted by Server/totp.js before it reaches MySQL.
+-- It is only returned during an authenticated setup flow and is never part
+-- of the shaped user object.
+
+ALTER TABLE users
+  ADD COLUMN totp_secret_enc VARCHAR(255) NULL AFTER password_hash,
+  ADD COLUMN totp_enabled TINYINT(1) NOT NULL DEFAULT 0 AFTER totp_secret_enc;
+
+
+-- ---------------------------------------------------------------------
 -- 2. Imported species data
 -- ---------------------------------------------------------------------
 -- The species list is built by scripts/import-species.mjs from GBIF,

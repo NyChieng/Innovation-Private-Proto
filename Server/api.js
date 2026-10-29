@@ -12,6 +12,7 @@ import { renderPhoto } from './images.js';
 import { photoExists, PHOTO_DIR, SPECIES_DATA, hasRealPhotos } from './species-data.js';
 import { lanAddresses } from './net.js';
 import { hashPassword, verifyPassword, DEMO_PASSWORD } from './passwords.js';
+import { decryptSecret, encryptSecret, generateSecret, otpauthUri, verifyCode } from './totp.js';
 
 /**
  * An async handler that rejects does not reach Express 4's error middleware on
@@ -34,6 +35,7 @@ const placeholders = (list) => list.map(() => '?').join(', ');
  * ranger stays signed in across a redeploy.
  */
 const sessions = new Map(); // token -> user_id
+const totpChallenges = new Map(); // challenge -> { userId, expiresAt }
 
 const hashToken = (token) => crypto.createHash('sha256').update(token).digest('hex');
 
@@ -93,6 +95,7 @@ function shapeUser(u) {
     id: u.id, full_name: u.full_name, email: u.email, title: u.title,
     phone: u.phone, role: role?.name, role_label: role?.label, role_id: u.role_id,
     is_active: !!u.is_active, must_change_password: !!u.must_change_password,
+    totp_enabled: !!u.totp_enabled,
     last_login_at: u.last_login_at, created_at: u.created_at,
     permissions: permissionsForRole(u.role_id),
   };
@@ -518,6 +521,10 @@ export function createApi() {
     }
     next();
   };
+  const needAuth = (req, res, next) => {
+    if (!req.user) return res.status(401).json({ error: 'Sign in required' });
+    next();
+  };
 
   /* ================================================================ */
   /* Bootstrap                                                        */
@@ -566,7 +573,7 @@ export function createApi() {
   api.get('/auth/me', (req, res) => res.json({ user: shapeUser(req.user) }));
 
   api.post('/auth/login', route(async (req, res) => {
-    const { email, password } = req.body || {};
+    const { email, password, totp_code: code } = req.body || {};
     const user = await one('SELECT * FROM users WHERE LOWER(email) = ? LIMIT 1',
       [String(email || '').toLowerCase().trim()]);
     if (!user) {
@@ -581,9 +588,97 @@ export function createApi() {
       activity({ user_id: user.id, action: 'login_failed', detail: 'Account deactivated' });
       return res.status(403).json({ error: 'This account has been deactivated by an administrator.' });
     }
+    if (user.totp_enabled) {
+      const secret = decryptSecret(user.totp_secret_enc);
+      if (!code) {
+        const challenge = crypto.randomBytes(24).toString('hex');
+        totpChallenges.set(challenge, { userId: user.id, expiresAt: Date.now() + 5 * 60 * 1000 });
+        return res.json({ requires_totp: true, challenge });
+      }
+      if (!secret || !verifyCode(secret, code)) {
+        activity({ user_id: user.id, action: 'login_failed', detail: 'Wrong authenticator code' });
+        return res.status(401).json({ error: 'Incorrect authenticator code.' });
+      }
+    }
     await update('users', user.id, { last_login_at: nowIso() });
     activity({ user_id: user.id, action: 'login', detail: 'Signed in' });
     res.json({ token: await issueToken(user.id), user: shapeUser(user) });
+  }));
+
+  api.post('/auth/2fa/verify', route(async (req, res) => {
+    const pending = totpChallenges.get(req.body?.challenge);
+    if (!pending || pending.expiresAt < Date.now()) {
+      if (req.body?.challenge) totpChallenges.delete(req.body.challenge);
+      return res.status(401).json({ error: 'That authenticator challenge has expired. Sign in again.' });
+    }
+    const user = await byId('users', pending.userId);
+    const secret = decryptSecret(user?.totp_secret_enc);
+    if (!user || !user.is_active || !user.totp_enabled || !secret || !verifyCode(secret, req.body?.code)) {
+      return res.status(401).json({ error: 'Incorrect authenticator code.' });
+    }
+    totpChallenges.delete(req.body.challenge);
+    await update('users', user.id, { last_login_at: nowIso() });
+    activity({ user_id: user.id, action: 'login', detail: 'Signed in with authenticator' });
+    res.json({ token: await issueToken(user.id), user: shapeUser(user) });
+  }));
+
+  api.post('/auth/2fa/setup', needAuth, route(async (req, res) => {
+    const secret = generateSecret();
+    const uri = otpauthUri(secret, req.user.email);
+    await update('users', req.user.id, { totp_secret_enc: encryptSecret(secret), totp_enabled: 0, updated_at: nowIso() });
+    res.json({ secret, uri, qr: await QRCode.toDataURL(uri, { margin: 1, width: 280 }) });
+  }));
+
+  api.post('/auth/2fa/enable', needAuth, route(async (req, res) => {
+    const user = await byId('users', req.user.id);
+    const secret = decryptSecret(user?.totp_secret_enc);
+    if (!secret || !verifyCode(secret, req.body?.code)) {
+      return res.status(400).json({ error: 'That authenticator code is not valid. Check your device time and try again.' });
+    }
+    const updated = await update('users', req.user.id, { totp_enabled: 1, updated_at: nowIso() });
+    activity({ user_id: req.user.id, action: 'totp_enabled', detail: 'Enabled authenticator verification' });
+    res.json({ user: shapeUser(updated) });
+  }));
+
+  api.post('/auth/2fa/disable', needAuth, route(async (req, res) => {
+    const user = await byId('users', req.user.id);
+    const secret = decryptSecret(user?.totp_secret_enc);
+    if (!user?.totp_enabled || !secret || !verifyCode(secret, req.body?.code)) {
+      return res.status(400).json({ error: 'That authenticator code is not valid.' });
+    }
+    const updated = await update('users', req.user.id, { totp_secret_enc: null, totp_enabled: 0, updated_at: nowIso() });
+    activity({ user_id: req.user.id, action: 'totp_disabled', detail: 'Disabled authenticator verification' });
+    res.json({ user: shapeUser(updated) });
+  }));
+
+  api.post('/auth/password/change', needAuth, route(async (req, res) => {
+    const { current_password: current, new_password: next, confirm_password: confirmation } = req.body || {};
+    if (!current || !next || !confirmation) {
+      return res.status(400).json({ error: 'All password fields are required.' });
+    }
+    if (String(next) !== String(confirmation)) {
+      return res.status(400).json({ error: 'The new passwords do not match.' });
+    }
+    if (String(next).length < 8) {
+      return res.status(400).json({ error: 'The new password must be at least 8 characters.' });
+    }
+    const user = await byId('users', req.user.id);
+    if (!await verifyPassword(current, user?.password_hash)) {
+      activity({ user_id: req.user.id, action: 'password_change_failed', detail: 'Wrong current password' });
+      return res.status(401).json({ error: 'The current password is incorrect.' });
+    }
+    if (await verifyPassword(next, user.password_hash)) {
+      return res.status(400).json({ error: 'The new password must be different from the current password.' });
+    }
+    const updated = await update('users', user.id, {
+      password_hash: hashPassword(next),
+      must_change_password: 0,
+      updated_at: nowIso(),
+    });
+    await revokeAllFor(user.id);
+    audit({ user_id: user.id, action: 'password_change', entity_type: 'users', entity_id: user.id, new_values: { must_change_password: 0 } });
+    activity({ user_id: user.id, action: 'password_changed', detail: 'Changed their own password' });
+    res.json({ user: shapeUser(updated) });
   }));
 
   api.post('/auth/logout', route(async (req, res) => {
@@ -606,6 +701,7 @@ export function createApi() {
     const user = await byId('users', req.body?.user_id);
     if (!user) return res.status(404).json({ error: 'No such demo account' });
     if (!user.is_active) return res.status(403).json({ error: 'That account is deactivated - reactivate it from the Admin dashboard first.' });
+    if (user.totp_enabled) return res.status(403).json({ error: 'Authenticator verification is required for this account.' });
     await update('users', user.id, { last_login_at: nowIso() });
     activity({ user_id: user.id, action: 'login', detail: 'Switched role (prototype switcher)' });
     res.json({ token: await issueToken(user.id), user: shapeUser(user) });
