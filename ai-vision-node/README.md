@@ -4,7 +4,7 @@ The camera part of the FloraScan IoT system. It watches a protected plant throug
 warns when a person gets too close or touches it.
 
 - **SAFE**: a person is in view, away from the plant.
-- **WARNING**: a person's body or hand stays inside the buffer zone around the plant (1 second by default).
+- **WARNING**: a person stays inside the buffer zone around the plant for 1 second, or puts a hand inside it.
 - **ALERT**: a hand is touching the plant for several frames in a row. A snapshot is saved.
 - Animals are detected and labelled, but never trigger an alert (they live in the forest).
 
@@ -16,20 +16,191 @@ NVIDIA GPU if there is one.
 
 ---
 
-## How it works
+## Architecture
 
-Each camera frame goes through these steps. A step only runs when the one before it finds something,
-which keeps it fast on a small machine.
+The diagrams below are drawn by GitHub from the text (Mermaid). Open this file on GitHub, or in
+VS Code with a Mermaid preview extension, to see them.
 
-1. **Motion check.** If nothing moves, the models only run once a second.
-2. **Detector** (YOLO26s, trained by us): finds people, animals and plants, and tracks each person with an ID.
-3. **Pose** (YOLO26s-pose): finds wrists, only for people near the plant.
-4. **Touch classifier** (YOLO26s-cls, trained by us): looks at each hand inside the buffer zone and
-   decides `touch` or `no_touch`.
-5. **Stage** per person: SAFE, WARNING or ALERT.
+### 1. The big picture
 
-The plant to protect is either a shape you draw in the app (**Plant zone** tab), or, if you draw
-nothing, every plant the detector finds.
+```mermaid
+flowchart LR
+    CAM["📷 Camera<br/>or video file"] --> APP
+
+    subgraph NODE["AI Vision node (this folder)"]
+        APP["Web app<br/>app/floraguard_app.py"] --> PIPE["Detection pipeline<br/>app/pipeline.py"]
+        PIPE --> ENG["Model runner<br/>app/engine.py"]
+        ENG --> MODELS[("3 models<br/>models/export/*.onnx")]
+    end
+
+    APP --> UI["🖥️ Browser<br/>127.0.0.1:7860"]
+    PIPE --> SNAP[("Alert snapshots<br/>events/*.jpg")]
+    APP <--> CFG[("Plant zone + settings<br/>app/config.json")]
+
+    PIPE -. "not connected yet" .-> SERVER["FloraScan server<br/>IoT dashboard"]
+    SENSOR["Sensor node<br/>iot-node/ (IotTesting branch)"] --> SERVER
+```
+
+- The **web app** reads the camera, shows the live picture, and lists warnings and alerts.
+- The **pipeline** decides, frame by frame, whether each person is SAFE, WARNING or ALERT.
+- The **model runner** runs the three neural networks on whatever hardware is available.
+
+### 2. What happens to each camera frame
+
+Each step only runs when the step before it found something. That is what keeps it fast on a laptop
+CPU: most of the time nobody is near the plant, and only the cheap first steps run.
+
+```mermaid
+flowchart TD
+    F["New camera frame"] --> M{"1. Anything<br/>moving?"}
+    M -- "no, and models ran<br/>under 1 s ago" --> REUSE["Reuse last results"]
+    M -- "yes, or 1 s has passed" --> DET["2. Detector<br/>finds people, animals, plants<br/>+ gives each person an ID"]
+    DET --> ZONE["3. Work out the plant zone<br/>and the buffer zone around it"]
+    REUSE --> ZONE
+    ZONE --> NEAR{"Is a person<br/>inside the buffer?"}
+    NEAR -- no --> SAFE["🟢 SAFE"]
+    NEAR -- yes --> POSE["4. Pose model<br/>finds their wrists"]
+    POSE --> HAND{"Is a wrist<br/>inside the buffer?"}
+    HAND -- "no (body only)" --> WAIT{"Near for<br/>1 second?"}
+    WAIT -- no --> SAFE
+    WAIT -- yes --> WARN["🟠 WARNING"]
+    HAND -- yes --> TOUCH["5. Touch model<br/>looks at a crop of the hand<br/>→ touch probability"]
+    TOUCH --> T{"Touching for<br/>4 frames in a row?"}
+    T -- no --> WARN
+    T -- yes --> ALERT["🔴 ALERT<br/>+ snapshot saved"]
+
+    classDef safe fill:#d8f5d8,stroke:#2e7d32,color:#000
+    classDef warn fill:#ffe5c2,stroke:#e67e00,color:#000
+    classDef alert fill:#ffd6d6,stroke:#c62828,color:#000
+    class SAFE safe
+    class WARN warn
+    class ALERT alert
+```
+
+| Step | Model | What it does | Runs when |
+| --- | --- | --- | --- |
+| 1. Motion check | none (background subtraction) | Compares the frame with the recent background | Every frame |
+| 2. Detector | YOLO26s, **trained by us** | Boxes people, animals and plants. A tracker keeps each person's ID across frames. | Something moves, or once a second |
+| 3. Zones | none | Plant zone = the shape you drew, or each detected plant. Buffer = plant zone grown by 25% of its width. | Every frame |
+| 4. Pose | YOLO26s-pose (stock) | Finds wrists and elbows, on a crop around the nearby people only | Someone is inside the buffer |
+| 5. Touch | YOLO26s-cls, **trained by us** | Says `touch` or `no_touch` for a 224×224 crop of each hand | A wrist is inside the buffer |
+
+### 3. The three stages
+
+Every person has their own stage. The stage shown at the top of the screen is the worst one.
+
+```mermaid
+flowchart LR
+    S["🟢 SAFE"] -- "in the buffer 1 s,<br/>or hand in buffer" --> W["🟠 WARNING"]
+    W -- "touching<br/>4 frames in a row" --> A["🔴 ALERT"]
+    A -- "stops touching" --> W
+    W -- "walks away" --> S
+
+    classDef safe fill:#d8f5d8,stroke:#2e7d32,color:#000
+    classDef warn fill:#ffe5c2,stroke:#e67e00,color:#000
+    classDef alert fill:#ffd6d6,stroke:#c62828,color:#000
+    class S safe
+    class W warn
+    class A alert
+```
+
+Walking away from ALERT goes straight back to SAFE.
+
+**What counts as "touching"** in a frame (any one is enough):
+
+- The touch model is at least **60%** sure, **or**
+- The wrist is inside the plant itself, the plant's leaves are moving, **and** the touch model is at least **20%** sure.
+  The leaf check helps because public datasets have few photos of hands on plants, so the model
+  under-scores real touches.
+
+Leaf movement is measured against a baseline learned while nobody is near, so wind and changing
+light don't count as a touch.
+
+**Alerts and snapshots:**
+
+- The same person gets the same warning at most once every **10 seconds**.
+- Only **ALERT** and **AFTER-HOURS** (someone there outside opening hours, if switched on) save a snapshot to `events/`.
+- All numbers above are defaults in `app/pipeline.py` (`DEFAULTS`). Most can be changed in the app under **Thresholds**.
+
+### 4. Plant zone and buffer zone
+
+```
++------------------------------- camera view -------------------------------+
+|                                                                           |
+|   person far away            + - - - - buffer zone - - - - +              |
+|   = SAFE                     :                             :              |
+|                              :   +---- plant zone -----+   :              |
+|                              :   |                     |   :              |
+|   person stands  ----------> :   |   hand on plant     |   :              |
+|   in here for 1 s            :   |   = ALERT           |   :              |
+|   = WARNING                  :   +---------------------+   :              |
+|                              :                             :              |
+|                              + - - - - - - - - - - - - - - +              |
++---------------------------------------------------------------------------+
+```
+
+- **Plant zone** (green): the shape you click around the plant in the **Plant zone** tab. If you
+  don't draw one, every plant the detector finds becomes a plant zone.
+- **Buffer zone** (orange): drawn automatically around the plant zone.
+- A plant hidden behind a person is **remembered** for up to 4 seconds (drawn dashed), so stepping
+  in front of a plant doesn't make it disappear.
+
+### 5. Saving CPU: three speed modes
+
+The pipeline changes how hard it works depending on what it sees.
+
+```mermaid
+flowchart LR
+    W["<b>Watch</b><br/>nobody near the plant<br/>detector every 3rd moving frame,<br/>at least once a second"]
+    T["<b>Track</b><br/>someone in the buffer<br/>detector + pose every frame"]
+    C["<b>Confirm</b><br/>a hand in the buffer<br/>detector + pose + touch every frame"]
+    W -- "person enters buffer" --> T
+    T -- "hand enters buffer" --> C
+    C -- "hand leaves" --> T
+    T -- "15 quiet frames" --> W
+```
+
+The app also caps processing at **15 frames per second** (changeable under **Performance**). The
+camera is read on its own thread, so a slow frame is skipped rather than building up a delay.
+
+### 6. Which hardware runs the models
+
+```mermaid
+flowchart TD
+    A{"Backend = auto"} --> G{"NVIDIA GPU<br/>+ PyTorch installed?"}
+    G -- yes --> CUDA["<b>cuda</b><br/>runs the .pt weights on the GPU<br/>~50 fps"]
+    G -- no --> O{"OpenVINO<br/>installed?"}
+    O -- yes --> OV["<b>openvino</b><br/>runs the .onnx files on the CPU<br/>~10 fps"]
+    O -- no --> ORT["<b>onnxruntime</b><br/>runs the .onnx files on the CPU<br/>~6.5 fps"]
+```
+
+A small device without a GPU only needs `app/`, `models/export/` and `requirements.txt`.
+
+### 7. How the models were made (offline)
+
+This only matters if you retrain. See [Retraining](#retraining-optional).
+
+```mermaid
+flowchart LR
+    subgraph DL["Download (scripts/download_*.py)"]
+        COCO["COCO"]
+        OI["Open Images"]
+        SWG["SWG camera traps"]
+        HICO["HICO-DET"]
+        VG["Visual Genome"]
+        DOH["100 Days of Hands"]
+    end
+
+    COCO & OI & SWG --> BUILD["build_dataset.py<br/>data/floraguard_det<br/>18,025 images"]
+    HICO & VG & DOH & COCO --> CROPS["make_touch_crops.py<br/>data/touch<br/>31,777 hand crops"]
+    USER["Your own recordings<br/>from the app"] -.-> CROPS
+
+    BUILD --> TD["train.py det<br/>→ det_B"]
+    CROPS --> TT["train.py touch<br/>→ touch_B"]
+    TD & TT --> EXP["export_models.py"]
+    POSE["YOLO26s-pose<br/>(stock)"] --> EXP
+    EXP --> OUT[("models/export/<br/>det.onnx · pose.onnx · touch.onnx")]
+```
 
 ---
 
