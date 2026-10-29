@@ -673,7 +673,7 @@ section('10. Admin - accounts and the approval switch');
 
   await go(page, '/staff/audit');
   check('the setting change reached the audit trail',
-    /Settings/i.test(await bodyText(page)));
+    /System setting/i.test(await page.$eval('.table tbody tr', (r) => r.textContent)));
 
   await expectNoErrors(page, 'no console errors on the admin screens');
   await page.close();
