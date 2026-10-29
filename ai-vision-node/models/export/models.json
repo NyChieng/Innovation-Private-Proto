@@ -1,0 +1,38 @@
+{
+  "det": {
+    "onnx": "det.onnx",
+    "weights": "runs/detect/det_B/weights/best.pt",
+    "names": [
+      "person",
+      "animal",
+      "plant"
+    ],
+    "imgsz": [
+      640,
+      384
+    ]
+  },
+  "pose": {
+    "onnx": "pose.onnx",
+    "weights": "models/yolo26s-pose.pt",
+    "names": [
+      "person"
+    ],
+    "imgsz": [
+      320,
+      320
+    ]
+  },
+  "touch": {
+    "onnx": "touch.onnx",
+    "weights": "runs/classify/touch_B/weights/best.pt",
+    "names": [
+      "no_touch",
+      "touch"
+    ],
+    "imgsz": [
+      224,
+      224
+    ]
+  }
+}

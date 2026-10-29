@@ -1,0 +1,28 @@
+# Python
+.venv/
+__pycache__/
+
+# Made while the app runs
+events/
+logs/
+app/config.json
+data/touch_user/
+
+# Downloaded or rebuilt by the scripts (see README)
+data/raw/
+data/staging/
+data/checks/
+data/floraguard_det/images/
+data/floraguard_det/labels/
+data/touch/*.cache
+datasets/
+
+# Training runs: only det_B and touch_B are kept, and only their best weights
+runs/*
+!runs/detect/
+runs/detect/*
+!runs/detect/det_B/
+!runs/classify/
+runs/classify/*
+!runs/classify/touch_B/
+last.pt
