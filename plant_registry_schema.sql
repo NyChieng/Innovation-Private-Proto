@@ -576,8 +576,6 @@ CREATE TABLE sensor_devices (
   temperature_max    DECIMAL(5,2)  NULL,
   humidity_min       DECIMAL(5,2)  NULL,       -- % relative humidity
   humidity_max       DECIMAL(5,2)  NULL,
-  light_min          INT UNSIGNED  NULL,       -- lux (optional)
-  light_max          INT UNSIGNED  NULL,
   last_seen_at       DATETIME      NULL,       -- time of the latest reading
   created_by         INT UNSIGNED  NULL,       -- botanist who set it up
   created_at         DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -592,7 +590,6 @@ CREATE TABLE sensor_devices (
   CONSTRAINT chk_sd_moisture_range    CHECK (soil_moisture_min < soil_moisture_max),
   CONSTRAINT chk_sd_temperature_range CHECK (temperature_min < temperature_max),
   CONSTRAINT chk_sd_humidity_range    CHECK (humidity_min < humidity_max),
-  CONSTRAINT chk_sd_light_range       CHECK (light_min < light_max),
   CONSTRAINT fk_sd_plant
     FOREIGN KEY (plant_id) REFERENCES plants(id) ON DELETE SET NULL,
   CONSTRAINT fk_sd_creator
@@ -602,6 +599,9 @@ CREATE TABLE sensor_devices (
 
 -- About 288 rows per sensor per day. The 24-hour and 7-day charts read one
 -- sensor over a time range, hence idx_sr_device_time.
+-- The kit has no light sensor, so there is no light column. Its other
+-- sensors (rain, motion, sound, HC-SR04 distance) add their columns in
+-- Server/schema-extensions.sql.
 CREATE TABLE sensor_readings (
   id                 BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   device_id          INT UNSIGNED    NOT NULL,
@@ -611,13 +611,12 @@ CREATE TABLE sensor_readings (
   soil_moisture_pct  DECIMAL(5,2)    NULL,
   temperature_c      DECIMAL(5,2)    NULL,
   humidity_pct       DECIMAL(5,2)    NULL,
-  light_lux          INT UNSIGNED    NULL,     -- optional (stretch goal)
   PRIMARY KEY (id),
   KEY idx_sr_device_time (device_id, recorded_at),
   KEY idx_sr_plant_time (plant_id, recorded_at),
   CONSTRAINT chk_sr_has_value
     CHECK (soil_moisture_pct IS NOT NULL OR temperature_c IS NOT NULL
-           OR humidity_pct IS NOT NULL OR light_lux IS NOT NULL),
+           OR humidity_pct IS NOT NULL),
   CONSTRAINT chk_sr_moisture    CHECK (soil_moisture_pct BETWEEN 0 AND 100),
   CONSTRAINT chk_sr_humidity    CHECK (humidity_pct BETWEEN 0 AND 100),
   CONSTRAINT chk_sr_temperature CHECK (temperature_c BETWEEN -40 AND 80),  -- DHT22 range
@@ -638,7 +637,7 @@ CREATE TABLE sensor_alerts (
   device_id        INT UNSIGNED    NOT NULL,
   plant_id         INT UNSIGNED    NULL,
   reading_id       BIGINT UNSIGNED NULL,     -- reading that crossed the limit; NULL for 'offline'
-  alert_type       ENUM('soil_moisture','temperature','humidity','light','offline')
+  alert_type       ENUM('soil_moisture','temperature','humidity','offline')
                                    NOT NULL,
   limit_crossed    ENUM('min','max') NULL,   -- NULL for 'offline'
   reading_value    DECIMAL(9,2)    NULL,
@@ -882,7 +881,7 @@ INSERT INTO settings (setting_key, setting_value, value_type, description) VALUE
 -- (? = settings.sensor_offline_minutes)
 --   SELECT d.id, d.device_code, p.plant_code,
 --          r.recorded_at, r.soil_moisture_pct, r.temperature_c,
---          r.humidity_pct, r.light_lux,
+--          r.humidity_pct,
 --          CASE
 --            WHEN d.last_seen_at IS NULL
 --              OR d.last_seen_at < NOW() - INTERVAL ? MINUTE THEN 'offline'

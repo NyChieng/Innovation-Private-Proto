@@ -1500,14 +1500,14 @@ export function createApi() {
     soil_moisture_pct: num(r.soil_moisture_pct),
     temperature_c: num(r.temperature_c),
     humidity_pct: num(r.humidity_pct),
-    light_lux: num(r.light_lux),
-    // From the rest of the kit (section 6 of schema-extensions.sql). A
+    // From the rest of the kit (sections 6 and 7 of schema-extensions.sql). A
     // database set up before those columns existed has none of them, so they
     // come back undefined and are sent as null.
     rain_pct: num(r.rain_pct),
     is_raining: r.is_raining === null || r.is_raining === undefined ? null : !!r.is_raining,
     motion_events: num(r.motion_events),
     sound_peak_pct: num(r.sound_peak_pct),
+    distance_cm: num(r.distance_cm),
     wifi_rssi_dbm: num(r.wifi_rssi_dbm),
   });
 

@@ -15,15 +15,16 @@ const MAX_MESSAGE_BYTES = 2048;
 // Fields saved into sensor_readings, with their allowed ranges.
 // integer: the column is a whole-number type, so fractions are refused.
 // To save another field the node sends, add its column to sensor_readings
-// (see section 6 of schema-extensions.sql) and list it here.
+// (see sections 6 and 7 of schema-extensions.sql) and list it here. Fields
+// not listed, such as light_lux from the old Wokwi simulation, are ignored.
 const FIELDS = {
   soil_moisture_pct: { range: [0, 100] },
   temperature_c: { range: [-40, 80] },
   humidity_pct: { range: [0, 100] },
-  light_lux: { range: [0, 4294967295], integer: true },
   rain_pct: { range: [0, 100] },
   motion_events: { range: [0, 65535], integer: true },
   sound_peak_pct: { range: [0, 100] },
+  distance_cm: { range: [0, 500] },  // HC-SR04; null when no echo came back
   wifi_rssi_dbm: { range: [-127, 0], integer: true },
   uptime_s: { range: [0, 4294967295], integer: true },
 };
@@ -32,9 +33,9 @@ const FIELDS = {
 const FLAGS = ['is_raining'];
 
 // The sensor readings proper. The extra fields above are context (rain,
-// motion, sound, Wi-Fi signal, uptime): a message carrying only those is
-// not a reading worth saving.
-const MEASUREMENTS = ['soil_moisture_pct', 'temperature_c', 'humidity_pct', 'light_lux'];
+// motion, sound, distance, Wi-Fi signal, uptime): a message carrying only
+// those is not a reading worth saving.
+const MEASUREMENTS = ['soil_moisture_pct', 'temperature_c', 'humidity_pct'];
 
 function sha256(value) {
   return createHash('sha256').update(value).digest();
