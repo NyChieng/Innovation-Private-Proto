@@ -563,12 +563,10 @@ botanist looking at the demo would notice.
 
 ## What is not built
 
-**IoT plant monitoring** is a designed-but-empty screen (`/staff/iot`) that says *Coming soon*
-and lists what will go there. The sensor kit has not arrived. The `sensor_devices`,
-`sensor_readings` and `sensor_alerts` tables and the device-key check are already in the
-schema, so the dashboard can be added without disturbing anything else.
+**IoT plant monitoring** is built: `/staff/iot` shows live readings and alerts from the
+ESP32 sensor kit over MQTT. The firmware and setup steps are in `iot-kit/README.md`.
 
-Also deferred, in line with the proposal: saved drafts, a separate "changes requested"
+Deferred, in line with the proposal: saved drafts, a separate "changes requested"
 state, self-service password reset, the superuser role, a map view of specimens, and
 offline field data capture (the service worker caches pages already visited, but a ranger
 cannot yet register a plant with no signal and sync it later).

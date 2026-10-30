@@ -508,6 +508,24 @@ export function seed() {
     insert('settings', { setting_key, setting_value, value_type, description, updated_by: null, updated_at: nowIso() }));
 
   /* ---------------------------------------------------------------- */
+  /* IoT sensor node                                                   */
+  /* ---------------------------------------------------------------- */
+  // The real kit in iot-kit/FloraScan_Node. Seeded so "npm run db:reset" and
+  // "npm test" (which reseeds) keep it: without this row Server/mqtt.js
+  // ignores every reading as coming from an unknown device. DEVICE_CODE and
+  // DEVICE_KEY in the sketch must match. The safe ranges are the ones the
+  // sketch prints in the Serial Monitor.
+  insert('sensor_devices', {
+    device_code: 'SN-001',
+    device_key_hash: crypto.createHash('sha256').update('demo-key-change-me').digest('hex'),
+    plant_id: null, label: 'Real kit', is_simulated: 0, is_active: 1,
+    soil_moisture_min: 30, soil_moisture_max: 80,
+    temperature_min: 18, temperature_max: 35,
+    humidity_min: 40, humidity_max: 90,
+    last_seen_at: null, created_by: null, updated_at: nowIso(), deleted_at: null,
+  });
+
+  /* ---------------------------------------------------------------- */
   /* Audit + activity history                                          */
   /* ---------------------------------------------------------------- */
   // Every plant, not a sample: a record without any history looks broken on

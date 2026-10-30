@@ -20,12 +20,14 @@ the sketch.
 - After pulling these changes, run `npm run db:setup` once. It adds the
   `distance_cm` column and removes the light columns, and keeps the readings
   already saved.
-- `sensor_devices` needs a row for the node. `DEVICE_CODE` and `DEVICE_KEY` in the
-  sketch must match it:
+- `npm run db:seed` (or `npm run db:reset`) adds the node's row to
+  `sensor_devices`: `SN-001` with the key `demo-key-change-me`, matching
+  `DEVICE_CODE` and `DEVICE_KEY` in the sketch. For a second node, add a row
+  and change both values in its copy of the sketch:
 
   ```sql
   INSERT INTO sensor_devices (device_code, device_key_hash, label)
-  VALUES ('SN-001', SHA2('demo-key-change-me', 256), 'Real kit');
+  VALUES ('SN-002', SHA2('another-key', 256), 'Second kit');
   ```
 
 - Start the server with `npm run dev`. Each reading then prints
