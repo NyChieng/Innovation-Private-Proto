@@ -6,8 +6,6 @@ distance sensor. Every 20 seconds it publishes one JSON reading over MQTT, and
 `Server/mqtt.js` saves it to `sensor_readings`. The wiring table is at the top of
 the sketch.
 
-It replaces the Wokwi simulation in `iot-node/`, which is kept for reference only.
-
 ## Upload it
 
 1. Open `FloraScan_Node/FloraScan_Node.ino` in the Arduino IDE. The folder and the

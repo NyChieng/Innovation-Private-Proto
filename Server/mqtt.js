@@ -16,7 +16,7 @@ const MAX_MESSAGE_BYTES = 2048;
 // integer: the column is a whole-number type, so fractions are refused.
 // To save another field the node sends, add its column to sensor_readings
 // (see sections 6 and 7 of schema-extensions.sql) and list it here. Fields
-// not listed, such as light_lux from the old Wokwi simulation, are ignored.
+// not listed here are ignored.
 const FIELDS = {
   soil_moisture_pct: { range: [0, 100] },
   temperature_c: { range: [-40, 80] },
