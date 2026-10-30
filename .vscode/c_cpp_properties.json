@@ -49,7 +49,6 @@
         "${arduinoEsp32}/tools/esp32-libs/${esp32Core}/include/esp_rom/esp32",
         "${arduinoEsp32}/tools/esp32-libs/${esp32Core}/include/esp_common/include",
         "${arduinoEsp32}/tools/esp32-libs/${esp32Core}/include/esp_system/include",
-        "${arduinoEsp32}/tools/esp32-libs/${esp32Core}/include/esp_system/port/soc",
         "${arduinoEsp32}/tools/esp32-libs/${esp32Core}/include/esp_system/port/include/private",
         "${arduinoEsp32}/tools/esp32-libs/${esp32Core}/include/xtensa/esp32/include",
         "${arduinoEsp32}/tools/esp32-libs/${esp32Core}/include/xtensa/include",
@@ -120,7 +119,6 @@
         "${arduinoEsp32}/tools/esp32-libs/${esp32Core}/include/esp_matter/data_model_provider",
         "${arduinoEsp32}/tools/esp32-libs/${esp32Core}/include/esp_matter_bridge",
         "${arduinoEsp32}/tools/esp32-libs/${esp32Core}/include/espressif__esp_matter/connectedhomeip/connectedhomeip/src/platform/ESP32",
-        "${arduinoEsp32}/tools/esp32-libs/${esp32Core}/include/espressif__esp_matter/connectedhomeip/connectedhomeip/src/platform/ESP32/bluedroid",
         "${arduinoEsp32}/tools/esp32-libs/${esp32Core}/include/espressif__esp_matter/connectedhomeip/connectedhomeip/src/platform/ESP32/nimble",
         "${arduinoEsp32}/tools/esp32-libs/${esp32Core}/include/espressif__esp_matter/connectedhomeip/connectedhomeip/src/platform/ESP32/route_hook",
         "${arduinoEsp32}/tools/esp32-libs/${esp32Core}/include/esp_eth/include",
@@ -366,7 +364,7 @@
       ],
       "compilerPath": "${arduinoEsp32}/tools/esp-x32/${esp32Toolchain}/bin/xtensa-esp32-elf-g++.exe",
       "cStandard": "gnu17",
-      "cppStandard": "gnu++2b",
+      "cppStandard": "gnu++20",
       "intelliSenseMode": "gcc-x86"
     }
   ],
