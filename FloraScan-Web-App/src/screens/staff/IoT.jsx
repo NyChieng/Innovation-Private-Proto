@@ -3,7 +3,7 @@ import { Empty, LoadingBlock, Modal, Notice, PageHead, Stat } from '../../compon
 import { api } from '../../lib/api.js';
 import { relativeTime, titleCase } from '../../lib/format.js';
 import * as I from '../../lib/icons.jsx';
-import { t } from '../../lib/i18n.js';
+import { msg, t } from '../../lib/i18n.js';
 
 /**
  * IoT plant monitoring.
@@ -17,19 +17,22 @@ import { t } from '../../lib/i18n.js';
 const REFRESH_MS = 10_000;
 
 const METRICS = [
-  { key: 'soil_moisture_pct', limit: 'soil_moisture', label: 'Soil moisture', unit: '%', decimals: 1 },
-  { key: 'temperature_c', limit: 'temperature', label: 'Temperature', unit: '°C', decimals: 1 },
-  { key: 'humidity_pct', limit: 'humidity', label: 'Humidity', unit: '%', decimals: 1 },
+  { key: 'soil_moisture_pct', limit: 'soil_moisture', label: msg('Soil moisture'), unit: '%', decimals: 1 },
+  { key: 'temperature_c', limit: 'temperature', label: msg('Temperature'), unit: '°C', decimals: 1 },
+  { key: 'humidity_pct', limit: 'humidity', label: msg('Humidity'), unit: '%', decimals: 1 },
   // The rest of the kit, and the node's own Wi-Fi signal. No safe range is
   // set for these, so they never raise an alert; they give context (rain
   // explains a soil reading; motion, noise and distance show visitors near
   // the plant) and help diagnose a node that goes quiet.
-  { key: 'rain_pct', limit: null, label: 'Rain', unit: '%', decimals: 1 },
-  { key: 'motion_events', limit: null, label: 'Motion', unit: 'events', decimals: 0, nonNegative: true },
-  { key: 'sound_peak_pct', limit: null, label: 'Sound (peak)', unit: '%', decimals: 1 },
-  { key: 'distance_cm', limit: null, label: 'Distance', unit: 'cm', decimals: 1, nonNegative: true },
-  { key: 'wifi_rssi_dbm', limit: null, label: 'Wi-Fi signal', unit: 'dBm', decimals: 0 },
+  { key: 'rain_pct', limit: null, label: msg('Rain'), unit: '%', decimals: 1 },
+  { key: 'motion_events', limit: null, label: msg('Motion'), unit: msg('events'), decimals: 0, nonNegative: true },
+  { key: 'sound_peak_pct', limit: null, label: msg('Sound (peak)'), unit: '%', decimals: 1 },
+  { key: 'distance_cm', limit: null, label: msg('Distance'), unit: 'cm', decimals: 1, nonNegative: true },
+  { key: 'wifi_rssi_dbm', limit: null, label: msg('Wi-Fi signal'), unit: 'dBm', decimals: 0 },
 ];
+
+// Units are symbols ("%", "cm") except "events", which is a word to translate.
+const unitOf = (m) => (m.unit === 'events' ? t(m.unit) : m.unit);
 
 const ALERT_METRIC = {
   soil_moisture: METRICS[0],
@@ -38,10 +41,10 @@ const ALERT_METRIC = {
 };
 
 const RANGES = [
-  { value: '1', label: 'Last hour' },
-  { value: '2', label: '2 hours' },
-  { value: '6', label: '6 hours' },
-  { value: '24', label: '24 hours' },
+  { value: '1', label: msg('Last hour') },
+  { value: '2', label: msg('2 hours') },
+  { value: '6', label: msg('6 hours') },
+  { value: '24', label: msg('24 hours') },
 ];
 
 // One series per chart, so one colour. Taken from a palette checked for
@@ -78,10 +81,10 @@ function outOfRange(value, lim) {
 
 /** The badge on each sensor card: Offline, Warning or OK. */
 function deviceState(d) {
-  if (!d.online) return { label: 'Offline', cls: 'badge-neutral' };
+  if (!d.online) return { label: msg('Offline'), cls: 'badge-neutral' };
   const outside = METRICS.some((m) => m.limit && outOfRange(d.latest?.[m.key], d.limits[m.limit]));
-  if (outside || d.open_alerts > 0) return { label: 'Warning', cls: 'badge-warn' };
-  return { label: 'OK', cls: 'badge-ok' };
+  if (outside || d.open_alerts > 0) return { label: msg('Warning'), cls: 'badge-warn' };
+  return { label: msg('OK'), cls: 'badge-ok' };
 }
 
 /** A round step (1, 2 or 5 times a power of ten) for axis ticks. */
@@ -143,7 +146,7 @@ export default function IoT() {
   if (!data && !error) {
     return (
       <div className="page"><div className="wrap" style={{ maxWidth: 1100 }}>
-        <LoadingBlock label="Loading sensors" />
+        <LoadingBlock label={t('Loading sensors')} />
       </div></div>
     );
   }
@@ -151,54 +154,55 @@ export default function IoT() {
   if (!data && error) {
     return (
       <div className="page"><div className="wrap" style={{ maxWidth: 1100 }}>
-        <PageHead title="IoT plant monitoring" />
-        <Notice kind="danger" title="Could not load the sensors">{error}</Notice>
+        <PageHead title={t('IoT plant monitoring')} />
+        <Notice kind="danger" title={t('Could not load the sensors')}>{error}</Notice>
       </div></div>
     );
   }
 
   const online = devices.filter((d) => d.online).length;
   const openAlerts = data.open_alerts ?? alerts.filter((a) => a.status === 'open').length;
-  const rangeLabel = RANGES.find((r) => r.value === hours)?.label.toLowerCase() || `${hours} hours`;
+  const range = RANGES.find((r) => r.value === hours);
+  const rangeLabel = range ? t(range.label) : t('{n} hours', { n: hours });
 
   return (
     <div className="page iot-viz">
       <style>{VIZ_STYLE}</style>
       <div className="wrap" style={{ maxWidth: 1100 }}>
         <PageHead
-          title="IoT plant monitoring"
-          sub="Soil, temperature, humidity, rain, motion, sound and distance around monitored plants, with alerts when a reading leaves its safe range."
+          title={t('IoT plant monitoring')}
+          sub={t('Soil, temperature, humidity, rain, motion, sound and distance around monitored plants, with alerts when a reading leaves its safe range.')}
         >
-          <span className="badge badge-ok"><span className="dot" />Live</span>
-          {updatedAt && <span className="tiny mute">Updated {updatedAt.toLocaleTimeString()}</span>}
+          <span className="badge badge-ok"><span className="dot" />{t('Live')}</span>
+          {updatedAt && <span className="tiny mute">{t('Updated {time}', { time: updatedAt.toLocaleTimeString() })}</span>}
         </PageHead>
 
         {error && (
           <div style={{ marginBottom: 16 }}>
-            <Notice kind="warn" title="Could not refresh">
-              {error} The figures below are from the last successful update.
+            <Notice kind="warn" title={t('Could not refresh')}>
+              {error} {t('The figures below are from the last successful update.')}
             </Notice>
           </div>
         )}
 
         {/* Headline numbers */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 12, marginBottom: 22 }}>
-          <Stat label="Sensors online" value={`${online} / ${devices.length}`}
-            detail={`Offline after ${data.offline_minutes} min without a reading`} />
-          <Stat label="Open alerts" value={openAlerts} accent={openAlerts > 0}
-            detail={openAlerts ? 'Waiting for a ranger to resolve' : 'Every reading is in range'} />
-          <Stat label="Readings shown" value={series.length}
+          <Stat label={t('Sensors online')} value={`${online} / ${devices.length}`}
+            detail={t('Offline after {n} min without a reading', { n: data.offline_minutes })} />
+          <Stat label={t('Open alerts')} value={openAlerts} accent={openAlerts > 0}
+            detail={openAlerts ? t('Waiting for a ranger to resolve') : t('Every reading is in range')} />
+          <Stat label={t('Readings shown')} value={series.length}
             detail={selected ? `${selected.device_code}, ${rangeLabel}` : rangeLabel} />
         </div>
 
         {devices.length === 0 ? (
-          <Empty icon={I.Sensor} title="No sensors registered">
-            Add a row to sensor_devices with the node's device code and the hash of its key, then start the node.
+          <Empty icon={I.Sensor} title={t('No sensors registered')}>
+            {t("Add a row to sensor_devices with the node's device code and the hash of its key, then start the node.")}
           </Empty>
         ) : (
           <>
             {/* Sensor cards */}
-            <h2 style={{ fontSize: '1.05rem', marginBottom: 10 }}>Sensors</h2>
+            <h2 style={{ fontSize: '1.05rem', marginBottom: 10 }}>{t('Sensors')}</h2>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 12, marginBottom: 26 }}>
               {devices.map((d) => (
                 <DeviceCard
@@ -214,16 +218,16 @@ export default function IoT() {
             {/* Filters: one row, above everything they change */}
             <div className="row row-wrap" style={{ gap: 7, marginBottom: 14, alignItems: 'center' }}>
               <h2 style={{ fontSize: '1.05rem', margin: '0 10px 0 0' }}>
-                Readings{selected && devices.length > 1 ? `: ${selected.device_code}` : ''}
+                {selected && devices.length > 1 ? t('Readings: {device}', { device: selected.device_code }) : t('Readings')}
               </h2>
               {RANGES.map((r) => (
                 <button key={r.value} className="chip" aria-pressed={hours === r.value} onClick={() => setHours(r.value)}>
-                  {r.label}
+                  {t(r.label)}
                 </button>
               ))}
               <span className="spacer" />
               <button className="btn btn-sm btn-ghost" onClick={() => setShowTable((v) => !v)}>
-                {showTable ? 'Hide table' : 'Show as table'}
+                {showTable ? t('Hide table') : t('Show as table')}
               </button>
             </div>
 
@@ -231,11 +235,13 @@ export default function IoT() {
               {METRICS.map((m) => (
                 <div className="card card-pad" key={m.key}>
                   <div className="row" style={{ marginBottom: 6 }}>
-                    <h3 style={{ margin: 0 }}>{m.label}</h3>
+                    <h3 style={{ margin: 0 }}>{t(m.label)}</h3>
                     <span className="spacer" />
                     {m.limit && selected && (
                       <span className="tiny mute">
-                        Safe range {fmt(selected.limits[m.limit].min, 0)}–{fmt(selected.limits[m.limit].max, 0)} {m.unit}
+                        {t('Safe range {min}–{max} {unit}', {
+                          min: fmt(selected.limits[m.limit].min, 0), max: fmt(selected.limits[m.limit].max, 0), unit: unitOf(m),
+                        })}
                       </span>
                     )}
                   </div>
@@ -256,13 +262,13 @@ export default function IoT() {
         {/* Alerts */}
         <div className="card card-pad" style={{ marginTop: 22 }}>
           <div className="row" style={{ marginBottom: 4 }}>
-            <h2 style={{ fontSize: '1.05rem', margin: 0 }}>Alerts</h2>
+            <h2 style={{ fontSize: '1.05rem', margin: 0 }}>{t('Alerts')}</h2>
             <span className="spacer" />
-            <span className="tiny mute">Most recent 50, open first</span>
+            <span className="tiny mute">{t('Most recent 50, unresolved first')}</span>
           </div>
           {alerts.length === 0 ? (
             <div className="small mute" style={{ padding: '14px 0 4px' }}>
-              No alerts yet. One opens when a reading leaves its sensor's safe range.
+              {t("No alerts yet. One opens when a reading leaves its sensor's safe range.")}
             </div>
           ) : (
             alerts.map((a) => <AlertItem key={a.id} alert={a} onResolve={() => setResolving(a)} />)
@@ -297,19 +303,19 @@ function DeviceCard({ device: d, selected, selectable, onSelect }) {
           <div className="strong mono">{d.device_code}</div>
           {d.label && <div className="tiny mute truncate">{d.label}</div>}
         </div>
-        {d.is_simulated && <span className="badge badge-info">Simulated</span>}
-        <span className={'badge ' + state.cls}><span className="dot" />{state.label}</span>
+        {d.is_simulated && <span className="badge badge-info">{t('Simulated')}</span>}
+        <span className={'badge ' + state.cls}><span className="dot" />{t(state.label)}</span>
       </div>
 
       {plant ? (
         <div className="small" style={{ marginBottom: 12 }}>
-          <span className={plant.scientific_name ? 'sci' : ''}>{plant.scientific_name || 'Unidentified plant'}</span>
+          <span className={plant.scientific_name ? 'sci' : ''}>{plant.scientific_name || t('Unidentified plant')}</span>
           <div className="tiny mute">
             <span className="mono">{plant.plant_code}</span>{plant.site_name ? ` · ${plant.site_name}` : ''}
           </div>
         </div>
       ) : (
-        <div className="small mute" style={{ marginBottom: 12 }}>Not linked to a plant</div>
+        <div className="small mute" style={{ marginBottom: 12 }}>{t('Not linked to a plant')}</div>
       )}
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 14px' }}>
@@ -319,17 +325,19 @@ function DeviceCard({ device: d, selected, selectable, onSelect }) {
           const out = outOfRange(value, lim);
           return (
             <div key={m.key}>
-              <div className="tiny mute">{m.label}</div>
+              <div className="tiny mute">{t(m.label)}</div>
               <div className="row" style={{ gap: 6 }}>
                 <span className="strong">{fmt(value, m.decimals)}</span>
-                {value !== null && value !== undefined && <span className="tiny mute">{m.unit}</span>}
+                {value !== null && value !== undefined && <span className="tiny mute">{unitOf(m)}</span>}
                 {out && (
-                  <span className="badge badge-warn" title={out === 'low' ? `Below ${lim.min} ${m.unit}` : `Above ${lim.max} ${m.unit}`}>
-                    {out === 'low' ? 'Low' : 'High'}
+                  <span className="badge badge-warn" title={out === 'low'
+                    ? t('Below {value} {unit}', { value: lim.min, unit: unitOf(m) })
+                    : t('Above {value} {unit}', { value: lim.max, unit: unitOf(m) })}>
+                    {out === 'low' ? t('Low') : t('High')}
                   </span>
                 )}
                 {m.key === 'rain_pct' && d.latest?.is_raining && (
-                  <span className="badge badge-info">Raining</span>
+                  <span className="badge badge-info">{t('Raining')}</span>
                 )}
               </div>
             </div>
@@ -338,7 +346,7 @@ function DeviceCard({ device: d, selected, selectable, onSelect }) {
       </div>
 
       <div className="tiny faint" style={{ marginTop: 12 }}>
-        {d.last_seen_at ? `Last reading ${relativeTime(d.last_seen_at)}` : 'Has never reported'}
+        {d.last_seen_at ? t('Last reading {when}', { when: relativeTime(d.last_seen_at) }) : t('Has never reported')}
       </div>
     </>
   );
@@ -477,12 +485,12 @@ function LineChart({ points, metric, limits, hours }) {
     <div ref={wrapRef} style={{ position: 'relative' }}>
       <div className="row" style={{ gap: 6, marginBottom: 4 }}>
         <span style={{ fontSize: '1.35rem', fontWeight: 600 }}>{latest ? fmt(latest.v, metric.decimals) : '—'}</span>
-        {latest && <span className="small mute">{metric.unit} now</span>}
+        {latest && <span className="small mute">{t('{unit} now', { unit: unitOf(metric) })}</span>}
       </div>
 
       {visible.length === 0 ? (
         <div className="small mute" style={{ height, display: 'grid', placeItems: 'center' }}>
-          No readings in this period
+          {t('No readings in this period')}
         </div>
       ) : (
         <svg
@@ -490,7 +498,9 @@ function LineChart({ points, metric, limits, hours }) {
           height={height}
           viewBox={`0 0 ${width} ${height}`}
           role="img"
-          aria-label={`${metric.label} over the selected period. Latest ${fmt(latest.v, metric.decimals)} ${metric.unit}. Use the arrow keys to step through readings.`}
+          aria-label={t('{metric} over the selected period. Latest {value} {unit}. Use the arrow keys to step through readings.', {
+            metric: t(metric.label), value: fmt(latest.v, metric.decimals), unit: unitOf(metric),
+          })}
           tabIndex={0}
           onPointerMove={onMove}
           onPointerLeave={() => setHover(null)}
@@ -517,8 +527,8 @@ function LineChart({ points, metric, limits, hours }) {
 
           {/* Safe range */}
           <g className="mute">
-            {limitLine(limits?.max, 'max')}
-            {limitLine(limits?.min, 'min')}
+            {limitLine(limits?.max, t('max'))}
+            {limitLine(limits?.min, t('min'))}
           </g>
 
           {/* The readings */}
@@ -560,7 +570,7 @@ function LineChart({ points, metric, limits, hours }) {
             boxShadow: '0 4px 14px rgba(0,0,0,0.12)',
           }}
         >
-          <div className="strong">{fmt(point.v, metric.decimals)} {metric.unit}</div>
+          <div className="strong">{fmt(point.v, metric.decimals)} {unitOf(metric)}</div>
           <div className="tiny mute">{new Date(point.t).toLocaleTimeString()}</div>
         </div>
       )}
@@ -577,12 +587,12 @@ function ReadingsTable({ readings }) {
   const cell = { padding: '7px 10px', textAlign: 'right', whiteSpace: 'nowrap' };
   return (
     <div className="card card-pad" style={{ overflowX: 'auto' }}>
-      <div className="tiny mute" style={{ marginBottom: 8 }}>Newest 30 readings</div>
+      <div className="tiny mute" style={{ marginBottom: 8 }}>{t('Newest 30 readings')}</div>
       <table className="small" style={{ width: '100%', borderCollapse: 'collapse' }}>
         <thead>
           <tr className="mute">
-            <th style={{ ...cell, textAlign: 'left' }}>Time</th>
-            {METRICS.map((m) => <th key={m.key} style={cell}>{m.label} ({m.unit})</th>)}
+            <th style={{ ...cell, textAlign: 'left' }}>{t('Time')}</th>
+            {METRICS.map((m) => <th key={m.key} style={cell}>{t(m.label)} ({unitOf(m)})</th>)}
           </tr>
         </thead>
         <tbody>
@@ -605,7 +615,11 @@ function ReadingsTable({ readings }) {
 function AlertItem({ alert: a, onResolve }) {
   const m = ALERT_METRIC[a.alert_type] || { label: titleCase(String(a.alert_type || 'Reading').replace(/_/g, ' ')), unit: '', decimals: 1 };
   const open = a.status === 'open';
-  const dir = a.limit_crossed === 'min' ? 'below' : 'above';
+  const label = ALERT_METRIC[a.alert_type] ? t(m.label) : m.label;
+  const withUnit = (v) => `${fmt(v, m.decimals)} ${unitOf(m)}`.trim();
+  const resolvedBy = a.resolved_by_name
+    ? t('Resolved by {name} {when}', { name: a.resolved_by_name, when: a.resolved_at ? relativeTime(a.resolved_at) : '' })
+    : t('Resolved {when}', { when: a.resolved_at ? relativeTime(a.resolved_at) : '' });
 
   return (
     <div className="row" style={{ gap: 12, padding: '12px 0', borderTop: '1px solid rgba(127,127,127,0.18)', alignItems: 'flex-start' }}>
@@ -613,9 +627,13 @@ function AlertItem({ alert: a, onResolve }) {
         ? <I.Alert style={{ width: 18, height: 18, flex: 'none', marginTop: 2 }} />
         : <I.CheckCircle style={{ width: 18, height: 18, flex: 'none', marginTop: 2, opacity: 0.6 }} />}
       <div className="grow" style={{ minWidth: 0 }}>
-        <div className="strong">{m.label} {dir} the safe range</div>
+        <div className="strong">
+          {a.limit_crossed === 'min'
+            ? t('{metric} below the safe range', { metric: label })
+            : t('{metric} above the safe range', { metric: label })}
+        </div>
         <div className="small">
-          {fmt(a.reading_value, m.decimals)} {m.unit}, limit {fmt(a.limit_value, m.decimals)} {m.unit}
+          {t('{value}, limit {limit}', { value: withUnit(a.reading_value), limit: withUnit(a.limit_value) })}
         </div>
         <div className="tiny mute">
           <span className="mono">{a.device_code}</span>
@@ -623,14 +641,14 @@ function AlertItem({ alert: a, onResolve }) {
         </div>
         {!open && (
           <div className="tiny mute" style={{ marginTop: 4 }}>
-            Resolved{a.resolved_by_name ? ` by ${a.resolved_by_name}` : ''}{a.resolved_at ? ` ${relativeTime(a.resolved_at)}` : ''}
+            {resolvedBy}
             {a.resolution_note ? `: “${a.resolution_note}”` : ''}
           </div>
         )}
       </div>
-      <span className={'badge ' + (open ? 'badge-warn' : 'badge-neutral')}><span className="dot" />{open ? 'Open' : 'Resolved'}</span>
-      {open && (
-        <button className="btn btn-sm" onClick={onResolve}><I.Check />Resolve</button>
+      <span className={'badge ' + (open ? 'badge-warn' : 'badge-neutral')}><span className="dot" />{open ? t('Unresolved') : t('Resolved')}</span>
+      {open && onResolve && (
+        <button className="btn btn-sm" onClick={onResolve}><I.Check />{t('Resolve')}</button>
       )}
     </div>
   );
@@ -656,30 +674,33 @@ function ResolveModal({ alert: a, onClose, onDone }) {
 
   return (
     <Modal
-      title="Resolve alert"
+      title={t('Resolve alert')}
       onClose={onClose}
       footer={(
         <>
-          <button className="btn" onClick={onClose}>Cancel</button>
+          <button className="btn" onClick={onClose}>{t('Cancel')}</button>
           <button className="btn btn-primary" disabled={busy} onClick={submit}>
-            {busy && <span className="spinner" />}Resolve
+            {busy && <span className="spinner" />}{t('Resolve')}
           </button>
         </>
       )}
     >
       <p className="small" style={{ marginTop: 0 }}>
-        {m ? m.label : 'Reading'} on <span className="mono">{a.device_code}</span>
-        {a.plant_code ? ` (${a.plant_code})` : ''}: {fmt(a.reading_value, m?.decimals ?? 1)} {m?.unit}
-        , limit {fmt(a.limit_value, m?.decimals ?? 1)} {m?.unit}.
+        {t('{metric} on {device}: {value}, limit {limit}.', {
+          metric: m ? t(m.label) : t('Reading'),
+          device: <span className="mono" key="d">{a.device_code}{a.plant_code ? ` (${a.plant_code})` : ''}</span>,
+          value: `${fmt(a.reading_value, m?.decimals ?? 1)} ${m ? unitOf(m) : ''}`.trim(),
+          limit: `${fmt(a.limit_value, m?.decimals ?? 1)} ${m ? unitOf(m) : ''}`.trim(),
+        })}
       </p>
-      <label className="small strong" htmlFor="resolve-note">What was done? (optional)</label>
+      <label className="small strong" htmlFor="resolve-note">{t('What was done? (optional)')}</label>
       <textarea
         id="resolve-note"
         className="input"
         value={note}
         onChange={(e) => setNote(e.target.value)}
         maxLength={500}
-        placeholder="For example: watered the plant, soil back above 30 %."
+        placeholder={t('For example: watered the plant, soil back above 30 %.')}
         style={{ width: '100%', minHeight: 90, marginTop: 6, font: 'inherit', padding: 8, boxSizing: 'border-box' }}
       />
       {error && <div style={{ marginTop: 10 }}><Notice kind="danger">{error}</Notice></div>}
