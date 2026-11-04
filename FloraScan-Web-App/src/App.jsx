@@ -36,6 +36,8 @@ import Audit from './screens/staff/Audit.jsx';
 import SettingsScreen from './screens/staff/Settings.jsx';
 import Notifications from './screens/staff/Notifications.jsx';
 import Me from './screens/staff/Me.jsx';
+import ChangePassword from './screens/staff/ChangePassword.jsx';
+import { RecoveryReminder } from './components/RecoveryCode.jsx';
 
 /* ------------------------------------------------------------------ */
 
@@ -51,6 +53,10 @@ function Guard({ need, needAny, children }) {
   const loc = useLocation();
   if (!ready) return <LoadingBlock />;
   if (!user) return <Navigate to="/login" replace state={{ from: loc.pathname }} />;
+  // A password an administrator handed out is replaced before any staff work.
+  if (user.must_change_password && loc.pathname !== '/staff/password') {
+    return <Navigate to="/staff/password" replace />;
+  }
   const missing = (need && !can(need)) || (needAny && !needAny.some((c) => can(c)));
   if (missing) {
     return (
@@ -64,7 +70,9 @@ function Guard({ need, needAny, children }) {
       </div></div>
     );
   }
-  return children;
+  // The security page is where the code is got, so no reminder there.
+  if (loc.pathname === '/staff/password') return children;
+  return <><RecoveryReminder user={user} />{children}</>;
 }
 
 /** /staff has no screen of its own - land each role where its work is. */
@@ -103,6 +111,17 @@ export default function App() {
     );
   }
 
+  // Sign in is a front door too: full screen, no site header around it.
+  if (loc.pathname === '/login') {
+    return (
+      <>
+        <Login />
+        <RoleSwitcher />
+        <Toasts />
+      </>
+    );
+  }
+
   return (
     <>
       <ScrollToTop />
@@ -120,7 +139,6 @@ export default function App() {
             <Route path="/p/:token" element={<PlantInfo byToken />} />
             <Route path="/scan" element={<Scan />} />
             <Route path="/connect" element={<Connect />} />
-            <Route path="/login" element={<Login />} />
 
             {/* Staff */}
             <Route path="/staff" element={<StaffHome />} />
@@ -139,6 +157,7 @@ export default function App() {
             <Route path="/staff/settings" element={<Guard need="system.settings"><SettingsScreen /></Guard>} />
             <Route path="/staff/notifications" element={<Guard><Notifications /></Guard>} />
             <Route path="/staff/me" element={<Guard><Me /></Guard>} />
+            <Route path="/staff/password" element={<Guard><ChangePassword /></Guard>} />
 
             <Route
               path="*"

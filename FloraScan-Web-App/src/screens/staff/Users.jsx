@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { api } from '../../lib/api.js';
 import { useApp } from '../../lib/store.jsx';
 import {
@@ -78,9 +79,11 @@ function NewUserDialog({ roles, onClose, onDone }) {
 }
 
 function UserDrawer({ user, roles, onClose, onDone }) {
-  const { toast, user: me } = useApp();
+  const { toast, user: me, can } = useApp();
   const [busy, setBusy] = useState(false);
+  const [checkCode, setCheckCode] = useState('');
   const isMe = me?.id === user.id;
+  const canManage = can('user.manage');
 
   const act = async (fn, msg) => {
     setBusy(true);
@@ -99,9 +102,55 @@ function UserDrawer({ user, roles, onClose, onDone }) {
               <span className="tag">{roleLabel(user.role_label)}</span>
               {user.is_active ? <span className="badge badge-ok">{t('Active')}</span> : <span className="badge badge-danger">{t('Deactivated')}</span>}
               {user.must_change_password ? <span className="badge badge-warn">{t('Must change password')}</span> : null}
+              {user.locked_until ? <span className="badge badge-danger"><I.Lock /> {t('Locked')}</span> : null}
+              {user.reset_requested_at ? <span className="badge badge-warn">{t('Reset requested')}</span> : null}
             </div>
           </div>
         </div>
+
+        {user.reset_requested_at && (
+          <Notice kind="warn" title={t('Asked for a password reset {when}', { when: relativeTime(user.reset_requested_at) })}>
+            {t('Their screen is showing a six-digit code. Ask them for it - in person or by phone - and type it here. Anyone can type this email address into the sign-in page; only the real person can see the code.')}
+            {canManage && (
+              <form
+                className="row" style={{ gap: 8, marginTop: 10, flexWrap: 'wrap' }}
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  act(() => api.approveReset(user.id, checkCode), t('Approved. {name} can now choose a new password on their screen.', { name: user.full_name }));
+                }}
+              >
+                <input
+                  className="input mono" inputMode="numeric" autoComplete="off" maxLength={7} placeholder="123 456"
+                  aria-label={t('Code on their screen')} style={{ width: 130, letterSpacing: '0.12em' }}
+                  value={checkCode} onChange={(e) => setCheckCode(e.target.value)}
+                />
+                <button type="submit" className="btn btn-sm btn-primary" disabled={busy || checkCode.replace(/\D/g, '').length !== 6}>
+                  <I.CheckCircle /> {t('Approve')}
+                </button>
+                <button
+                  type="button" className="btn btn-sm" disabled={busy}
+                  onClick={() => act(() => api.denyReset(user.id), t('Request refused.'))}
+                >
+                  {t('Refuse')}
+                </button>
+              </form>
+            )}
+          </Notice>
+        )}
+
+        {user.locked_until && (
+          <Notice kind="warn" title={t('Locked after too many wrong passwords')}>
+            {t('Sign in is refused until {time}. Unlock it now if you know this was the account holder.', { time: formatDateTime(user.locked_until) })}
+            <div style={{ marginTop: 10 }}>
+              <button
+                className="btn btn-sm btn-primary" disabled={busy}
+                onClick={() => act(() => api.unlockUser(user.id), t('{name} unlocked.', { name: user.full_name }))}
+              >
+                <I.Lock /> {t('Unlock account')}
+              </button>
+            </div>
+          </Notice>
+        )}
 
         <dl className="dl small">
           <dt>{t('Job title')}</dt><dd>{user.title || '--'}</dd>
@@ -182,11 +231,29 @@ export default function Users() {
   const [open, setOpen] = useState(null);
   const [creating, setCreating] = useState(false);
 
+  const [params, setParams] = useSearchParams();
+
   const load = () => {
     api.users().then((r) => setRows(r.results)).catch(() => setRows([]));
     api.adminStats().then(setStats).catch(() => {});
   };
   useEffect(() => { load(); }, []);
+
+  // ?open=<id> - from a "forgot their password" notification. The address
+  // keeps it until the drawer is closed: arriving from another page, the page
+  // transition mounts this screen twice, and clearing it on open left the
+  // copy that stays with nothing to open.
+  useEffect(() => {
+    const id = Number(params.get('open'));
+    if (!rows || !id) return;
+    const u = rows.find((r) => r.id === id);
+    if (u) setOpen(u);
+  }, [rows, params]);
+
+  const closeDrawer = () => {
+    setOpen(null);
+    if (params.get('open')) setParams({}, { replace: true });
+  };
 
   if (!rows) return <LoadingBlock label={t('Loading staff accounts')} />;
 
@@ -237,7 +304,10 @@ export default function Users() {
                     <td className="num">{u.plants_registered}</td>
                     <td className="num">{u.plants_verified}</td>
                     <td>
-                      {u.is_active ? <span className="badge badge-ok"><span className="dot" />{t('Active')}</span> : <span className="badge badge-danger"><span className="dot" />{t('Off')}</span>}
+                      {!u.is_active ? <span className="badge badge-danger"><span className="dot" />{t('Off')}</span>
+                        : u.locked_until ? <span className="badge badge-danger"><span className="dot" />{t('Locked')}</span>
+                        : u.reset_requested_at ? <span className="badge badge-warn"><span className="dot" />{t('Reset requested')}</span>
+                        : <span className="badge badge-ok"><span className="dot" />{t('Active')}</span>}
                     </td>
                     <td className="num"><I.ChevronRight style={{ width: 16, height: 16, color: 'var(--text-faint)' }} /></td>
                   </tr>
@@ -255,7 +325,7 @@ export default function Users() {
       </div>
 
       {creating && <NewUserDialog roles={roles} onClose={() => setCreating(false)} onDone={load} />}
-      {open && <UserDrawer user={open} roles={roles} onClose={() => setOpen(null)} onDone={() => { load(); setOpen(null); }} />}
+      {open && <UserDrawer user={open} roles={roles} onClose={closeDrawer} onDone={() => { load(); closeDrawer(); }} />}
     </div>
   );
 }

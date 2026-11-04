@@ -20,7 +20,10 @@ import bcrypt from 'bcryptjs';
 
 const COST = 10;
 
-/** Every seeded account uses this. Shown on the sign-in screen on purpose. */
+/**
+ * Temporary password an administrator hands out when creating or resetting an
+ * account. Seeded accounts have their own passwords (see seed.js).
+ */
 export const DEMO_PASSWORD = 'demo1234';
 
 export const hashPassword = (plain) => bcrypt.hashSync(String(plain), COST);

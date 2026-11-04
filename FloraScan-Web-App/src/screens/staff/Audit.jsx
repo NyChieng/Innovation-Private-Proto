@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../lib/api.js';
 import { Avatar, Empty, LoadingBlock, Notice, PageHead } from '../../components/ui.jsx';
-import { formatDateTime, relativeTime, titleCase } from '../../lib/format.js';
+import { formatDateTime, relativeTime, roleLabel, titleCase } from '../../lib/format.js';
+import { useApp } from '../../lib/store.jsx';
 import * as I from '../../lib/icons.jsx';
 import { msg, t } from '../../lib/i18n.js';
 
@@ -10,6 +11,10 @@ const ACTION_STYLE = {
   create: 'badge-ok', approve: 'badge-ok', update: 'badge-info',
   reject: 'badge-danger', archive: 'badge-neutral',
   role_change: 'badge-warn', password_reset: 'badge-warn', password_changed: 'badge-warn',
+  account_locked: 'badge-danger', account_unlocked: 'badge-warn',
+  password_recovered: 'badge-warn', reset_approved: 'badge-ok', reset_denied: 'badge-danger',
+  passkey_added: 'badge-info', passkey_removed: 'badge-neutral', recovery_email_set: 'badge-info',
+  two_factor_enabled: 'badge-ok', two_factor_disabled: 'badge-warn',
 };
 
 /** Plain names for the codes the API writes, so an entry reads as a sentence. */
@@ -17,7 +22,22 @@ const ACTION_LABEL = {
   create: msg('Added'), update: msg('Edited'), approve: msg('Approved'),
   reject: msg('Returned'), archive: msg('Archived'), role_change: msg('Role changed'),
   password_reset: msg('Password reset'), password_changed: msg('Password changed'),
+  account_locked: msg('Account locked'), account_unlocked: msg('Account unlocked'),
+  password_recovered: msg('Password recovered'), reset_approved: msg('Reset approved'),
+  reset_denied: msg('Reset refused'), passkey_added: msg('Face ID / fingerprint turned on'),
+  passkey_removed: msg('Face ID / fingerprint turned off'), recovery_email_set: msg('Recovery email set'),
+  two_factor_enabled: msg('Two-step verification on'), two_factor_disabled: msg('Two-step verification off'),
 };
+
+/** Plain names for the fields the API records, in place of column names. */
+const FIELD_LABEL = {
+  must_change_password: msg('Must change password'), is_active: msg('Active'), role_id: msg('Role'),
+  full_name: msg('Name'), email: msg('Email address'), status: msg('Status'), device: msg('Device'),
+  rp_id: msg('Address'), recovery_email: msg('Recovery email'), locked_until: msg('Locked until'),
+  via: msg('How'), reason: msg('Reason'), request_id: msg('Request'), approved_by: msg('Approved by'),
+  two_factor: msg('Two-step verification'),
+};
+const YES_NO = new Set(['must_change_password', 'is_active', 'two_factor']);
 
 const ENTITY_LABEL = {
   plants: msg('Plant'), species: msg('Species'), users: msg('Staff account'),
@@ -37,20 +57,36 @@ const QUESTIONS = [
   { label: msg('Who changed a system setting?'), entity: 'settings', action: 'update' },
 ];
 
+/** Only plain objects have fields; anything else is shown as one value. */
+const asFields = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : (v == null ? {} : { value: v }));
+
 /** Renders the old -> new value pairs the API stores as JSON. */
-function Diff({ oldValues, newValues }) {
-  const keys = [...new Set([...Object.keys(oldValues || {}), ...Object.keys(newValues || {})])]
-    .filter((k) => String(oldValues?.[k] ?? '') !== String(newValues?.[k] ?? ''));
+function Diff({ oldValues, newValues, roles }) {
+  const before = asFields(oldValues);
+  const after = asFields(newValues);
+  const keys = [...new Set([...Object.keys(before), ...Object.keys(after)])]
+    .filter((k) => String(before[k] ?? '') !== String(after[k] ?? ''));
   if (!keys.length) return <span className="tiny faint">{t('No details recorded')}</span>;
+
+  const show = (k, v) => {
+    if (v === null || v === undefined || v === '') return t('empty');
+    if (YES_NO.has(k)) return [1, '1', true, 'true'].includes(v) ? t('Yes') : t('No');
+    if (k === 'role_id') {
+      const role = roles.find((r) => r.id === Number(v));
+      if (role) return roleLabel(role.label);
+    }
+    if (typeof v === 'string' && /^\d{4}-\d\d-\d\dT/.test(v)) return formatDateTime(v);
+    return (typeof v === 'object' ? JSON.stringify(v) : String(v)).slice(0, 40);
+  };
 
   return (
     <div style={{ display: 'grid', gap: 3 }}>
       {keys.slice(0, 5).map((k) => (
         <div key={k} className="tl-diff" style={{ marginTop: 0 }}>
-          <span className="tiny faint" style={{ minWidth: 92 }}>{titleCase(k)}</span>
-          <span className="tl-old tiny">{String(oldValues?.[k] ?? t('empty')).slice(0, 40)}</span>
+          <span className="tiny faint" style={{ minWidth: 92 }}>{FIELD_LABEL[k] ? t(FIELD_LABEL[k]) : titleCase(k)}</span>
+          <span className="tl-old tiny">{show(k, before[k])}</span>
           <I.ChevronRight style={{ width: 11, height: 11, color: 'var(--text-faint)' }} />
-          <span className="tl-new tiny">{String(newValues?.[k] ?? t('empty')).slice(0, 40)}</span>
+          <span className="tl-new tiny">{show(k, after[k])}</span>
         </div>
       ))}
       {keys.length > 5 && <span className="tiny faint">{t('+{n} more fields', { n: keys.length - 5 })}</span>}
@@ -67,6 +103,7 @@ function RecordCell({ entry }) {
 }
 
 export default function Audit() {
+  const { boot } = useApp();
   const [data, setData] = useState(null);
   const [entity, setEntity] = useState('');
   const [action, setAction] = useState('');
@@ -154,7 +191,7 @@ export default function Audit() {
                       </span>
                     </td>
                     <td className="small"><RecordCell entry={r} /></td>
-                    <td style={{ maxWidth: 380 }}><Diff oldValues={r.old_values} newValues={r.new_values} /></td>
+                    <td style={{ maxWidth: 380 }}><Diff oldValues={r.old_values} newValues={r.new_values} roles={boot?.roles || []} /></td>
                     <td className="small nowrap">
                       {relativeTime(r.created_at)}
                       <div className="tiny faint">{formatDateTime(r.created_at)}</div>

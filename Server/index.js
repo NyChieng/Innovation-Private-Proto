@@ -10,7 +10,7 @@ import { createApi } from './api.js';
 import { connect, close as closeDb, databaseUrl } from './sql.js';
 import { loadReference } from './db.js';
 import { resolvePort } from './port.js';
-import { lanAddresses } from './net.js';
+import { lanAddresses, localHostName } from './net.js';
 import { tlsOptions, caDer, CA_PATH } from './certs.js';
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -75,7 +75,9 @@ app.set('protoPort', port);
 app.set('protoScheme', scheme);
 
 // Signed by a local CA kept in .certs/ (see server/certs.js).
-const tls = useHttps ? tlsOptions(path.join(root, '.certs'), lanAddresses().map((a) => a.address)) : null;
+const tls = useHttps
+  ? tlsOptions(path.join(root, '.certs'), lanAddresses().map((a) => a.address), [localHostName()])
+  : null;
 const server = useHttps
   ? https.createServer({ key: tls.key, cert: tls.cert }, app)
   : http.createServer(app);
@@ -136,6 +138,8 @@ server.listen(port, '0.0.0.0', () => {
   const lan = addrs[0]?.address;
   const localUrl = `${scheme}://localhost:${port}`;
   const lanUrl = lan ? `${scheme}://${lan}:${port}` : null;
+  // Face ID and fingerprint sign-in refuse an IP address; this name works for them.
+  const namedUrl = useHttps && localHostName() ? `${scheme}://${localHostName()}:${port}` : null;
 
   const line = (s = '') => console.log('  ' + s);
   console.log('');
@@ -145,6 +149,9 @@ server.listen(port, '0.0.0.0', () => {
   line(`\x1b[1mThis computer\x1b[0m   ${localUrl}`);
   if (lanUrl) {
     line(`\x1b[1mPhone / tablet\x1b[0m  \x1b[36m${lanUrl}\x1b[0m   (same Wi-Fi or hotspot)`);
+  }
+  if (namedUrl) {
+    line(`\x1b[1mFace ID / fingerprint\x1b[0m  ${namedUrl}   (phone must trust the certificate, see /connect)`);
   }
   line(`\x1b[2mOpen ${localUrl}/connect for a scannable QR code and mobile hand-off.\x1b[0m`);
   console.log('');

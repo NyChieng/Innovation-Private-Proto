@@ -10,6 +10,22 @@ const ACTIONS = {
   logout: { label: msg('Signed out'), cls: 'badge-neutral' },
   login_failed: { label: msg('Failed sign in'), cls: 'badge-danger' },
   password_changed: { label: msg('Password changed'), cls: 'badge-warn' },
+  account_locked: { label: msg('Account locked'), cls: 'badge-danger' },
+  account_unlocked: { label: msg('Account unlocked'), cls: 'badge-warn' },
+  password_change_failed: { label: msg('Password change failed'), cls: 'badge-danger' },
+  recovery_code_issued: { label: msg('Recovery code made'), cls: 'badge-info' },
+  recovery_failed: { label: msg('Recovery failed'), cls: 'badge-danger' },
+  reset_requested: { label: msg('Asked for a reset'), cls: 'badge-warn' },
+  reset_approved: { label: msg('Reset approved'), cls: 'badge-ok' },
+  reset_denied: { label: msg('Reset refused'), cls: 'badge-danger' },
+  reset_cancelled: { label: msg('Reset screen left'), cls: 'badge-neutral' },
+  recovery_email_code: { label: msg('Recovery email code sent'), cls: 'badge-info' },
+  recovery_email_set: { label: msg('Recovery email set'), cls: 'badge-info' },
+  email_reset_requested: { label: msg('Reset code emailed'), cls: 'badge-warn' },
+  passkey_added: { label: msg('Face ID / fingerprint turned on'), cls: 'badge-info' },
+  passkey_removed: { label: msg('Face ID / fingerprint turned off'), cls: 'badge-neutral' },
+  two_factor_enabled: { label: msg('Two-step verification on'), cls: 'badge-ok' },
+  two_factor_disabled: { label: msg('Two-step verification off'), cls: 'badge-warn' },
 };
 
 export default function ActivityLog() {

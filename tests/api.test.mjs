@@ -87,17 +87,20 @@ const get = (p, t) => call('GET', p, { token: t });
 const post = (p, body, t) => call('POST', p, { token: t, body });
 const patch = (p, body, t) => call('PATCH', p, { token: t, body });
 
-async function login(email, password = 'demo1234') {
+// Seeded accounts use the email's local part + 123 (Server/seed.js); an
+// account an admin creates starts on the temporary password demo1234.
+const passwordFor = (email) => (email.endsWith('@gmail.com') ? email.split('@')[0] + '123' : 'demo1234');
+
+async function login(email, password = passwordFor(email)) {
   const r = await post('/auth/login', { email, password });
   return r.body?.token;
 }
 
-const ADMIN = 'admin@niah.sarawak.gov.my';
-const BOTANIST = 'suehan.lee@niah.sarawak.gov.my';
-const BOTANIST_2 = 'hans.yee@niah.sarawak.gov.my';
-const RANGER = 'edmund.yu@niah.sarawak.gov.my';
-const REVIEWER = 'meiling.wong@niah.sarawak.gov.my';
-const DEACTIVATED = 'jiaqi.hu@niah.sarawak.gov.my';
+const ADMIN = 'nengyichieng@gmail.com';
+const BOTANIST = 'drsuehanlee@gmail.com';
+const BOTANIST_2 = 'hansjiasynyee@gmail.com';
+const RANGER = 'edmundguoqianyu@gmail.com';
+const REVIEWER = 'drmeilingwong@gmail.com';
 
 /* ================================================================== */
 
@@ -117,7 +120,7 @@ if (!adminT || !botT || !bot2T || !rangerT || !revT) {
 /* ------------------------------------------------------------------ */
 section('1. Authentication');
 {
-  const ok = await post('/auth/login', { email: RANGER, password: 'demo1234' });
+  const ok = await post('/auth/login', { email: RANGER, password: passwordFor(RANGER) });
   eq('correct credentials return 200', ok.status, 200);
   check('a session token is issued', typeof ok.body.token === 'string' && ok.body.token.length > 20);
   check('the response carries the permission list', Array.isArray(ok.body.user.permissions));
@@ -129,8 +132,12 @@ section('1. Authentication');
   const unknown = await post('/auth/login', { email: 'nobody@example.com', password: 'demo1234' });
   eq('unknown email is refused', unknown.status, 401);
 
-  const off = await post('/auth/login', { email: DEACTIVATED, password: 'demo1234' });
-  eq('a deactivated account cannot sign in', off.status, 403);
+  const other = await post('/auth/login', { email: RANGER, password: passwordFor(ADMIN) });
+  eq("another account's password is refused", other.status, 401);
+
+  const switcher = await post('/auth/switch', { user_id: 1 });
+  check('there is no password-free way into an account', switcher.status === 404 || !switcher.body?.token, 'status ' + switcher.status);
+  // A deactivated account being refused is covered in section 17.
 
   const empty = await post('/auth/login', { email: '', password: '' });
   eq('empty credentials are refused', empty.status, 401);
@@ -664,6 +671,287 @@ section('17. Admin account management');
 }
 
 /* ------------------------------------------------------------------ */
+section('17b. Changing your own password');
+{
+  // A throwaway account, so the seeded passwords the other tests use stay put.
+  const email = `test.pw.${Date.now()}@niah.sarawak.gov.my`;
+  await post('/users', { full_name: 'Password Test User', email, role_id: 2 }, adminT);
+  const tokenA = await login(email);
+  const tokenB = await login(email);
+  const change = (current_password, new_password, t = tokenA) =>
+    post('/auth/password', { current_password, new_password }, t);
+
+  eq('anonymous visitors are refused', (await post('/auth/password', { current_password: 'x', new_password: 'y' })).status, 401);
+  const wrong = await change('not-it', 'fresh-pass-9');
+  eq('a wrong current password is refused', wrong.status, 400);
+  eq('...without signing the user out', (await get('/auth/me', tokenA)).body.user?.email, email);
+  eq('a short password is refused', (await change('demo1234', 'ab1')).status, 400);
+  eq('a password without a number is refused', (await change('demo1234', 'onlyletters')).status, 400);
+  eq('reusing the temporary password is refused', (await change('demo1234', 'demo1234')).status, 400);
+
+  const ok = await change('demo1234', 'fresh-pass-9');
+  eq('a valid change succeeds', ok.status, 200);
+  check('...and clears must_change_password', ok.body.user?.must_change_password === false);
+  eq('...keeps the session that made the change', (await get('/auth/me', tokenA)).body.user?.email, email);
+  eq('...signs out the other device', (await get('/auth/me', tokenB)).body.user, null);
+  eq('the old password no longer works', (await post('/auth/login', { email, password: 'demo1234' })).status, 401);
+  check('the new password works', !!await login(email, 'fresh-pass-9'));
+  check('...and the change issues a recovery code', /^[0-9A-Z]{4}-[0-9A-Z]{4}-[0-9A-Z]{4}$/.test(ok.body.recovery_code || ''));
+  check('...which the account now reports holding', ok.body.user?.has_recovery_code === true);
+}
+
+/* ------------------------------------------------------------------ */
+section('17c. Forgotten password - recovery codes');
+{
+  const email = `test.recover.${Date.now()}@niah.sarawak.gov.my`;
+  const made = await post('/users', { full_name: 'Recovery Test User', email, role_id: 2 }, adminT);
+  const userId = made.body.user.id;
+  const first = await login(email);
+  const set = await post('/auth/password', { current_password: 'demo1234', new_password: 'first-pass-1' }, first);
+  const code = set.body.recovery_code;
+  const other = await login(email, 'first-pass-1');
+  const recover = (body) => post('/auth/recover', body);
+
+  const unknown = await recover({ email: 'nobody@example.com', recovery_code: code, new_password: 'second-pass-2' });
+  const wrong = await recover({ email, recovery_code: 'AAAA-BBBB-CCCC', new_password: 'second-pass-2' });
+  eq('a wrong code is refused', wrong.status, 400);
+  eq('...with the same message as an unknown email', wrong.body.error, unknown.body.error);
+  eq('a weak new password is refused even with the right code', (await recover({ email, recovery_code: code, new_password: 'short' })).status, 400);
+
+  // Typed in lower case without the dashes, as someone copying off paper might.
+  const ok = await recover({ email, recovery_code: code.toLowerCase().replace(/-/g, ' '), new_password: 'second-pass-2' });
+  eq('the right code resets the password', ok.status, 200);
+  check('...signs the user in', !!ok.body.token && (await get('/auth/me', ok.body.token)).body.user?.email === email);
+  check('...and hands over a different code', !!ok.body.recovery_code && ok.body.recovery_code !== code);
+  eq('...which signs out every older session', (await get('/auth/me', other)).body.user, null);
+  eq('the old password no longer works', (await post('/auth/login', { email, password: 'first-pass-1' })).status, 401);
+  eq('a used code cannot be used again', (await recover({ email, recovery_code: code, new_password: 'third-pass-3' })).status, 400);
+
+  const regen = await post('/auth/recovery-code', { current_password: 'second-pass-2' }, ok.body.token);
+  eq('a signed-in user can make a new code', regen.status, 200);
+  eq('...but only with their current password', (await post('/auth/recovery-code', { current_password: 'nope' }, ok.body.token)).status, 400);
+  eq('...which replaces the previous one', (await recover({ email, recovery_code: ok.body.recovery_code, new_password: 'third-pass-3' })).status, 400);
+
+  // Wrong codes share the five-attempt lockout with wrong passwords.
+  // The failure above already counted once; reset the count first.
+  await post(`/users/${userId}/unlock`, {}, adminT);
+  let last;
+  for (let i = 0; i < 5; i += 1) last = await recover({ email, recovery_code: 'ZZZZ-ZZZZ-ZZZZ', new_password: 'third-pass-3' });
+  eq('five wrong codes lock the account', last.status, 423);
+  eq('...and while locked even the right code is refused', (await recover({ email, recovery_code: regen.body.recovery_code, new_password: 'third-pass-3' })).status, 423);
+
+  await post(`/users/${userId}/reset-password`, {}, adminT);
+  const afterReset = (await get('/users', adminT)).body.results?.find((u) => u.id === userId);
+  check('an administrator reset clears the recovery code', afterReset && afterReset.has_recovery_code === false);
+}
+
+/* ------------------------------------------------------------------ */
+section('17d. Forgotten password, no recovery code - an administrator approves');
+{
+  const email = `test.askreset.${Date.now()}@niah.sarawak.gov.my`;
+  const made = await post('/users', { full_name: 'Ask Reset Test User', email, role_id: 2 }, adminT);
+  const userId = made.body.user.id;
+  const unread = async () => (await get('/notifications', adminT)).body.results
+    .filter((n) => n.type === 'password.reset_request' && Number(n.related_id) === userId).length;
+  const status = async (token) => (await post('/auth/reset-request/status', { token })).body.status;
+  const listed = async () => (await get('/users', adminT)).body.results.find((u) => u.id === userId);
+
+  eq('an empty email is refused', (await post('/auth/reset-request', { email: '' })).status, 400);
+  const unknown = await post('/auth/reset-request', { email: 'nobody@example.com' });
+  const asked = await post('/auth/reset-request', { email });
+  eq('a request is accepted', asked.status, 200);
+  check('...and gives the screen a six-digit code and a secret', /^\d{6}$/.test(asked.body.code) && asked.body.token?.length >= 32);
+  check('...shaped exactly like the answer for an unknown email',
+    JSON.stringify(Object.keys(asked.body).sort()) === JSON.stringify(Object.keys(unknown.body).sort()));
+  eq('the administrators are notified', await unread(), 1);
+  check('...and the account shows the request', !!(await listed())?.reset_requested_at);
+  eq('the screen is waiting', await status(asked.body.token), 'pending');
+  eq('...and cannot set a password before approval',
+    (await post('/auth/reset-request/complete', { token: asked.body.token, new_password: 'approved-pass-1' })).status, 400);
+
+  // A second press replaces the first; only the newest screen can win.
+  const second = await post('/auth/reset-request', { email });
+  eq('pressing it again does not notify again', await unread(), 1);
+  eq('...and the older screen stops waiting', await status(asked.body.token), 'closed');
+
+  const wrongCode = second.body.code === '000000' ? '111111' : '000000';
+  eq('only an administrator can approve', (await post(`/users/${userId}/reset-request/approve`, { code: second.body.code }, botT)).status, 403);
+  const wrong = await post(`/users/${userId}/reset-request/approve`, { code: wrongCode }, adminT);
+  eq('the wrong code is refused', wrong.status, 400);
+  eq('...saying how many tries are left', wrong.body.attempts_left, 4);
+  // Read out with a space, as it is shown on the screen.
+  const code = second.body.code.slice(0, 3) + ' ' + second.body.code.slice(3);
+  eq('the code from their screen approves it', (await post(`/users/${userId}/reset-request/approve`, { code }, adminT)).status, 200);
+  eq('...the waiting screen sees the approval', await status(second.body.token), 'approved');
+  check('...and the badge clears', (await listed())?.reset_requested_at === null);
+
+  eq('another browser cannot use the approval', (await post('/auth/reset-request/complete', { token: asked.body.token, new_password: 'approved-pass-1' })).status, 400);
+  eq('a weak new password is still refused', (await post('/auth/reset-request/complete', { token: second.body.token, new_password: 'weak' })).status, 400);
+  const done = await post('/auth/reset-request/complete', { token: second.body.token, new_password: 'approved-pass-1' });
+  eq('the approved screen sets the new password', done.status, 200);
+  check('...signs the user in', (await get('/auth/me', done.body.token)).body.user?.email === email);
+  check('...and hands over a recovery code', !!done.body.recovery_code);
+  check('the new password works', !!await login(email, 'approved-pass-1'));
+  eq('the approval cannot be used twice', (await post('/auth/reset-request/complete', { token: second.body.token, new_password: 'another-pass-2' })).status, 400);
+
+  // Refusing, and refusing itself after too many wrong codes.
+  const third = await post('/auth/reset-request', { email });
+  eq('an administrator can refuse a request', (await post(`/users/${userId}/reset-request/deny`, {}, adminT)).status, 200);
+  eq('...and the screen is told', await status(third.body.token), 'denied');
+  const fourth = await post('/auth/reset-request', { email });
+  const bad = fourth.body.code === '000000' ? '111111' : '000000';
+  let last;
+  for (let i = 0; i < 5; i += 1) last = await post(`/users/${userId}/reset-request/approve`, { code: bad }, adminT);
+  check('five wrong codes refuse the request', last.status === 400 && (await status(fourth.body.token)) === 'denied');
+
+  // Leaving the screen after approval - a refresh - throws the approval away.
+  await post(`/users/${userId}/unlock`, {}, adminT);
+  const left = await post('/auth/reset-request', { email });
+  await post(`/users/${userId}/reset-request/approve`, { code: left.body.code }, adminT);
+  eq('an approved screen that is refreshed or closed is cancelled', (await post('/auth/reset-request/cancel', { token: left.body.token })).status, 200);
+  eq('...the request is closed', await status(left.body.token), 'closed');
+  eq('...and the approval can no longer set a password',
+    (await post('/auth/reset-request/complete', { token: left.body.token, new_password: 'left-pass-1' })).status, 400);
+
+  // The old way still works as a fallback, and closes anything waiting.
+  const fifth = await post('/auth/reset-request', { email });
+  await post(`/users/${userId}/reset-password`, {}, adminT);
+  eq('an administrator reset closes a waiting request', await status(fifth.body.token), 'closed');
+  check('...and the temporary password then works', !!await login(email, 'demo1234'));
+}
+
+/* ------------------------------------------------------------------ */
+section("17e. An administrator's recovery email");
+{
+  // Codes are read from the outbox the server writes when no mail account is
+  // set up. With real email configured there is no outbox, so this is skipped.
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+  const outbox = path.join(path.dirname(path.dirname(fileURLToPath(import.meta.url))), '.outbox.log');
+  const lastCodeTo = (address) => {
+    const lines = fs.existsSync(outbox) ? fs.readFileSync(outbox, 'utf8').trim().split('\n') : [];
+    const mail = lines.map((l) => { try { return JSON.parse(l); } catch { return null; } })
+      .filter((m) => m && m.to === address).pop();
+    const m = mail?.text.match(/(\d{3}) (\d{3})/);
+    return m ? m[1] + m[2] : null;
+  };
+
+  const ts = Date.now();
+  const email = `test.admin.${ts}@niah.sarawak.gov.my`;
+  const backup = `test.admin.backup.${ts}@example.com`;
+  const made = await post('/users', { full_name: 'Recovery Email Admin', email, role_id: 1 }, adminT);
+  const first = await login(email);
+  await post('/auth/password', { current_password: 'demo1234', new_password: 'admin-pass-1' }, first);
+  const tok = await login(email, 'admin-pass-1');
+
+  eq('a non-administrator cannot add one', (await post('/auth/recovery-email', { email: backup, current_password: passwordFor(BOTANIST) }, botT)).status, 403);
+  eq('the current password is required', (await post('/auth/recovery-email', { email: backup, current_password: 'nope' }, tok)).status, 400);
+  eq('the sign-in address cannot be its own backup', (await post('/auth/recovery-email', { email, current_password: 'admin-pass-1' }, tok)).status, 400);
+  const start = await post('/auth/recovery-email', { email: backup, current_password: 'admin-pass-1' }, tok);
+  eq('a code is sent to the new address', start.status, 200);
+
+  if (start.body.delivery !== 'terminal') {
+    check('(skipped: real email is configured, so codes cannot be read here)', true);
+  } else {
+    eq('asking again at once is refused', (await post('/auth/recovery-email', { email: backup, current_password: 'admin-pass-1' }, tok)).status, 429);
+    check('...and nothing is saved until the code comes back', (await get('/auth/me', tok)).body.user.recovery_email === null);
+    eq('a wrong code does not confirm it', (await post('/auth/recovery-email/confirm', { code: '000000' }, tok)).status === 400
+      && lastCodeTo(backup) !== '000000', true);
+    const confirmed = await post('/auth/recovery-email/confirm', { code: lastCodeTo(backup) }, tok);
+    eq('the emailed code confirms it', confirmed.status, 200);
+    check('...and it is shown masked', /^te\*\*\*@example\.com$/.test(confirmed.body.user?.recovery_email || ''), confirmed.body.user?.recovery_email);
+
+    const unknown = await post('/auth/email-reset', { email: 'nobody@example.com' });
+    const asked = await post('/auth/email-reset', { email });
+    eq('a forgotten password sends a reset code', asked.status, 200);
+    check('...with the same answer as an unknown email', JSON.stringify(asked.body) === JSON.stringify(unknown.body));
+    const resetCode = lastCodeTo(backup);
+    check('...to the recovery address', !!resetCode);
+
+    const complete = (code, pw) => post('/auth/email-reset/complete', { email, code, new_password: pw });
+    eq('a weak password is refused without spending the code', (await complete(resetCode, 'weak')).status, 400);
+    const wrong = resetCode === '000000' ? '111111' : '000000';
+    eq('a wrong code is refused', (await complete(wrong, 'admin-pass-2')).status, 400);
+    const done = await complete(resetCode, 'admin-pass-2');
+    eq('the right code sets the new password', done.status, 200);
+    check('...signs the administrator in', (await get('/auth/me', done.body.token)).body.user?.email === email);
+    eq('...and signs out the old sessions', (await get('/auth/me', tok)).body.user, null);
+    check('the new password works', !!await login(email, 'admin-pass-2'));
+    eq('the code cannot be used twice', (await complete(resetCode, 'admin-pass-3')).status, 400);
+
+    // Rangers and the rest use recovery codes or approval, not email.
+    const ranger = await post('/auth/email-reset', { email: RANGER });
+    check('a non-administrator gets the same answer, and no email', ranger.status === 200 && lastCodeTo(RANGER) === null);
+  }
+  await patch(`/users/${made.body.user.id}`, { is_active: false }, adminT);
+}
+
+/* ------------------------------------------------------------------ */
+section('17f. Two-step verification with an authenticator app');
+{
+  // The test plays the phone: it works codes out from the secret the same way the app does.
+  const { _codeAt } = await import(new URL('../Server/totp.js', import.meta.url));
+  const email = `test.twofa.${Date.now()}@niah.sarawak.gov.my`;
+  const made = await post('/users', { full_name: 'Two Step Test User', email, role_id: 2 }, adminT);
+  const userId = made.body.user.id;
+  const first = await login(email);
+  const changed = await post('/auth/password', { current_password: 'demo1234', new_password: 'twofa-pass-1' }, first);
+  const recoveryCode = changed.body.recovery_code;
+  const tok = await login(email, 'twofa-pass-1');
+
+  eq('setting up needs the current password', (await post('/auth/2fa/setup', { current_password: 'nope' }, tok)).status, 400);
+  const setup = await post('/auth/2fa/setup', { current_password: 'twofa-pass-1' }, tok);
+  eq('setup gives a QR code', setup.status, 200);
+  check('...as an image, with the key to type by hand', /^data:image\/png/.test(setup.body.qr) && /^[A-Z2-7 ]{32,}$/.test(setup.body.secret));
+  check('...encoding an authenticator link for FloraScan', /^otpauth:\/\/totp\/FloraScan/.test(setup.body.uri));
+  const secret = setup.body.secret.replace(/ /g, '');
+
+  eq('a wrong code does not turn it on', (await post('/auth/2fa/enable', { code: '000000' }, tok)).status === 400
+    || _codeAt(secret, -1) === '000000', true);
+  check('...so it is still off', (await get('/auth/me', tok)).body.user.two_factor === false);
+  const on = await post('/auth/2fa/enable', { code: _codeAt(secret, -1) }, tok);
+  eq('the code from the app turns it on', on.status, 200);
+  check('...and the account says so', on.body.user?.two_factor === true);
+
+  const step1 = await post('/auth/login', { email, password: 'twofa-pass-1' });
+  check('now the right password alone does not sign in', step1.status === 200 && step1.body.two_factor === true && !step1.body.token);
+  const wrong = await post('/auth/login/2fa', { ticket: step1.body.ticket, code: _codeAt(secret, 0) === '000000' ? '111111' : '000000' });
+  eq('a wrong code is refused', wrong.status, 400);
+  eq('...saying how many tries are left', wrong.body.attempts_left, 4);
+  const code = _codeAt(secret, 0);
+  const step2 = await post('/auth/login/2fa', { ticket: step1.body.ticket, code });
+  eq('password and the current code sign in', step2.status, 200);
+  check('...as the right person', (await get('/auth/me', step2.body.token)).body.user?.email === email);
+  const again = await post('/auth/login', { email, password: 'twofa-pass-1' });
+  eq('the same code cannot be used twice', (await post('/auth/login/2fa', { ticket: again.body.ticket, code })).status, 400);
+  eq('a made-up ticket is refused', (await post('/auth/login/2fa', { ticket: 'nope', code })).status, 400);
+
+  const recovered = await post('/auth/recover', { email, recovery_code: recoveryCode, new_password: 'twofa-pass-2' });
+  check('a password reset does not get round it - no session, sign in again',
+    recovered.status === 200 && !recovered.body.token && recovered.body.sign_in_again === true);
+
+  const fresh = (await post('/auth/login/2fa', {
+    ticket: (await post('/auth/login', { email, password: 'twofa-pass-2' })).body.ticket, code: _codeAt(secret, 1),
+  })).body.token;
+  eq('turning it off needs a current code too', (await post('/auth/2fa/disable', { current_password: 'twofa-pass-2', code: '000000' }, fresh)).status, 400);
+  // Turned off by an administrator's reset instead - the lost-phone route.
+  await post(`/users/${userId}/reset-password`, {}, adminT);
+  const listed = (await get('/users', adminT)).body.results.find((u) => u.id === userId);
+  check('an administrator reset turns it off, for a lost phone', listed && listed.two_factor === false);
+  check('...and the temporary password then signs in directly', !!await login(email, 'demo1234'));
+
+  // The audit trail: values as objects (not text), and who it came from.
+  const entry = (await get('/audit?action=two_factor_enabled', adminT)).body.results.find((r) => r.entity_id === userId);
+  check('the audit trail records turning it on', !!entry);
+  check('...with its values as data, not text', entry && typeof entry.new_values === 'object' && entry.new_values.two_factor === 1,
+    JSON.stringify(entry?.new_values));
+  check('...and the real caller, not a placeholder', entry && entry.user_agent !== 'Prototype X demo' && !!entry.ip_address,
+    `${entry?.ip_address} / ${entry?.user_agent}`);
+  await patch(`/users/${userId}`, { is_active: false }, adminT);
+}
+
+/* ------------------------------------------------------------------ */
 section('18. QR codes');
 {
   const plant = (await get('/public/plants')).body.results[0];
@@ -1143,7 +1431,51 @@ section('32. Uploading a photograph');
 }
 
 /* ------------------------------------------------------------------ */
-section('33. Tidying up after the run');
+section('33. Locking an account after five wrong passwords');
+{
+  // A throwaway account, so the run never locks somebody real out.
+  const email = `lock.test.${Date.now()}@example.com`;
+  const made = await post('/users', { full_name: 'Lockout Test User', email, role_id: 2 }, adminT);
+  eq('a throwaway account is created', made.status, 201);
+  const id = made.body.user.id;
+  const wrong = () => post('/auth/login', { email, password: 'not-the-password' });
+
+  const left = [];
+  for (let i = 0; i < 4; i++) left.push((await wrong()).body.attempts_left);
+  eq('each wrong password says how many attempts are left', left.join(','), '4,3,2,1');
+
+  const fifth = await wrong();
+  eq('the fifth wrong password locks the account', fifth.status, 423);
+  check('...and says for how long', fifth.body.minutes === 15 && !!fifth.body.locked_until, JSON.stringify(fifth.body));
+
+  const right = await post('/auth/login', { email, password: 'demo1234' });
+  eq('while locked, even the right password is refused', right.status, 423);
+
+  const listed = (await get('/users', adminT)).body.results.find((u) => u.id === id);
+  check('an administrator can see the lock', !!listed?.locked_until);
+
+  const notAdmin = await post(`/users/${id}/unlock`, {}, rangerT);
+  eq('a ranger cannot unlock an account', notAdmin.status, 403);
+
+  const unlocked = await post(`/users/${id}/unlock`, {}, adminT);
+  eq('an administrator can unlock it', unlocked.status, 200);
+  check('...which clears the lock', unlocked.body.user.locked_until === null);
+  eq('...and sign in works again', (await post('/auth/login', { email, password: 'demo1234' })).status, 200);
+
+  // A correct sign in wipes the slate, so mistakes do not pile up for weeks.
+  for (let i = 0; i < 4; i++) await wrong();
+  await post('/auth/login', { email, password: 'demo1234' });
+  eq('a correct sign in resets the count', (await wrong()).body.attempts_left, 4);
+
+  const audits = (await get('/audit', adminT)).body.results;
+  check('the lock reached the audit trail',
+    audits.some((a) => a.action === 'account_locked' && a.entity_id === id));
+
+  await patch(`/users/${id}`, { is_active: false }, adminT);
+}
+
+/* ------------------------------------------------------------------ */
+section('34. Tidying up after the run');
 {
   // These suites create records to exercise the workflow. Left behind, they
   // sit at the top of the public register and make a demo look broken, so

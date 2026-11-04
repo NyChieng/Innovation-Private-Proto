@@ -50,6 +50,8 @@ export default function Notifications() {
     }
     if (n.related_type === 'plant' && n.related_id) navigate('/staff/plants/' + n.related_id);
     else if (n.related_type === 'submission') navigate('/staff/review');
+    // A password reset request opens that person's account, where the reset is.
+    else if (n.related_type === 'user' && n.related_id) navigate('/staff/users?open=' + n.related_id);
     else load();
   };
 

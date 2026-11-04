@@ -182,6 +182,7 @@ function AccountMenu() {
             {!!counts?.unread_notifications && <span className="count alert">{counts.unread_notifications}</span>}
           </Link>
           <Link className="side-link" to={homeFor(user)} onClick={() => setOpen(false)}><I.Leaf /> {t('My dashboard')}</Link>
+          <Link className="side-link" to="/staff/password" onClick={() => setOpen(false)}><I.Lock /> {t('Sign-in and security')}</Link>
           <Link className="side-link" to="/connect" onClick={() => setOpen(false)}><I.Phone /> {t('Open on phone')}</Link>
           <button
             className="side-link"

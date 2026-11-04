@@ -5,13 +5,16 @@ import {
   q, one, count, insert, update, byId, tx, nowIso,
   getSetting, setSetting, allSettings, permissionsForRole, userCan,
   roles as cachedRoles, roleById,
-  audit, activity, notify, notifyPermission, recordRevisions,
+  audit, activity, notify, notifyPermission, recordRevisions, requestContext,
 } from './db.js';
 import path from 'node:path';
 import { renderPhoto } from './images.js';
 import { photoExists, PHOTO_DIR, SPECIES_DATA, hasRealPhotos } from './species-data.js';
-import { lanAddresses } from './net.js';
+import { lanAddresses, localHostName } from './net.js';
 import { hashPassword, verifyPassword, DEMO_PASSWORD } from './passwords.js';
+import * as passkeys from './passkeys.js';
+import { sendMail, maskEmail } from './mailer.js';
+import * as totp from './totp.js';
 
 /**
  * An async handler that rejects does not reach Express 4's error middleware on
@@ -62,6 +65,13 @@ async function revokeAllFor(userId) {
     [nowIso(), userId]);
 }
 
+/** Every session but the one in use - a password change signs out the other devices. */
+async function revokeOthersFor(userId, keepToken) {
+  for (const [token, uid] of sessions) if (uid === userId && token !== keepToken) sessions.delete(token);
+  await q('UPDATE refresh_tokens SET revoked_at = ? WHERE user_id = ? AND token_hash <> ? AND revoked_at IS NULL',
+    [nowIso(), userId, hashToken(keepToken)]);
+}
+
 async function currentUser(req) {
   const header = req.get('authorization') || '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : null;
@@ -86,6 +96,194 @@ async function currentUser(req) {
   return user;
 }
 
+/* Wrong-password lockout. See section 7 of Server/schema-extensions.sql. */
+const MAX_FAILED_LOGINS = 5;
+const LOCK_MINUTES = 15;
+
+const LOCKED_MESSAGE = 'This account is locked after too many wrong passwords.';
+
+/**
+ * Counts one wrong guess at an account - a password or a recovery code - and
+ * locks it on the fifth in a row. Returns how many so far, and the lock time
+ * when this attempt was the one that locked it.
+ */
+async function recordFailedAttempt(user, what) {
+  // Incremented in SQL, so two attempts racing each other both count.
+  await q('UPDATE users SET failed_login_count = failed_login_count + 1 WHERE id = ?', [user.id]);
+  const failed = Number((await one('SELECT failed_login_count FROM users WHERE id = ?', [user.id])).failed_login_count);
+  if (failed < MAX_FAILED_LOGINS) {
+    activity({ user_id: user.id, action: 'login_failed', detail: `Wrong ${what} (${failed} of ${MAX_FAILED_LOGINS})` });
+    return { failed, until: null };
+  }
+  const until = new Date(Date.now() + LOCK_MINUTES * 60000).toISOString();
+  await update('users', user.id, { failed_login_count: 0, locked_until: until });
+  // Any session already open stays a risk while someone guesses at the account.
+  await revokeAllFor(user.id);
+  activity({ user_id: user.id, action: 'account_locked', detail: `Locked for ${LOCK_MINUTES} minutes after ${MAX_FAILED_LOGINS} wrong attempts` });
+  // Whoever was guessing is unknown, so the entry is filed under the account.
+  audit({ user_id: user.id, action: 'account_locked', entity_type: 'users', entity_id: user.id, new_values: { locked_until: until } });
+  return { failed, until };
+}
+
+/* Password rules, shared by changing a password and recovering one. */
+const MIN_PASSWORD = 8;
+
+function newPasswordProblem(pw, current) {
+  pw = String(pw || '');
+  // Fixed wording rather than templates, so the browser can translate them.
+  if (pw.length < MIN_PASSWORD) return 'The new password must be at least 8 characters.';
+  if (pw.length > 128) return 'The new password is too long (maximum 128 characters).';
+  if ((current && pw === String(current)) || pw === DEMO_PASSWORD) {
+    return 'Choose a password you have not used here before.';
+  }
+  if (!/[a-z]/i.test(pw) || !/\d/.test(pw)) return 'The new password needs at least one letter and one number.';
+  return null;
+}
+
+/*
+ * Recovery codes - see section 8 of Server/schema-extensions.sql.
+ *
+ * Twelve characters from an alphabet with no 0/O, 1/I/L or 5/S to confuse
+ * when copied off paper: about 58 bits, so a plain SHA-256 is enough to store
+ * it. Unlike a password it is never chosen by a person, and the lockout caps
+ * guessing at five tries per fifteen minutes.
+ */
+const CODE_ALPHABET = '2346789ABCDEFGHJKMNPQRTUVWXYZ';
+
+function newRecoveryCode() {
+  const bytes = crypto.randomBytes(12);
+  const chars = [...bytes].map((b) => CODE_ALPHABET[b % CODE_ALPHABET.length]).join('');
+  return chars.match(/.{4}/g).join('-');
+}
+
+// Case, spaces and dashes do not matter when the code is typed back in.
+const hashRecoveryCode = (code) =>
+  crypto.createHash('sha256').update(String(code || '').toUpperCase().replace(/[^0-9A-Z]/g, '')).digest('hex');
+
+function recoveryCodeMatches(code, storedHash) {
+  if (!code || String(storedHash || '').length !== 64) return false;
+  return crypto.timingSafeEqual(Buffer.from(hashRecoveryCode(code)), Buffer.from(String(storedHash)));
+}
+
+/**
+ * An audit row as the screens expect it, with the before and after values as
+ * objects. MariaDB (XAMPP's "MySQL") stores a JSON column as text and the
+ * driver hands it back as a string; the audit screen then listed it one
+ * character at a time. MySQL proper returns an object, which passes through.
+ */
+function auditRow(row) {
+  const parse = (v) => {
+    if (typeof v !== 'string') return v ?? null;
+    try {
+      const out = JSON.parse(v);
+      // A value double-encoded somewhere upstream is a string of JSON; unwrap once more.
+      return typeof out === 'string' ? JSON.parse(out) : out;
+    } catch {
+      return { value: v };
+    }
+  };
+  return { ...row, old_values: parse(row.old_values), new_values: parse(row.new_values) };
+}
+
+/*
+ * Two-step verification - section 12 of Server/schema-extensions.sql. A right
+ * password on an account with it on earns a short-lived ticket, not a session;
+ * the ticket plus the authenticator's current code earns the session.
+ */
+const TICKET_MS = 5 * 60 * 1000;
+const tickets = new Map(); // ticket -> { userId, expires }
+
+function issueTicket(userId) {
+  const now = Date.now();
+  for (const [k, v] of tickets) if (v.expires < now) tickets.delete(k);
+  const ticket = crypto.randomBytes(24).toString('hex');
+  tickets.set(ticket, { userId, expires: now + TICKET_MS });
+  return ticket;
+}
+
+/**
+ * After a self-service password reset (recovery code, approval, email): signed
+ * straight in - unless two-step verification is on, which a new password does
+ * not get round. Then they sign in normally, password and authenticator code.
+ */
+async function finishReset(after, freshCode) {
+  if (after.totp_enabled_at) return { user: shapeUser(after), recovery_code: freshCode, sign_in_again: true };
+  return { token: await issueToken(after.id), user: shapeUser(after), recovery_code: freshCode };
+}
+
+/* Administrators' recovery email - section 11 of Server/schema-extensions.sql. */
+const EMAIL_CODE_MINUTES = 15;
+const MAX_EMAIL_CODE_TRIES = 5;
+const emailSentAt = new Map(); // "user:purpose" -> when a code last went out
+const isAdmin = (u) => permissionsForRole(u.role_id).includes('user.manage');
+const hashEmailCode = (code) => crypto.createHash('sha256').update(String(code || '').replace(/\D/g, '')).digest('hex');
+
+/** At most one code a minute per account and purpose, so nobody can flood an inbox. */
+function emailThrottled(userId, purpose) {
+  const key = userId + ':' + purpose;
+  if (Date.now() - (emailSentAt.get(key) || 0) < 60000) return true;
+  emailSentAt.set(key, Date.now());
+  return false;
+}
+
+/** A new six-digit code; any older one for the same purpose stops working. */
+async function issueEmailCode(user, purpose, email) {
+  await q('UPDATE email_codes SET used_at = ? WHERE user_id = ? AND purpose = ? AND used_at IS NULL', [nowIso(), user.id, purpose]);
+  const code = String(crypto.randomInt(0, 1000000)).padStart(6, '0');
+  await insert('email_codes', {
+    user_id: user.id, purpose, email, code_hash: hashEmailCode(code),
+    expires_at: new Date(Date.now() + EMAIL_CODE_MINUTES * 60000).toISOString(), created_at: nowIso(),
+  });
+  const spaced = code.slice(0, 3) + ' ' + code.slice(3);
+  const text = purpose === 'verify'
+    ? `Hello ${user.full_name},\n\nYour code to confirm this as your FloraScan recovery email is:\n\n    ${spaced}\n\nIt works for ${EMAIL_CODE_MINUTES} minutes. If you did not ask for this, ignore this email.`
+    : `Hello ${user.full_name},\n\nSomeone asked to reset the FloraScan password for ${user.email}. Your code is:\n\n    ${spaced}\n\nIt works for ${EMAIL_CODE_MINUTES} minutes. If this was not you, ignore this email - your password stays as it is.`;
+  return sendMail({
+    to: email,
+    subject: purpose === 'verify' ? 'Confirm your FloraScan recovery email' : 'Your FloraScan password reset code',
+    text,
+  });
+}
+
+/** Checks a typed code against the newest live one; counts and retires wrong guesses. */
+async function checkEmailCode(userId, purpose, typed) {
+  const row = await one(
+    'SELECT * FROM email_codes WHERE user_id = ? AND purpose = ? AND used_at IS NULL ORDER BY id DESC LIMIT 1',
+    [userId, purpose],
+  );
+  if (!row || new Date(row.expires_at).getTime() < Date.now()) return { ok: false, row: null };
+  if (hashEmailCode(typed) !== row.code_hash) {
+    const attempts = row.attempts + 1;
+    await update('email_codes', row.id, attempts >= MAX_EMAIL_CODE_TRIES ? { attempts, used_at: nowIso() } : { attempts });
+    return { ok: false, row };
+  }
+  await update('email_codes', row.id, { used_at: nowIso() });
+  return { ok: true, row };
+}
+
+/* Asking an administrator to approve a reset - section 10 of Server/schema-extensions.sql. */
+const RESET_REQUEST_MINUTES = 30;
+// Once approved, the new password has to be chosen promptly: an approval left
+// open is an open door for whoever reaches that screen next.
+const APPROVAL_MINUTES = 5;
+const MAX_WRONG_CHECK_CODES = 5;
+const resetNotifiedAt = new Map(); // user id -> when the admins were last told
+const requestExpired = (row) => new Date(row.expires_at).getTime() < Date.now()
+  || (row.status === 'approved' && row.decided_at
+    && Date.now() - new Date(row.decided_at).getTime() > APPROVAL_MINUTES * 60000);
+
+/** The request waiting on an account, if there is one still in time. */
+async function pendingResetRequest(userId) {
+  const row = await one(
+    "SELECT * FROM password_reset_requests WHERE user_id = ? AND status = 'pending' ORDER BY id DESC LIMIT 1",
+    [userId],
+  );
+  return row && !requestExpired(row) ? row : null;
+}
+
+const isLocked = (u) => !!u?.locked_until && new Date(u.locked_until).getTime() > Date.now();
+const minutesLeft = (u) => Math.max(1, Math.ceil((new Date(u.locked_until).getTime() - Date.now()) / 60000));
+
 function shapeUser(u) {
   if (!u) return null;
   const role = roleById(u.role_id);
@@ -93,7 +291,17 @@ function shapeUser(u) {
     id: u.id, full_name: u.full_name, email: u.email, title: u.title,
     phone: u.phone, role: role?.name, role_label: role?.label, role_id: u.role_id,
     is_active: !!u.is_active, must_change_password: !!u.must_change_password,
+    has_recovery_code: !!u.recovery_code_hash,
+    // Masked even to the owner and other admins: a personal address, shown only enough to recognise.
+    recovery_email: u.recovery_email_verified_at ? maskEmail(u.recovery_email) : null,
+    two_factor: !!u.totp_enabled_at,
+    // A request runs out after half an hour, and so does the badge.
+    reset_requested_at: u.reset_requested_at
+      && Date.now() - new Date(u.reset_requested_at).getTime() < RESET_REQUEST_MINUTES * 60000
+      ? u.reset_requested_at : null,
     last_login_at: u.last_login_at, created_at: u.created_at,
+    // Only while the lock is still running; an expired lock is no lock.
+    locked_until: isLocked(u) ? u.locked_until : null,
     permissions: permissionsForRole(u.role_id),
   };
 }
@@ -502,6 +710,9 @@ function matchesQuery(p, needleRaw, { viewer = null } = {}) {
 
 export function createApi() {
   const api = express.Router();
+  // Every audit and activity row written while handling this request records
+  // who it came from - the caller's address and browser - not placeholders.
+  api.use((req, res, next) => requestContext.run({ ip: req.ip, userAgent: req.get('user-agent') }, next));
   api.use(express.json({ limit: '12mb' }));
 
   /* -------- auth context on every request -------- */
@@ -524,9 +735,8 @@ export function createApi() {
   /* ================================================================ */
 
   api.get('/bootstrap', route(async (req, res) => {
-    const [statuses, users, facets] = await Promise.all([
+    const [statuses, facets] = await Promise.all([
       q('SELECT * FROM conservation_statuses ORDER BY sort_order'),
-      q('SELECT id, full_name, email, title, role_id, is_active FROM users WHERE deleted_at IS NULL ORDER BY id'),
       Promise.all([
         q('SELECT DISTINCT family FROM species WHERE family IS NOT NULL AND deleted_at IS NULL ORDER BY family'),
         q('SELECT DISTINCT genus FROM species WHERE genus IS NOT NULL AND deleted_at IS NULL ORDER BY genus'),
@@ -542,14 +752,6 @@ export function createApi() {
       require_approval: getSetting('require_approval'),
       conservation_statuses: statuses,
       roles: cachedRoles().map((r) => ({ ...r, permissions: permissionsForRole(r.id) })),
-      // Prototype convenience: the role switcher needs the demo roster.
-      demo_accounts: users.map((u) => ({
-        id: u.id, full_name: u.full_name, email: u.email, title: u.title,
-        role: roleById(u.role_id)?.name,
-        role_label: roleById(u.role_id)?.label,
-        is_active: !!u.is_active,
-      })),
-      demo_password: DEMO_PASSWORD,
       families: families.map((r) => r.family),
       genera: genera.map((r) => r.genus),
       sites: sites.map((r) => r.site_name),
@@ -573,17 +775,483 @@ export function createApi() {
       activity({ user_id: null, action: 'login_failed', detail: 'Unknown email: ' + email });
       return res.status(401).json({ error: 'No account with that email address.' });
     }
+    // A locked account is refused before the password is even checked, so
+    // guessing on stops being worth anything until the lock runs out.
+    if (isLocked(user)) {
+      activity({ user_id: user.id, action: 'login_failed', detail: 'Account locked' });
+      return res.status(423).json({
+        error: LOCKED_MESSAGE, locked_until: user.locked_until, minutes: minutesLeft(user),
+      });
+    }
     if (!await verifyPassword(password, user.password_hash)) {
-      activity({ user_id: user.id, action: 'login_failed', detail: 'Wrong password' });
-      return res.status(401).json({ error: 'Incorrect password. The demo password is demo1234.' });
+      const { failed, until } = await recordFailedAttempt(user, 'password');
+      if (until) return res.status(423).json({ error: LOCKED_MESSAGE, locked_until: until, minutes: LOCK_MINUTES });
+      return res.status(401).json({ error: 'Incorrect password.', attempts_left: MAX_FAILED_LOGINS - failed });
     }
     if (!user.is_active) {
       activity({ user_id: user.id, action: 'login_failed', detail: 'Account deactivated' });
       return res.status(403).json({ error: 'This account has been deactivated by an administrator.' });
     }
-    await update('users', user.id, { last_login_at: nowIso() });
+    // Two-step verification on: the password alone is not enough. The lockout
+    // count is left alone until the code is right too.
+    if (user.totp_enabled_at) {
+      return res.json({ two_factor: true, ticket: issueTicket(user.id) });
+    }
+    await update('users', user.id, { last_login_at: nowIso(), failed_login_count: 0, locked_until: null });
     activity({ user_id: user.id, action: 'login', detail: 'Signed in' });
     res.json({ token: await issueToken(user.id), user: shapeUser(user) });
+  }));
+
+  /** Second step: the ticket from a right password, plus the authenticator's code. */
+  api.post('/auth/login/2fa', route(async (req, res) => {
+    const { ticket, code } = req.body || {};
+    const held = tickets.get(String(ticket || ''));
+    if (!held || held.expires < Date.now()) {
+      tickets.delete(String(ticket || ''));
+      return res.status(400).json({ error: 'Sign-in timed out. Enter your password again.' });
+    }
+    const user = await byId('users', held.userId);
+    if (!user || !user.is_active || user.deleted_at || !user.totp_enabled_at) {
+      tickets.delete(ticket);
+      return res.status(400).json({ error: 'Sign-in timed out. Enter your password again.' });
+    }
+    if (isLocked(user)) {
+      tickets.delete(ticket);
+      return res.status(423).json({ error: LOCKED_MESSAGE, locked_until: user.locked_until, minutes: minutesLeft(user) });
+    }
+    const secret = totp.openSecret(user.totp_secret);
+    const step = secret ? totp.verifyCode(secret, code, user.totp_last_step) : null;
+    if (step === null) {
+      // Shares the lockout with passwords: five wrong in a row locks the account.
+      const { failed, until } = await recordFailedAttempt(user, 'authenticator code');
+      if (until) {
+        tickets.delete(ticket);
+        return res.status(423).json({ error: LOCKED_MESSAGE, locked_until: until, minutes: LOCK_MINUTES });
+      }
+      return res.status(400).json({ error: 'That code is not right.', attempts_left: MAX_FAILED_LOGINS - failed });
+    }
+    tickets.delete(ticket);
+    const after = await update('users', user.id, {
+      totp_last_step: step, last_login_at: nowIso(), failed_login_count: 0, locked_until: null,
+    });
+    activity({ user_id: user.id, action: 'login', detail: 'Signed in with password and authenticator code' });
+    res.json({ token: await issueToken(user.id), user: shapeUser(after) });
+  }));
+
+  /* -------- setting up two-step verification -------- */
+
+  /** Step 1: a new secret, held as pending, shown as a QR code for the app to scan. */
+  api.post('/auth/2fa/setup', route(async (req, res) => {
+    if (!req.user) return res.status(401).json({ error: 'Sign in required' });
+    if (!await verifyPassword(req.body?.current_password, req.user.password_hash)) {
+      return res.status(400).json({ error: 'Your current password is not correct.' });
+    }
+    const secret = totp.newSecret();
+    await update('users', req.user.id, { totp_pending: totp.sealSecret(secret), updated_at: nowIso() });
+    const uri = totp.otpauthUri({ issuer: 'FloraScan', account: req.user.email, secret });
+    const qr = await QRCode.toDataURL(uri, { margin: 1, width: 360, errorCorrectionLevel: 'M' });
+    res.json({ qr, secret: totp.groupSecret(secret), uri });
+  }));
+
+  /** Step 2: a code from the app proves it holds the secret. Only now is it switched on. */
+  api.post('/auth/2fa/enable', route(async (req, res) => {
+    if (!req.user) return res.status(401).json({ error: 'Sign in required' });
+    const secret = req.user.totp_pending ? totp.openSecret(req.user.totp_pending) : null;
+    if (!secret) return res.status(400).json({ error: 'Start the setup again - scan a new QR code.' });
+    const step = totp.verifyCode(secret, req.body?.code);
+    if (step === null) return res.status(400).json({ error: 'That code is not right. Check the app shows FloraScan and try the current code.' });
+    const after = await update('users', req.user.id, {
+      totp_secret: req.user.totp_pending, totp_pending: null, totp_enabled_at: nowIso(),
+      totp_last_step: step, updated_at: nowIso(),
+    });
+    audit({ user_id: req.user.id, action: 'two_factor_enabled', entity_type: 'users', entity_id: req.user.id, new_values: { two_factor: 1 } });
+    activity({ user_id: req.user.id, action: 'two_factor_enabled', detail: 'Turned on two-step verification' });
+    res.json({ user: shapeUser(after) });
+  }));
+
+  /** Turning it off takes the password and a current code, so a borrowed session cannot. */
+  api.post('/auth/2fa/disable', route(async (req, res) => {
+    if (!req.user) return res.status(401).json({ error: 'Sign in required' });
+    if (!req.user.totp_enabled_at) return res.json({ user: shapeUser(req.user) });
+    if (!await verifyPassword(req.body?.current_password, req.user.password_hash)) {
+      return res.status(400).json({ error: 'Your current password is not correct.' });
+    }
+    const secret = totp.openSecret(req.user.totp_secret);
+    const step = secret ? totp.verifyCode(secret, req.body?.code, req.user.totp_last_step) : null;
+    if (step === null) return res.status(400).json({ error: 'That code is not right.' });
+    const after = await update('users', req.user.id, {
+      totp_secret: null, totp_pending: null, totp_enabled_at: null, totp_last_step: null, updated_at: nowIso(),
+    });
+    audit({ user_id: req.user.id, action: 'two_factor_disabled', entity_type: 'users', entity_id: req.user.id, old_values: { two_factor: 1 }, new_values: { two_factor: 0 } });
+    activity({ user_id: req.user.id, action: 'two_factor_disabled', detail: 'Turned off two-step verification' });
+    res.json({ user: shapeUser(after) });
+  }));
+
+  /**
+   * A signed-in user chooses their own password. A wrong current password is
+   * a 400, not a 401: the browser drops its token on a 401, and a typo here
+   * should not sign anybody out.
+   */
+  api.post('/auth/password', route(async (req, res) => {
+    if (!req.user) return res.status(401).json({ error: 'Sign in required' });
+    const { current_password: current, new_password: next } = req.body || {};
+    if (!await verifyPassword(current, req.user.password_hash)) {
+      activity({ user_id: req.user.id, action: 'password_change_failed', detail: 'Wrong current password' });
+      return res.status(400).json({ error: 'Your current password is not correct.' });
+    }
+    const problem = newPasswordProblem(next, current);
+    if (problem) return res.status(400).json({ error: problem });
+
+    // Every new password comes with a fresh recovery code; the old one stops working.
+    const code = newRecoveryCode();
+    const after = await update('users', req.user.id, {
+      password_hash: hashPassword(next), recovery_code_hash: hashRecoveryCode(code),
+      must_change_password: 0, updated_at: nowIso(),
+    });
+    await revokeOthersFor(req.user.id, req.get('authorization').slice(7));
+    audit({ user_id: req.user.id, action: 'password_changed', entity_type: 'users', entity_id: req.user.id, new_values: { must_change_password: 0 } });
+    activity({ user_id: req.user.id, action: 'password_changed', detail: 'Changed their own password' });
+    res.json({ user: shapeUser(after), recovery_code: code });
+  }));
+
+  /** A replacement recovery code, for a user who lost theirs but still knows the password. */
+  api.post('/auth/recovery-code', route(async (req, res) => {
+    if (!req.user) return res.status(401).json({ error: 'Sign in required' });
+    if (!await verifyPassword(req.body?.current_password, req.user.password_hash)) {
+      return res.status(400).json({ error: 'Your current password is not correct.' });
+    }
+    const code = newRecoveryCode();
+    const after = await update('users', req.user.id, { recovery_code_hash: hashRecoveryCode(code), updated_at: nowIso() });
+    activity({ user_id: req.user.id, action: 'recovery_code_issued', detail: 'Made a new recovery code' });
+    res.json({ user: shapeUser(after), recovery_code: code });
+  }));
+
+  /**
+   * Forgotten password: email + recovery code + new password, no administrator.
+   *
+   * One message for an unknown email, a closed account and a wrong code, so
+   * the form cannot be used to find out which addresses have accounts. A
+   * wrong code counts towards the same lockout as a wrong password.
+   */
+  api.post('/auth/recover', route(async (req, res) => {
+    const { email, recovery_code: code, new_password: next } = req.body || {};
+    const NO_MATCH = 'That email address and recovery code do not match.';
+    const user = await one('SELECT * FROM users WHERE LOWER(email) = ? LIMIT 1',
+      [String(email || '').toLowerCase().trim()]);
+    if (!user || !user.is_active || user.deleted_at) {
+      activity({ user_id: user?.id ?? null, action: 'recovery_failed', detail: 'No usable account for ' + email });
+      return res.status(400).json({ error: NO_MATCH });
+    }
+    if (isLocked(user)) {
+      return res.status(423).json({ error: LOCKED_MESSAGE, locked_until: user.locked_until, minutes: minutesLeft(user) });
+    }
+    if (!recoveryCodeMatches(code, user.recovery_code_hash)) {
+      const { until } = await recordFailedAttempt(user, 'recovery code');
+      if (until) return res.status(423).json({ error: LOCKED_MESSAGE, locked_until: until, minutes: LOCK_MINUTES });
+      return res.status(400).json({ error: NO_MATCH });
+    }
+    // Checked after the code, so the rules are not a free hint to a stranger.
+    const problem = newPasswordProblem(next, null);
+    if (problem) return res.status(400).json({ error: problem });
+
+    // The code is single use: it is replaced here, and the new one is shown once.
+    const fresh = newRecoveryCode();
+    const after = await update('users', user.id, {
+      password_hash: hashPassword(next), recovery_code_hash: hashRecoveryCode(fresh),
+      must_change_password: 0, failed_login_count: 0, locked_until: null,
+      // Sorted it themselves, so a request still waiting with the admins is moot.
+      reset_requested_at: null,
+      last_login_at: nowIso(), updated_at: nowIso(),
+    });
+    // Whoever had the old password is signed out everywhere.
+    await revokeAllFor(user.id);
+    await q("UPDATE password_reset_requests SET status = 'closed' WHERE user_id = ? AND status IN ('pending', 'approved')", [user.id]);
+    audit({ user_id: user.id, action: 'password_recovered', entity_type: 'users', entity_id: user.id, new_values: { must_change_password: 0 } });
+    activity({ user_id: user.id, action: 'password_changed', detail: 'Reset their password with a recovery code' });
+    res.json(await finishReset(after, fresh));
+  }));
+
+  /**
+   * Forgot the password and never saved a recovery code: ask the
+   * administrators. They are notified inside FloraScan, check it is really
+   * the person, and reset the password from Staff accounts.
+   *
+   * The answer is the same whether or not the email has an account, so this
+   * cannot be used to find out who works here.
+   */
+  api.post('/auth/reset-request', route(async (req, res) => {
+    const email = String(req.body?.email || '').toLowerCase().trim();
+    if (!email) return res.status(400).json({ error: 'Email address is required.' });
+
+    // The secret stays in the asking browser; the code is read out to an admin.
+    const token = crypto.randomBytes(24).toString('hex');
+    const code = String(crypto.randomInt(0, 1000000)).padStart(6, '0');
+    const reply = { token, code, expires_in_minutes: RESET_REQUEST_MINUTES };
+
+    const user = await one('SELECT * FROM users WHERE LOWER(email) = ? LIMIT 1', [email]);
+    if (!user || !user.is_active || user.deleted_at) {
+      // A code and token like any other, which simply never get approved.
+      activity({ user_id: null, action: 'reset_requested', detail: 'Reset asked for an unknown or closed account: ' + email });
+      return res.json(reply);
+    }
+
+    // A newer request replaces one still waiting, so only the latest screen can win.
+    await q("UPDATE password_reset_requests SET status = 'closed' WHERE user_id = ? AND status IN ('pending', 'approved')", [user.id]);
+    await insert('password_reset_requests', {
+      user_id: user.id, token_hash: hashToken(token), check_code: code, status: 'pending',
+      created_at: nowIso(), expires_at: new Date(Date.now() + RESET_REQUEST_MINUTES * 60000).toISOString(),
+    });
+    await update('users', user.id, { reset_requested_at: nowIso() });
+
+    // Once per quarter hour, so the button cannot bury the administrators.
+    const last = resetNotifiedAt.get(user.id) || 0;
+    if (Date.now() - last > 15 * 60000) {
+      resetNotifiedAt.set(user.id, Date.now());
+      await notifyPermission('user.manage', {
+        type: 'password.reset_request',
+        title: `${user.full_name} forgot their password`,
+        body: `${user.email} is waiting for approval to choose a new password. Ask them for the six-digit code on their screen - in person or by phone - and enter it on their account.`,
+        related_type: 'user', related_id: user.id,
+      });
+    }
+    activity({ user_id: user.id, action: 'reset_requested', detail: 'Asked an administrator to approve a password reset' });
+    res.json(reply);
+  }));
+
+  /* -------- administrators' recovery email -------- */
+
+  const emailDelivery = () => (process.env.SMTP_USER && process.env.SMTP_PASS ? 'email' : 'terminal');
+
+  /** Step 1 of adding one: send a code to the new address. */
+  api.post('/auth/recovery-email', route(async (req, res) => {
+    if (!req.user) return res.status(401).json({ error: 'Sign in required' });
+    if (!isAdmin(req.user)) return res.status(403).json({ error: 'A recovery email is for administrators.' });
+    const { email, current_password: current } = req.body || {};
+    if (!await verifyPassword(current, req.user.password_hash)) {
+      return res.status(400).json({ error: 'Your current password is not correct.' });
+    }
+    const address = String(email || '').trim().toLowerCase();
+    if (!EMAIL_RE.test(address) || address.length > 190) return res.status(400).json({ error: 'That does not look like an email address.' });
+    if (address === String(req.user.email).toLowerCase()) {
+      return res.status(400).json({ error: 'Use a different address from the one you sign in with.' });
+    }
+    if (emailThrottled(req.user.id, 'verify')) {
+      return res.status(429).json({ error: 'A code was sent a moment ago. Wait a minute before asking again.' });
+    }
+    await issueEmailCode(req.user, 'verify', address);
+    activity({ user_id: req.user.id, action: 'recovery_email_code', detail: 'Sent a code to confirm a recovery email' });
+    res.json({ sent_to: maskEmail(address), delivery: emailDelivery() });
+  }));
+
+  /** Step 2: the code typed back proves the address is real and theirs. Only now is it saved. */
+  api.post('/auth/recovery-email/confirm', route(async (req, res) => {
+    if (!req.user) return res.status(401).json({ error: 'Sign in required' });
+    if (!isAdmin(req.user)) return res.status(403).json({ error: 'A recovery email is for administrators.' });
+    const { ok, row } = await checkEmailCode(req.user.id, 'verify', req.body?.code);
+    if (!ok) {
+      return res.status(400).json({ error: row ? 'That code is not right.' : 'No code is waiting, or it ran out. Send a new one.' });
+    }
+    const after = await update('users', req.user.id, { recovery_email: row.email, recovery_email_verified_at: nowIso(), updated_at: nowIso() });
+    audit({ user_id: req.user.id, action: 'recovery_email_set', entity_type: 'users', entity_id: req.user.id, new_values: { recovery_email: maskEmail(row.email) } });
+    activity({ user_id: req.user.id, action: 'recovery_email_set', detail: 'Confirmed a recovery email' });
+    res.json({ user: shapeUser(after) });
+  }));
+
+  /**
+   * Forgotten password, administrator: email a code to the recovery address.
+   * The answer never says whether the account exists or has an address.
+   */
+  api.post('/auth/email-reset', route(async (req, res) => {
+    const email = String(req.body?.email || '').toLowerCase().trim();
+    if (!email) return res.status(400).json({ error: 'Email address is required.' });
+    const reply = { ok: true, delivery: emailDelivery() };
+    const user = await one('SELECT * FROM users WHERE LOWER(email) = ? LIMIT 1', [email]);
+    if (!user || !user.is_active || user.deleted_at || !isAdmin(user) || !user.recovery_email_verified_at) {
+      activity({ user_id: user?.id ?? null, action: 'email_reset_requested', detail: 'No recovery email to send to for ' + email });
+      return res.json(reply);
+    }
+    if (!emailThrottled(user.id, 'reset')) {
+      await issueEmailCode(user, 'reset', user.recovery_email);
+      activity({ user_id: user.id, action: 'email_reset_requested', detail: 'Sent a reset code to the recovery email' });
+    }
+    res.json(reply);
+  }));
+
+  api.post('/auth/email-reset/complete', route(async (req, res) => {
+    const { email, code, new_password: next } = req.body || {};
+    const NO_MATCH = 'That email address and code do not match.';
+    const user = await one('SELECT * FROM users WHERE LOWER(email) = ? LIMIT 1', [String(email || '').toLowerCase().trim()]);
+    if (!user || !user.is_active || user.deleted_at || !isAdmin(user)) return res.status(400).json({ error: NO_MATCH });
+    if (isLocked(user)) {
+      return res.status(423).json({ error: LOCKED_MESSAGE, locked_until: user.locked_until, minutes: minutesLeft(user) });
+    }
+    // Checked before the code is spent, so a weak password does not waste it.
+    const problem = newPasswordProblem(next, null);
+    if (problem) return res.status(400).json({ error: problem });
+    const { ok } = await checkEmailCode(user.id, 'reset', code);
+    if (!ok) {
+      // Shares the lockout with passwords, so the code cannot be guessed faster.
+      const { until } = await recordFailedAttempt(user, 'emailed code');
+      if (until) return res.status(423).json({ error: LOCKED_MESSAGE, locked_until: until, minutes: LOCK_MINUTES });
+      return res.status(400).json({ error: NO_MATCH });
+    }
+
+    const fresh = newRecoveryCode();
+    const after = await update('users', user.id, {
+      password_hash: hashPassword(next), recovery_code_hash: hashRecoveryCode(fresh),
+      must_change_password: 0, failed_login_count: 0, locked_until: null, reset_requested_at: null,
+      last_login_at: nowIso(), updated_at: nowIso(),
+    });
+    await revokeAllFor(user.id);
+    await q("UPDATE password_reset_requests SET status = 'closed' WHERE user_id = ? AND status IN ('pending', 'approved')", [user.id]);
+    audit({ user_id: user.id, action: 'password_recovered', entity_type: 'users', entity_id: user.id, new_values: { via: 'recovery email' } });
+    activity({ user_id: user.id, action: 'password_changed', detail: 'Reset their password with a code sent to the recovery email' });
+    res.json(await finishReset(after, fresh));
+  }));
+
+  /** The waiting screen asks every few seconds whether it has been approved. */
+  api.post('/auth/reset-request/status', route(async (req, res) => {
+    const row = await one('SELECT * FROM password_reset_requests WHERE token_hash = ? LIMIT 1', [hashToken(String(req.body?.token || ''))]);
+    // No row: an unknown email's pretend request, which just keeps waiting.
+    if (!row) return res.json({ status: 'pending' });
+    res.json({ status: requestExpired(row) ? 'expired' : row.status });
+  }));
+
+  /**
+   * The waiting screen was left - refreshed, closed, or "cancel" pressed. The
+   * request dies with it, approved or not, so nobody coming to that browser
+   * afterwards can finish it. Sent with navigator.sendBeacon as the page goes.
+   */
+  api.post('/auth/reset-request/cancel', route(async (req, res) => {
+    const row = await one('SELECT * FROM password_reset_requests WHERE token_hash = ? LIMIT 1', [hashToken(String(req.body?.token || ''))]);
+    if (row && ['pending', 'approved'].includes(row.status)) {
+      await update('password_reset_requests', row.id, { status: 'closed' });
+      await update('users', row.user_id, { reset_requested_at: null });
+      activity({ user_id: row.user_id, action: 'reset_cancelled', detail: `Left the reset screen; the ${row.status} request was closed` });
+    }
+    res.json({ ok: true });
+  }));
+
+  /** Approved: the waiting screen - and only it - chooses the new password. */
+  api.post('/auth/reset-request/complete', route(async (req, res) => {
+    const { token, new_password: next } = req.body || {};
+    const row = await one('SELECT * FROM password_reset_requests WHERE token_hash = ? LIMIT 1', [hashToken(String(token || ''))]);
+    if (!row || row.status !== 'approved' || requestExpired(row)) {
+      return res.status(400).json({ error: 'This request has not been approved, or it has run out. Ask again.' });
+    }
+    const user = await byId('users', row.user_id);
+    if (!user || !user.is_active || user.deleted_at) {
+      return res.status(403).json({ error: 'This account has been deactivated by an administrator.' });
+    }
+    const problem = newPasswordProblem(next, null);
+    if (problem) return res.status(400).json({ error: problem });
+
+    const fresh = newRecoveryCode();
+    const after = await update('users', user.id, {
+      password_hash: hashPassword(next), recovery_code_hash: hashRecoveryCode(fresh),
+      must_change_password: 0, failed_login_count: 0, locked_until: null, reset_requested_at: null,
+      last_login_at: nowIso(), updated_at: nowIso(),
+    });
+    await update('password_reset_requests', row.id, { status: 'used' });
+    await revokeAllFor(user.id);
+    audit({ user_id: user.id, action: 'password_recovered', entity_type: 'users', entity_id: user.id, new_values: { approved_by: row.decided_by } });
+    activity({ user_id: user.id, action: 'password_changed', detail: 'Chose a new password after an administrator approved it' });
+    res.json(await finishReset(after, fresh));
+  }));
+
+  /* -------- passkeys: Face ID, fingerprint, the phone's pattern / PIN -------- */
+
+  /**
+   * Where passkeys work. On an IP address they cannot, so the page is told
+   * the named address to switch to instead.
+   */
+  const passkeyHome = (req) => {
+    const name = localHostName();
+    const port = req.app.get('protoPort');
+    return name && req.app.get('protoScheme') === 'https' && !req.app.get('trust proxy')
+      ? `https://${name}${port ? ':' + port : ''}` : null;
+  };
+  const PASSKEY_NO_ADDRESS = 'Face ID and fingerprint sign-in need the named address, not a number.';
+  const PASSKEY_FAILED = 'Face ID or fingerprint sign-in could not be confirmed. Try again, or use your password.';
+
+  api.get('/auth/passkeys', route(async (req, res) => {
+    if (!req.user) return res.status(401).json({ error: 'Sign in required' });
+    const rows = await q(
+      'SELECT id, device_label, rp_id, created_at, last_used_at FROM passkeys WHERE user_id = ? ORDER BY id',
+      [req.user.id],
+    );
+    const rp = passkeys.relyingParty(req);
+    res.json({ results: rows, rp_id: rp?.rpID ?? null, named_url: rp ? null : passkeyHome(req) });
+  }));
+
+  api.post('/auth/passkeys/register/options', route(async (req, res) => {
+    if (!req.user) return res.status(401).json({ error: 'Sign in required' });
+    const rp = passkeys.relyingParty(req);
+    if (!rp) return res.status(400).json({ error: PASSKEY_NO_ADDRESS, named_url: passkeyHome(req) });
+    const existing = await q('SELECT credential_id, transports FROM passkeys WHERE user_id = ? AND rp_id = ?', [req.user.id, rp.rpID]);
+    res.json({ options: await passkeys.registrationOptions(req.user, existing, rp) });
+  }));
+
+  api.post('/auth/passkeys/register/verify', route(async (req, res) => {
+    if (!req.user) return res.status(401).json({ error: 'Sign in required' });
+    let row;
+    try {
+      row = await passkeys.verifyRegistration(req.user, req.body?.response);
+    } catch {
+      return res.status(400).json({ error: PASSKEY_FAILED });
+    }
+    const label = passkeys.deviceLabel(req.get('user-agent'), row.transports);
+    const saved = await insert('passkeys', { ...row, user_id: req.user.id, device_label: label, created_at: nowIso() });
+    audit({ user_id: req.user.id, action: 'passkey_added', entity_type: 'users', entity_id: req.user.id, new_values: { device: label, rp_id: row.rp_id } });
+    activity({ user_id: req.user.id, action: 'passkey_added', detail: `Turned on Face ID / fingerprint sign-in (${label})` });
+    res.status(201).json({ passkey: { id: saved.id, device_label: label, rp_id: row.rp_id, created_at: saved.created_at, last_used_at: null } });
+  }));
+
+  api.delete('/auth/passkeys/:id', route(async (req, res) => {
+    if (!req.user) return res.status(401).json({ error: 'Sign in required' });
+    // Scoped to the signed-in user, so nobody can remove someone else's.
+    const row = await one('SELECT * FROM passkeys WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
+    if (!row) return res.status(404).json({ error: 'Not found' });
+    await q('DELETE FROM passkeys WHERE id = ?', [row.id]);
+    audit({ user_id: req.user.id, action: 'passkey_removed', entity_type: 'users', entity_id: req.user.id, old_values: { device: row.device_label, rp_id: row.rp_id } });
+    activity({ user_id: req.user.id, action: 'passkey_removed', detail: `Turned off Face ID / fingerprint sign-in (${row.device_label})` });
+    res.json({ ok: true });
+  }));
+
+  api.post('/auth/passkeys/login/options', route(async (req, res) => {
+    const rp = passkeys.relyingParty(req);
+    if (!rp) return res.status(400).json({ error: PASSKEY_NO_ADDRESS, named_url: passkeyHome(req) });
+    res.json(await passkeys.authenticationOptions(rp));
+  }));
+
+  api.post('/auth/passkeys/login/verify', route(async (req, res) => {
+    const { flow, response } = req.body || {};
+    const row = response?.id
+      ? await one('SELECT * FROM passkeys WHERE credential_id = ? LIMIT 1', [String(response.id)])
+      : null;
+    if (!row) {
+      activity({ user_id: null, action: 'login_failed', detail: 'Unknown passkey' });
+      return res.status(400).json({ error: 'This device has no FloraScan passkey any more. Sign in with your password.' });
+    }
+    const user = await byId('users', row.user_id);
+    if (!user || !user.is_active || user.deleted_at) {
+      return res.status(403).json({ error: 'This account has been deactivated by an administrator.' });
+    }
+    // The lock is about the account, not the method: a stolen phone does not get around it.
+    if (isLocked(user)) {
+      return res.status(423).json({ error: LOCKED_MESSAGE, locked_until: user.locked_until, minutes: minutesLeft(user) });
+    }
+    let counter;
+    try {
+      counter = await passkeys.verifyAuthentication(flow, response, row);
+    } catch {
+      activity({ user_id: user.id, action: 'login_failed', detail: 'Passkey not confirmed' });
+      return res.status(400).json({ error: PASSKEY_FAILED });
+    }
+    await q('UPDATE passkeys SET counter = ?, last_used_at = ? WHERE id = ?', [counter, nowIso(), row.id]);
+    const after = await update('users', user.id, { last_login_at: nowIso(), failed_login_count: 0, locked_until: null });
+    activity({ user_id: user.id, action: 'login', detail: `Signed in with Face ID / fingerprint (${row.device_label})` });
+    res.json({ token: await issueToken(user.id), user: shapeUser(after) });
   }));
 
   api.post('/auth/logout', route(async (req, res) => {
@@ -594,21 +1262,6 @@ export function createApi() {
       await revokeToken(token);
     }
     res.json({ ok: true });
-  }));
-
-  /**
-   * Prototype-only: jump straight into any demo account.
-   * This is what the floating role switcher calls. It exists so the team and
-   * the client can compare roles quickly; it is NOT part of the real design
-   * and must not ship to production.
-   */
-  api.post('/auth/switch', route(async (req, res) => {
-    const user = await byId('users', req.body?.user_id);
-    if (!user) return res.status(404).json({ error: 'No such demo account' });
-    if (!user.is_active) return res.status(403).json({ error: 'That account is deactivated - reactivate it from the Admin dashboard first.' });
-    await update('users', user.id, { last_login_at: nowIso() });
-    activity({ user_id: user.id, action: 'login', detail: 'Switched role (prototype switcher)' });
-    res.json({ token: await issueToken(user.id), user: shapeUser(user) });
   }));
 
   /* ================================================================ */
@@ -1240,7 +1893,7 @@ export function createApi() {
            FROM audit_logs a LEFT JOIN users u ON u.id = a.user_id
           WHERE a.entity_type = 'plants' AND a.entity_id = ? ORDER BY a.created_at DESC`, [plant.id]),
     ]);
-    res.json({ revisions, audits });
+    res.json({ revisions, audits: audits.map(auditRow) });
   }));
 
   /* -------- submissions -------- */
@@ -1474,12 +2127,79 @@ export function createApi() {
     await update('users', u.id, {
       password_hash: hashPassword(DEMO_PASSWORD),
       must_change_password: 1,
+      // A reset may be because the account was taken over, so a code the
+      // intruder could have seen goes too; a new one comes with the new password.
+      recovery_code_hash: null,
+      // Usually a reset because the phone is lost too, so two-step
+      // verification goes; they can turn it on again with the new phone.
+      totp_secret: null, totp_pending: null, totp_enabled_at: null, totp_last_step: null,
+      // A fresh password is a fresh start: a lock earned against the old one
+      // goes, and so does a request for this reset.
+      failed_login_count: 0, locked_until: null, reset_requested_at: null,
       updated_at: nowIso(),
     });
     await revokeAllFor(u.id);
+    // Same reasoning as the recovery code: whoever took the account may have
+    // added their own phone. The user turns Face ID back on afterwards.
+    await q('DELETE FROM passkeys WHERE user_id = ?', [u.id]);
+    // Dealt with by hand, so a request still waiting has nothing left to do.
+    await q("UPDATE password_reset_requests SET status = 'closed' WHERE user_id = ? AND status IN ('pending', 'approved')", [u.id]);
     audit({ user_id: req.user.id, action: 'password_reset', entity_type: 'users', entity_id: u.id, new_values: { must_change_password: 1 } });
     activity({ user_id: req.user.id, action: 'password_changed', detail: 'Reset the password for ' + u.email });
     res.json({ ok: true, temporary_password: DEMO_PASSWORD });
+  }));
+
+  /**
+   * Approve a waiting reset request. The administrator types the code the
+   * person reads off their screen, which shows they are talking to whoever
+   * pressed the button - not to someone who only knows the email address.
+   */
+  api.post('/users/:id/reset-request/approve', need('user.manage'), route(async (req, res) => {
+    const u = await byId('users', req.params.id);
+    if (!u) return res.status(404).json({ error: 'Not found' });
+    const row = await pendingResetRequest(u.id);
+    if (!row) return res.status(404).json({ error: 'There is no reset request waiting for this account.' });
+
+    if (String(req.body?.code || '').replace(/\D/g, '') !== row.check_code) {
+      const wrong = row.wrong_codes + 1;
+      if (wrong >= MAX_WRONG_CHECK_CODES) {
+        // Someone is guessing; the person can simply ask again.
+        await update('password_reset_requests', row.id, { wrong_codes: wrong, status: 'denied', decided_by: req.user.id, decided_at: nowIso() });
+        await update('users', u.id, { reset_requested_at: null });
+        audit({ user_id: req.user.id, action: 'reset_denied', entity_type: 'users', entity_id: u.id, new_values: { reason: 'too many wrong codes' } });
+        return res.status(400).json({ error: 'Too many wrong codes, so the request has been refused. They can ask again.' });
+      }
+      await update('password_reset_requests', row.id, { wrong_codes: wrong });
+      return res.status(400).json({ error: 'That is not the code on their screen.', attempts_left: MAX_WRONG_CHECK_CODES - wrong });
+    }
+
+    await update('password_reset_requests', row.id, { status: 'approved', decided_by: req.user.id, decided_at: nowIso() });
+    await update('users', u.id, { reset_requested_at: null });
+    audit({ user_id: req.user.id, action: 'reset_approved', entity_type: 'users', entity_id: u.id, new_values: { request_id: row.id } });
+    activity({ user_id: req.user.id, action: 'reset_approved', detail: 'Approved a password reset for ' + u.email });
+    res.json({ ok: true });
+  }));
+
+  api.post('/users/:id/reset-request/deny', need('user.manage'), route(async (req, res) => {
+    const u = await byId('users', req.params.id);
+    if (!u) return res.status(404).json({ error: 'Not found' });
+    const row = await pendingResetRequest(u.id);
+    if (!row) return res.status(404).json({ error: 'There is no reset request waiting for this account.' });
+    await update('password_reset_requests', row.id, { status: 'denied', decided_by: req.user.id, decided_at: nowIso() });
+    await update('users', u.id, { reset_requested_at: null });
+    audit({ user_id: req.user.id, action: 'reset_denied', entity_type: 'users', entity_id: u.id, new_values: { request_id: row.id } });
+    activity({ user_id: req.user.id, action: 'reset_denied', detail: 'Refused a password reset request for ' + u.email });
+    res.json({ ok: true });
+  }));
+
+  /** Lift a wrong-password lock before it runs out on its own. */
+  api.post('/users/:id/unlock', need('user.manage'), route(async (req, res) => {
+    const u = await byId('users', req.params.id);
+    if (!u) return res.status(404).json({ error: 'Not found' });
+    const after = await update('users', u.id, { failed_login_count: 0, locked_until: null, updated_at: nowIso() });
+    audit({ user_id: req.user.id, action: 'account_unlocked', entity_type: 'users', entity_id: u.id, old_values: { locked_until: u.locked_until }, new_values: { locked_until: null } });
+    activity({ user_id: req.user.id, action: 'account_unlocked', detail: 'Unlocked ' + u.email });
+    res.json({ user: shapeUser(after) });
   }));
 
   api.get('/activity', need('system.audit'), route(async (req, res) => {
@@ -1511,7 +2231,7 @@ export function createApi() {
       total,
       entity_types: types.map((r) => r.entity_type),
       actions: actions.map((r) => r.action),
-      results: rows,
+      results: rows.map(auditRow),
     });
   }));
 
@@ -1637,6 +2357,7 @@ export function createApi() {
       addresses: hosted ? [] : addrs.map((a) => ({ ...a, url: `${scheme}://${a.address}:${port}` })),
       secure: scheme === 'https',
       ca_url: hosted ? null : (req.app.get('protoCaPath') || null),
+      passkey_url: hosted ? null : passkeyHome(req),
       note: hosted
         ? 'Open this address on your phone, or scan the code. The site has a real certificate, so there is nothing to accept and the camera scanner works straight away.'
         : scheme === 'https'

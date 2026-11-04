@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 // and scripts/seed-mysql.mjs writes it into MySQL.
 import { db, insert, nowIso, notify, notifyPermission, audit, activity, reset } from './seed-store.js';
 import { SPECIES_DATA, photoExists, tintFor } from './species-data.js';
-import { hashPassword, DEMO_PASSWORD } from './passwords.js';
+import { hashPassword } from './passwords.js';
 
 const SPECIES = SPECIES_DATA.species;
 
@@ -105,20 +105,20 @@ export function seed() {
 
   /* ---------------------------------------------------------------- */
   /* Staff accounts                                                    */
-  /* Demo password for every account is 'demo1234'.                    */
+  /* Each account has its own password: the email's local part + 123. */
   /* ---------------------------------------------------------------- */
   const USERS = [
-    { role: 1, full_name: 'Neng Yi Chieng', email: 'admin@niah.sarawak.gov.my', title: 'System Administrator' },
-    { role: 3, full_name: 'Dr Sue Han Lee', email: 'suehan.lee@niah.sarawak.gov.my', title: 'Senior Botanist' },
-    { role: 3, full_name: 'Hans Jia Syn Yee', email: 'hans.yee@niah.sarawak.gov.my', title: 'Botanist' },
-    { role: 2, full_name: 'Edmund Guo Qian Yu', email: 'edmund.yu@niah.sarawak.gov.my', title: 'Park Ranger' },
-    { role: 2, full_name: 'Lim Yon', email: 'lim.yon@niah.sarawak.gov.my', title: 'Park Ranger' },
-    { role: 2, full_name: 'Edward Ngie Jie Ling', email: 'edward.ling@niah.sarawak.gov.my', title: 'Field Ranger' },
-    { role: 2, full_name: 'Darren Chong Yue Yang', email: 'darren.chong@niah.sarawak.gov.my', title: 'Field Ranger' },
-    { role: 1, full_name: 'Jiaqi Hu', email: 'jiaqi.hu@niah.sarawak.gov.my', title: 'Administrator (on leave)', inactive: true },
+    { role: 1, full_name: 'Neng Yi Chieng', email: 'nengyichieng@gmail.com', password: 'nengyichieng123', title: 'System Administrator' },
+    { role: 3, full_name: 'Dr Sue Han Lee', email: 'drsuehanlee@gmail.com', password: 'drsuehanlee123', title: 'Senior Botanist' },
+    { role: 3, full_name: 'Hans Jia Syn Yee', email: 'hansjiasynyee@gmail.com', password: 'hansjiasynyee123', title: 'Botanist' },
+    { role: 2, full_name: 'Edmund Guo Qian Yu', email: 'edmundguoqianyu@gmail.com', password: 'edmundguoqianyu123', title: 'Park Ranger' },
+    { role: 2, full_name: 'Lim Yon', email: 'limyon@gmail.com', password: 'limyon123', title: 'Park Ranger' },
+    { role: 2, full_name: 'Edward Ngie Jie Ling', email: 'edwardngiejieling@gmail.com', password: 'edwardngiejieling123', title: 'Field Ranger' },
+    { role: 2, full_name: 'Darren Chong Yue Yang', email: 'darrenyueyangchong@gmail.com', password: 'darrenyueyangchong123', title: 'Field Ranger' },
+    { role: 1, full_name: 'Jiaqi Hu', email: 'jiaqihu@gmail.com', password: 'jiaqihu123', title: 'Administrator' },
     // Appended rather than inserted, so the indexes used further down for the
     // audit history still point at the same people.
-    { role: 4, full_name: 'Dr Mei Ling Wong', email: 'meiling.wong@niah.sarawak.gov.my', title: 'Herbarium Curator' },
+    { role: 4, full_name: 'Dr Mei Ling Wong', email: 'drmeilingwong@gmail.com', password: 'drmeilingwong123', title: 'Herbarium Curator' },
   ];
 
   USERS.forEach((u, i) => insert('users', {
@@ -128,8 +128,7 @@ export function seed() {
     title: u.title,
     phone: '+60 8' + (5000000 + Math.floor(rnd() * 900000)),
     // A real bcrypt hash, salted per account, exactly as the schema specifies.
-    // Every demo account shares the same password; the hashes still differ.
-    password_hash: hashPassword(DEMO_PASSWORD),
+    password_hash: hashPassword(u.password),
     must_change_password: 0,
     is_active: u.inactive ? 0 : 1,
     email_verified_at: daysAgo(120),
