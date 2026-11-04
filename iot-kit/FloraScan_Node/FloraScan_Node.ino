@@ -36,6 +36,7 @@
 
 #include <WiFi.h>
 #include <PubSubClient.h>
+#include <WiFiClientSecure.h>
 
 // Where a failed DHT read stopped, so the Serial Monitor can say why.
 // Keep this above every function: the Arduino IDE inserts function declarations just
@@ -51,8 +52,32 @@ const char *WIFI_PASSWORD = "YOUR-WIFI-PASSWORD";  // don't share or commit your
 const unsigned long REPORT_INTERVAL_MS = 20UL * 1000;
 
 // ===== 2. MQTT and the FloraScan backend ===============================
-const char *MQTT_HOST = "broker.hivemq.com";
-const uint16_t MQTT_PORT = 1883;
+const char *MQTT_HOST = "l11c8d1d.ala.asia-southeast1.emqxsl.com";
+const uint16_t MQTT_PORT = 8883;
+const char *MQTT_USER = "iot_service";
+const char *MQTT_PASS = "IotTesting1234";
+const char* EMQX_CA_CERT = R"EOF(-----BEGIN CERTIFICATE-----
+MIIDjjCCAnagAwIBAgIQAzrx5qcRqaC7KGSxHQn65TANBgkqhkiG9w0BAQsFADBh
+MQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYDVQQLExB3
+d3cuZGlnaWNlcnQuY29tMSAwHgYDVQQDExdEaWdpQ2VydCBHbG9iYWwgUm9vdCBH
+MjAeFw0xMzA4MDExMjAwMDBaFw0zODAxMTUxMjAwMDBaMGExCzAJBgNVBAYTAlVT
+MRUwEwYDVQQKEwxEaWdpQ2VydCBJbmMxGTAXBgNVBAsTEHd3dy5kaWdpY2VydC5j
+b20xIDAeBgNVBAMTF0RpZ2lDZXJ0IEdsb2JhbCBSb290IEcyMIIBIjANBgkqhkiG
+9w0BAQEFAAOCAQ8AMIIBCgKCAQEAuzfNNNx7a8myaJCtSnX/RrohCgiN9RlUyfuI
+2/Ou8jqJkTx65qsGGmvPrC3oXgkkRLpimn7Wo6h+4FR1IAWsULecYxpsMNzaHxmx
+1x7e/dfgy5SDN67sH0NO3Xss0r0upS/kqbitOtSZpLYl6ZtrAGCSYP9PIUkY92eQ
+q2EGnI/yuum06ZIya7XzV+hdG82MHauVBJVJ8zUtluNJbd134/tJS7SsVQepj5Wz
+tCO7TG1F8PapspUwtP1MVYwnSlcUfIKdzXOS0xZKBgyMUNGPHgm+F6HmIcr9g+UQ
+vIOlCsRnKPZzFBQ9RnbDhxSJITRNrw9FDKZJobq7nMWxM4MphQIDAQABo0IwQDAP
+BgNVHRMBAf8EBTADAQH/MA4GA1UdDwEB/wQEAwIBhjAdBgNVHQ4EFgQUTiJUIBiV
+5uNu5g/6+rkS7QYXjzkwDQYJKoZIhvcNAQELBQADggEBAGBnKJRvDkhj6zHd6mcY
+1Yl9PMWLSn/pvtsrF9+wX3N3KjITOYFnQoQj8kVnNeyIv/iPsGEMNKSuIEyExtv4
+NeF22d+mQrvHRAiGfzZ0JFrabA0UWTW98kndth/Jsw1HKj2ZL7tcu7XUIOGZX1NG
+Fdtom/DzMNU+MeKNhJ7jitralj41E6Vf8PlwUHBHQRFXGU7Aj64GxJUTFy8bJZ91
+8rGOmaFvE7FBcf6IKshPECBV1/MUReXgRPTqh5Uykw7+U0b6LJ3/iyK5S9kJRaTe
+pLiaWN0bfVKfjllDiIGknibVb63dDcY3fe0Dkhvld1927jyNxF1WW6LZZm6zNTfl
+MrY=
+-----END CERTIFICATE-----)EOF";
 const char *TOPIC_PREFIX = "florascan-swinburne-demo";  // the backend listens on <prefix>/+/readings
 const char *DEVICE_CODE = "SN-001";             // sensor_devices.device_code
 const char *DEVICE_KEY = "demo-key-change-me";  // the database keeps SHA2(key, 256)
@@ -103,7 +128,7 @@ const float HUM_MIN = 40, HUM_MAX = 90;    // % RH
 const unsigned long PIR_WARMUP_MS = 60000UL;
 
 // ===== Globals ==========================================================
-WiFiClient net;
+WiFiClientSecure net; 
 PubSubClient mqtt(net);
 String topicReadings, clientId;
 unsigned long lastWifiAttemptMs = 0;
@@ -355,7 +380,7 @@ bool connectMqtt() {
   if (WiFi.status() != WL_CONNECTED) return false;
   lastMqttAttemptMs = millis();
   Serial.printf("MQTT: connecting to %s:%u as %s ...", MQTT_HOST, MQTT_PORT, clientId.c_str());
-  if (!mqtt.connect(clientId.c_str())) {
+  if (!mqtt.connect(clientId.c_str(), MQTT_USER, MQTT_PASS)) {
     Serial.printf(" failed (state %d), retrying in 5 s\r\n", mqtt.state());
     return false;
   }
@@ -507,6 +532,8 @@ void setup() {
            (unsigned long)(ESP.getEfuseMac() & 0xFFFFFF));
   clientId = id;
 
+  net.setCACert(EMQX_CA_CERT); 
+
   mqtt.setServer(MQTT_HOST, MQTT_PORT);
   mqtt.setBufferSize(1024);  // a reading is about 350 bytes; the default limit is 256
   mqtt.setKeepAlive(30);
@@ -521,6 +548,26 @@ void setup() {
   startupChecks();
   delay(2000);  // let the DHT settle after the line check
   connectWiFi();
+
+  configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+  Serial.print("Waiting for NTP time sync...");
+  
+  unsigned long startAttemptTime = millis();
+  time_t now = time(nullptr);
+  
+  // Loop until time is valid OR 10 seconds have passed
+  while (now < 24 * 3600 && (millis() - startAttemptTime < 10000)) { 
+    delay(500);
+    Serial.print(".");
+    now = time(nullptr);
+  }
+
+  if (now < 24 * 3600) {
+    Serial.println("\n[ERROR] NTP Time Sync failed! Secure connection might fail.");
+  } else {
+    Serial.println("\n[SUCCESS] Time synced!");
+  }
+
   connectMqtt();
 }
 

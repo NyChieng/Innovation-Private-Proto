@@ -2,7 +2,7 @@ import mqtt from 'mqtt';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { q, insert, update, nowIso } from './db.js';
 
-const MQTT_URL = process.env.MQTT_URL || 'mqtt://broker.hivemq.com:1883';
+const MQTT_URL = process.env.MQTT_URL || 'mqtts://l11c8d1d.ala.asia-southeast1.emqxsl.com';
 
 // Must match TOPIC_PREFIX in the ESP32 sketch. The "+" matches any device
 // code, so adding SN-002, SN-003... needs no change here.
@@ -254,6 +254,8 @@ export function startMqttSubscriber() {
   const client = mqtt.connect(MQTT_URL, {
     reconnectPeriod: 5000, // retry every 5 s if the broker drops us
     connectTimeout: 10000,
+    username: process.env.MQTT_USERNAME || 'backend_service',
+    password: process.env.MQTT_PASSWORD || 'BackendTesting1234',
   });
 
   client.on('connect', () => {
