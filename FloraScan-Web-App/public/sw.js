@@ -11,7 +11,7 @@
  * plant record is always labelled as such by the page that reads it.
  */
 
-const VERSION = 'florascan-v3'; // bump when cached shell files change (v3: apple touch icon set)
+const VERSION = 'florascan-v4'; // refresh cached documents with the security headers
 const SHELL = `${VERSION}-shell`;
 const RUNTIME = `${VERSION}-runtime`;
 
@@ -82,8 +82,11 @@ self.addEventListener('fetch', (event) => {
   if (isPhoto(url)) {
     event.respondWith(
       caches.match(request).then((hit) => hit || fetch(request).then((res) => {
-        const copy = res.clone();
-        caches.open(RUNTIME).then((c) => c.put(request, copy)).catch(() => {});
+        // Never persist a rate-limit/error response as the photograph.
+        if (res.ok) {
+          const copy = res.clone();
+          caches.open(RUNTIME).then((c) => c.put(request, copy)).catch(() => {});
+        }
         return res;
       })),
     );

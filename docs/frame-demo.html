@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FloraScan framing demonstration</title>
+<style>
+  body { font: 17px system-ui, sans-serif; max-width: 850px; margin: 3rem auto; padding: 0 1rem; color: #173528; }
+  input, button { font: inherit; padding: .7rem; }
+  input { width: min(95%, 500px); }
+  button { cursor: pointer; }
+  iframe { width: 100%; height: 350px; margin-top: 1.5rem; border: 2px dashed #527c63; }
+</style>
+<h1>Can another page embed FloraScan?</h1>
+<p>First open FloraScan directly and trust its local HTTPS certificate. Then enter the same address here.</p>
+<form id="form">
+  <label for="url">FloraScan address</label><br>
+  <input id="url" type="url" placeholder="https://localhost:your-port" required>
+  <button>Try embedding</button>
+</form>
+<p id="result">The frame below should stay blocked. Open browser Developer Tools → Console to see the framing-policy refusal.</p>
+<iframe id="frame" title="Attempt to embed FloraScan"></iframe>
+<p>The expected evidence is a refusal mentioning <code>frame-ancestors 'none'</code> or <code>X-Frame-Options: DENY</code>. A certificate or connection error alone is not proof.</p>
+<script>
+  document.getElementById('form').addEventListener('submit', (event) => {
+    event.preventDefault();
+    const url = new URL(document.getElementById('url').value);
+    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) {
+      document.getElementById('result').textContent = 'Enter an HTTP or HTTPS address without credentials.';
+      return;
+    }
+    document.getElementById('frame').src = url.href;
+    document.getElementById('result').textContent = 'Embedding attempted. Check the browser Console for a framing-policy refusal.';
+  });
+</script>
+</html>
