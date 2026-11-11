@@ -85,6 +85,7 @@ const eq = (label, a, b) => check(label, a === b, `expected ${JSON.stringify(b)}
 const ACCOUNTS = {
   admin: 'admin@niah.sarawak.gov.my',
   botanist: 'suehan.lee@niah.sarawak.gov.my',
+  reviewer: 'meiling.wong@niah.sarawak.gov.my',
   ranger: 'edmund.yu@niah.sarawak.gov.my',
 };
 
@@ -358,8 +359,12 @@ section('5. Staff routes under every role');
       if (info.denied) blocked++;
       check(`[${role}] ${r}`, !info.empty, 'rendered nothing');
     }
+    // Exactly the screens outside each role's job (#8). A botanist has no
+    // review queue or admin screens; a reviewer has only the register, the
+    // queue and their own account; a ranger has only the IoT dashboard.
+    const EXPECT_BLOCKED = { botanist: 5, reviewer: 9, ranger: 10 };
     check(`[${role}] pages outside the role are refused with an explanation`,
-      role === 'botanist' ? blocked === 4 : blocked > 0,
+      EXPECT_BLOCKED[role] === undefined ? blocked > 0 : blocked === EXPECT_BLOCKED[role],
       `${blocked} blocked`);
     await expectNoErrors(page, `[${role}] no console errors on any staff screen`);
     await page.close();
@@ -369,7 +374,7 @@ section('5. Staff routes under every role');
 /* ------------------------------------------------------------------ */
 section('6. Registration form - input validation');
 {
-  const token = await tokenFor(ACCOUNTS.ranger);
+  const token = await tokenFor(ACCOUNTS.botanist);
   const page = await newPage({ token });
   await go(page, '/staff/register');
 
@@ -392,8 +397,8 @@ section('6. Registration form - input validation');
   await page.type('input[placeholder*="Hoya"]', 'Testus uiensis (browser test)');
   await sleep(250);
   text = await bodyText(page);
-  check('an unidentified record is flagged as needing a botanist',
-    /always needs a botanist|review queue/i.test(text), text.slice(0, 300));
+  check('an unidentified record is flagged as needing a reviewer',
+    /always goes to a reviewer|review queue/i.test(text), text.slice(0, 300));
 
   // Fill the location and submit.
   await page.type('#site', 'UI test plot, marker 9');
@@ -407,7 +412,7 @@ section('6. Registration form - input validation');
   check('a valid submission navigates to the new record', /\/staff\/plants\/\d+/.test(page.url()), page.url());
   text = await bodyText(page);
   check('...and the record shows as pending review', /Pending review/i.test(text), text.slice(0, 200));
-  check('...carrying the name the ranger typed', /Testus uiensis/.test(text));
+  check('...carrying the name the botanist typed', /Testus uiensis/.test(text));
 
   await expectNoErrors(page, 'no console errors while registering');
   await page.close();
@@ -416,7 +421,7 @@ section('6. Registration form - input validation');
 /* ------------------------------------------------------------------ */
 section('7. Registration form - awkward and out-of-range input');
 {
-  const token = await tokenFor(ACCOUNTS.ranger);
+  const token = await tokenFor(ACCOUNTS.botanist);
   const page = await newPage({ token });
   await go(page, '/staff/register');
 
@@ -443,10 +448,10 @@ section('7. Registration form - awkward and out-of-range input');
   check('...and nothing was submitted', !/\/staff\/plants\/\d+/.test(page.url()), page.url());
 
   // Defence in depth: the API must refuse it even when the client guard is bypassed.
-  const rangerToken = await tokenFor(ACCOUNTS.ranger);
+  const botanistToken = await tokenFor(ACCOUNTS.botanist);
   const direct = await fetch(BASE + '/api/plants', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + rangerToken },
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + botanistToken },
     body: JSON.stringify({ site_name: 'Bypass test', proposed_species_name: 'x', height_m: -40 }),
   });
   const directBody = await direct.json();
@@ -478,7 +483,7 @@ section('7. Registration form - awkward and out-of-range input');
 /* ------------------------------------------------------------------ */
 section('8. Review queue - approve and return');
 {
-  const token = await tokenFor(ACCOUNTS.botanist);
+  const token = await tokenFor(ACCOUNTS.reviewer);
   const page = await newPage({ token });
   await go(page, '/staff/review');
 
@@ -525,7 +530,7 @@ section('8. Review queue - approve and return');
   check('the backdrop covers the viewport height', overlay?.coversHeight === true, JSON.stringify(overlay));
 
   await page.evaluate(() => [...document.querySelectorAll('.modal button')]
-    .find((b) => /Return to ranger/i.test(b.textContent))?.click());
+    .find((b) => /Return to botanist/i.test(b.textContent))?.click());
   await sleep(600);
   text = await bodyText(page);
   check('returning without a note is refused', /note is required/i.test(text), text.slice(-250));
@@ -668,7 +673,7 @@ section('10. Admin - accounts and the approval switch');
 
   await go(page, '/staff/audit');
   check('the setting change reached the audit trail',
-    /Settings/i.test(await bodyText(page)));
+    /System setting/i.test(await page.$eval('.table tbody tr', (r) => r.textContent)));
 
   await expectNoErrors(page, 'no console errors on the admin screens');
   await page.close();
@@ -705,14 +710,14 @@ section('11. Visitor report from a plant page');
 /* ------------------------------------------------------------------ */
 section('12. Phone layout');
 {
-  const token = await tokenFor(ACCOUNTS.ranger);
+  const token = await tokenFor(ACCOUNTS.botanist);
   const page = await newPage({ token, mobile: true, view: 'mobile' });
 
   await go(page, '/');
   const nav = await page.evaluate(() => [...document.querySelectorAll('.bottom-nav .bn-item')].map((e) => e.innerText.trim()));
   check('the bottom tab bar is present', nav.length >= 4, nav.join(','));
   check('...with Scan in the middle', nav.some((n) => /Scan/i.test(n)), nav.join(','));
-  check('...and a Register tab for a ranger', nav.some((n) => /Register/i.test(n)), nav.join(','));
+  check('...and a Register tab for a botanist', nav.some((n) => /Register/i.test(n)), nav.join(','));
   check('the desktop sidebar is hidden', await page.evaluate(() => !document.querySelector('.sidebar')));
 
   await go(page, '/staff/me');
@@ -1390,14 +1395,14 @@ section('27. Images reserve space and become visible');
 /* ------------------------------------------------------------------ */
 section('28. The layout survives awkward content and the floating pill');
 {
-  // A ranger types notes on a phone in the field. Sooner or later one of them
-  // pastes a long URL or holds a key down, and a grid track whose implicit
-  // min-width is auto will stretch and drag the whole page sideways.
+  // A botanist types notes on a phone in the field. Sooner or later one of
+  // them pastes a long URL or holds a key down, and a grid track whose
+  // implicit min-width is auto will stretch and drag the whole page sideways.
+  const revToken = await tokenFor(ACCOUNTS.reviewer);
   const botToken = await tokenFor(ACCOUNTS.botanist);
-  const rangerToken = await tokenFor(ACCOUNTS.ranger);
   const made = await fetch(BASE + '/api/plants', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + rangerToken },
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + botToken },
     body: JSON.stringify({
       site_name: 'UI test plot, long-token layout',
       proposed_species_name: 'Unbroken string case',
@@ -1409,7 +1414,7 @@ section('28. The layout survives awkward content and the floating pill');
   check('a record with an unbroken 900-character note is accepted', made.status === 201);
 
   for (const width of [360, 1280]) {
-    const page = await newPage({ token: botToken });
+    const page = await newPage({ token: revToken });
     await page.setViewport({ width, height: 860, isMobile: width < 500, hasTouch: width < 500 });
     await page.goto(BASE + '/staff/review', { waitUntil: 'networkidle2' });
     await new Promise((r) => setTimeout(r, 700));
@@ -1459,6 +1464,138 @@ section('28. The layout survives awkward content and the floating pill');
     'heights: ' + inlineTargets.join(', '));
   check('no console errors on any of it', page.errors.length === 0, page.errors.join('\n'));
   await page.close();
+}
+
+/* ------------------------------------------------------------------ */
+section('28b. English, Malay and Chinese (#5)');
+{
+  // Malay runs noticeably longer than English and Chinese wraps differently,
+  // so every language is checked for sideways scroll on a narrow phone, not
+  // just for having changed.
+  const SAMPLES = {
+    ms: { home: /Setiap tumbuhan di denai/, nav: /Layari tumbuhan|Imbas/, review: /Baris gilir semakan/, html: 'ms' },
+    zh: { home: /步道上的每一株植物/, nav: /浏览植物|扫描/, review: /审核队列/, html: 'zh-Hans' },
+  };
+  const revToken = await tokenFor(ACCOUNTS.reviewer);
+  const botToken = await tokenFor(ACCOUNTS.botanist);
+
+  for (const [lang, want] of Object.entries(SAMPLES)) {
+    const page = await newPage();
+    await page.evaluate((l) => localStorage.setItem('florascan.lang', l), lang);
+    await go(page, '/');
+    const text = await bodyText(page);
+    check(`[${lang}] the home page is translated`, want.home.test(text), text.slice(0, 160));
+    check(`[${lang}] ...and so is the navigation`, want.nav.test(text));
+    eq(`[${lang}] <html lang> follows the language`, await page.evaluate(() => document.documentElement.lang), want.html);
+    await page.close();
+
+    for (const [who, token, routes] of [
+      ['visitor', null, ['/', '/browse', '/species', '/scan', '/login']],
+      ['botanist', botToken, ['/staff/plants', '/staff/register', '/staff/submissions', '/staff/species']],
+      ['reviewer', revToken, ['/staff/review', '/staff/plants']],
+    ]) {
+      const p = await newPage({ token });
+      await p.evaluate((l) => localStorage.setItem('florascan.lang', l), lang);
+      await p.setViewport({ width: 360, height: 780, isMobile: true, hasTouch: true });
+      const wide = [];
+      for (const r of routes) {
+        await go(p, r);
+        const px = await p.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+        if (px > 1) wide.push(`${r} +${px}px`);
+        if (r === '/staff/review') check(`[${lang}] the review queue is translated`, want.review.test(await bodyText(p)));
+      }
+      check(`[${lang}] [${who}] no screen scrolls sideways at 360px`, wide.length === 0, wide.join(', '));
+      await expectNoErrors(p, `[${lang}] [${who}] no console errors`);
+      await p.close();
+    }
+  }
+
+  // Switching from the header select, rather than from storage.
+  const page = await newPage();
+  await go(page, '/');
+  await page.select('.lang-switch select', 'zh');
+  await sleep(300);
+  check('choosing 中文 in the header switches at once', /步道上的每一株植物/.test(await bodyText(page)));
+  await page.select('.lang-switch select', 'en');
+  await sleep(300);
+  check('...and English comes back', /Every plant on the trail/.test(await bodyText(page)));
+  await expectNoErrors(page, 'no console errors while switching language');
+  await page.close();
+}
+
+/* ------------------------------------------------------------------ */
+section('28c. A reviewer corrects a record without returning it (#6)');
+{
+  const botToken = await tokenFor(ACCOUNTS.botanist);
+  const species = (await (await fetch(BASE + '/api/species')).json()).results[0];
+  const made = await fetch(BASE + '/api/plants', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + botToken },
+    body: JSON.stringify({ species_id: species.id, site_name: 'UI test plot, review edit', height_m: 400 / 100 }),
+  });
+  const plant = (await made.json()).plant;
+  check('a botanist submission is waiting', made.status === 201 && plant.status === 'pending');
+
+  const page = await newPage({ token: await tokenFor(ACCOUNTS.reviewer) });
+  await go(page, '/staff/review');
+  const opened = await page.evaluate((code) => {
+    const card = [...document.querySelectorAll('.card')].find((c) => c.innerText.includes(code));
+    const b = card && [...card.querySelectorAll('button')].find((x) => /Correct details/i.test(x.textContent));
+    if (!b) return false;
+    b.click();
+    return true;
+  }, plant.plant_code);
+  await sleep(400);
+  check('the card offers "Correct details"', opened);
+
+  const saveDisabled = await page.evaluate(() => [...document.querySelectorAll('.modal button')]
+    .find((b) => /Save changes/i.test(b.textContent))?.disabled);
+  check('Save is disabled until something changes', saveDisabled === true);
+
+  await page.evaluate(() => {
+    const i = document.querySelector('#e-site');
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+    setter.call(i, 'UI test plot, review edit (corrected)');
+    i.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await sleep(200);
+  const preview = await page.evaluate(() => document.querySelector('.change-list')?.innerText || '');
+  check('the dialog shows what will change', /corrected/.test(preview), preview);
+
+  await page.evaluate(() => [...document.querySelectorAll('.modal button')]
+    .find((b) => /Save changes/i.test(b.textContent))?.click());
+  await waitFor(() => page.evaluate(() => !document.querySelector('.modal')));
+  check('the correction is saved and the dialog closes', await page.evaluate(() => !document.querySelector('.modal')));
+  check('...and the card shows the new site', /review edit \(corrected\)/.test(await bodyText(page)));
+
+  const hist = await (await fetch(`${BASE}/api/plants/${plant.id}/history`, {
+    headers: { Authorization: 'Bearer ' + botToken },
+  })).json();
+  const rev = hist.revisions.find((r) => r.field_name === 'site_name');
+  check('the history records it against the reviewer', rev?.changed_by_name === 'Dr Mei Ling Wong', rev?.changed_by_name);
+  eq('...with the review reason', rev?.change_reason, 'Corrected at review');
+  check('...and the record is still waiting for a decision',
+    (await bodyText(page)).includes(plant.plant_code));
+
+  await expectNoErrors(page, 'no console errors while correcting at review');
+  await page.close();
+}
+
+/* ------------------------------------------------------------------ */
+section('28d. A ranger lands on the IoT dashboard (#8)');
+{
+  const page = await newPage({ token: await tokenFor(ACCOUNTS.ranger) });
+  await go(page, '/staff');
+  check('a ranger lands on IoT monitoring', page.url().endsWith('/staff/iot'), page.url());
+  const side = await page.evaluate(() => [...document.querySelectorAll('.sidebar .side-link')].map((a) => a.innerText));
+  check('...with no plant management in the sidebar', !side.some((t) => /Register a plant|Plant register|Print QR/i.test(t)), side.join(' | '));
+  await page.close();
+
+  const phone = await newPage({ token: await tokenFor(ACCOUNTS.ranger), mobile: true, view: 'mobile' });
+  await go(phone, '/');
+  const tabs = await phone.evaluate(() => [...document.querySelectorAll('.bottom-nav .bn-item')].map((e) => e.innerText.trim()));
+  check('on a phone a ranger gets an Alerts tab, not Register', tabs.some((t) => /Alerts/.test(t)) && !tabs.some((t) => /Register/.test(t)), tabs.join(','));
+  await phone.close();
 }
 
 /* ------------------------------------------------------------------ */

@@ -7,9 +7,10 @@ import {
   ConservationBadge, StatusBadge, Empty, LoadingBlock, Modal, Notice, CopyButton,
 } from '../components/ui.jsx';
 import {
-  CONSERVATION, GROWTH_FORM, HEALTH, LIFE_STAGE, coords, formatDate, measure, num, titleCase,
+  CONSERVATION, GROWTH_FORM, HEALTH, LIFE_STAGE, STATUS, coords, formatDate, fromServer, measure, num, titleCase,
 } from '../lib/format.js';
 import * as I from '../lib/icons.jsx';
+import { t } from '../lib/i18n.js';
 
 /* ------------------------------------------------------------------ */
 
@@ -53,7 +54,7 @@ function Gallery({ photos, alt }) {
         onClick={() => setZoom(true)}
         className="gallery-main"
         style={{ display: 'block', position: 'relative', width: '100%', padding: 0, border: 0, background: 'none', borderRadius: 'var(--r-md)', overflow: 'hidden', cursor: 'zoom-in' }}
-        aria-label="Enlarge photograph"
+        aria-label={t('Enlarge photograph')}
       >
         <div style={{ aspectRatio: '4/3', borderRadius: 'var(--r-md)', overflow: 'hidden', border: '1px solid var(--border)' }}>
           <SmartImage src={current.file_path} fallback={current.remote_url} tint={current.tint} alt={alt} />
@@ -72,7 +73,7 @@ function Gallery({ photos, alt }) {
             <button
               key={p.id}
               onClick={() => setIdx(i)}
-              aria-label={'Photograph ' + (i + 1)}
+              aria-label={t('Photograph {n}', { n: i + 1 })}
               aria-current={i === idx}
               style={{
                 width: 62, height: 48, padding: 0, borderRadius: 8, overflow: 'hidden',
@@ -104,11 +105,11 @@ function ReportDialog({ plant, onClose }) {
   const [busy, setBusy] = useState(false);
 
   const submit = async () => {
-    if (!form.description.trim()) { toast('Please describe what looks wrong.', 'err'); return; }
+    if (!form.description.trim()) { toast(t('Please describe what looks wrong.'), 'err'); return; }
     setBusy(true);
     try {
       await api.createReport({ plant_id: plant.id, ...form });
-      toast('Thank you. A botanist will review your report.');
+      toast(t('Thank you. A botanist will review your report.'));
       onClose();
     } catch (e) {
       toast(e.message, 'err');
@@ -117,51 +118,52 @@ function ReportDialog({ plant, onClose }) {
 
   return (
     <Modal
-      title="Report incorrect information"
+      title={t('Report incorrect information')}
       onClose={onClose}
       footer={
         <>
-          <button className="btn" onClick={onClose}>Cancel</button>
+          <button className="btn" onClick={onClose}>{t('Cancel')}</button>
           <button className="btn btn-primary" onClick={submit} disabled={busy}>
-            {busy && <span className="spinner" />}Send report
+            {busy && <span className="spinner" />}{t('Send report')}
           </button>
         </>
       }
     >
       <div className="stack" style={{ '--gap': '14px' }}>
         <Notice kind="plain">
-          You are reporting <strong>{plant.plant_code}</strong>
-          {plant.scientific_name && <> &mdash; <span className="sci">{plant.scientific_name}</span></>}.
+          {t('You are reporting {record}.', {
+            record: <><strong>{plant.plant_code}</strong>{plant.scientific_name && <> &mdash; <span className="sci">{plant.scientific_name}</span></>}</>,
+          })}
         </Notice>
         <div className="field">
-          <label htmlFor="r-type">What is wrong?</label>
+          <label htmlFor="r-type">{t('What is wrong?')}</label>
           <select id="r-type" className="select" value={form.issue_type} onChange={(e) => setForm({ ...form, issue_type: e.target.value })}>
-            <option value="wrong_name">The species or name looks wrong</option>
-            <option value="wrong_location">The location is wrong</option>
-            <option value="bad_photo">The photograph is unclear or wrong</option>
-            <option value="outdated">The information is out of date</option>
-            <option value="other">Something else</option>
+            <option value="wrong_name">{t('The species or name looks wrong')}</option>
+            <option value="wrong_location">{t('The location is wrong')}</option>
+            <option value="bad_photo">{t('The photograph is unclear or wrong')}</option>
+            <option value="outdated">{t('The information is out of date')}</option>
+            <option value="other">{t('Something else')}</option>
           </select>
         </div>
         <div className="field">
-          <label htmlFor="r-desc">Details <span className="req">*</span></label>
+          <label htmlFor="r-desc">{t('Details')} <span className="req">*</span></label>
           <textarea
             id="r-desc" className="textarea" value={form.description}
             onChange={(e) => setForm({ ...form, description: e.target.value })}
-            placeholder="Tell us what you saw and why you think the record is wrong."
+            placeholder={t('Tell us what you saw and why you think the record is wrong.')}
           />
         </div>
         <div className="grid grid-2" style={{ gap: 12 }}>
           <div className="field">
-            <label htmlFor="r-name">Your name <span className="hint">(optional)</span></label>
+            <label htmlFor="r-name">{t('Your name')} <span className="hint">({t('optional')})</span></label>
             <input id="r-name" className="input" value={form.reporter_name} onChange={(e) => setForm({ ...form, reporter_name: e.target.value })} />
           </div>
           <div className="field">
-            <label htmlFor="r-email">Email <span className="hint">(optional)</span></label>
+            <label htmlFor="r-email">{t('Email')} <span className="hint">({t('optional')})</span></label>
             <input id="r-email" type="email" className="input" value={form.reporter_email} onChange={(e) => setForm({ ...form, reporter_email: e.target.value })} />
           </div>
         </div>
-        <div className="hint">You do not need an account. We only use your email to ask a follow-up question.</div>
+        <div className="hint">{t('You do not need an account. We only use your email to ask a follow-up question.')}</div>
       </div>
     </Modal>
   );
@@ -188,31 +190,31 @@ export default function PlantInfo({ byToken }) {
       <div className="page"><div className="wrap wrap-narrow">
         <Empty
           icon={reason === 'archived' ? I.Archive : I.Compass}
-          title={reason === 'archived' ? 'This plant is no longer on display' : 'Tag not recognised'}
-          action={<Link className="btn btn-primary" to="/browse">Browse the register</Link>}
+          title={reason === 'archived' ? t('This plant is no longer on display') : t('Tag not recognised')}
+          action={<Link className="btn btn-primary" to="/browse">{t('Browse the register')}</Link>}
         >
           {reason === 'archived'
-            ? <>The record {error.body?.plant_code ? <span className="mono">{error.body.plant_code}</span> : null} has been archived by a botanist, usually because the specimen was removed. The tag stays accounted for in the register.</>
-            : <>This QR code does not match any plant in the register. It may be a tag from another system, or the record may not be published yet.</>}
+            ? <>{t('The record {code} has been archived by a botanist, usually because the specimen was removed. The tag stays accounted for in the register.', { code: error.body?.plant_code ? <span className="mono">{error.body.plant_code}</span> : '' })}</>
+            : <>{t('This QR code does not match any plant in the register. It may be a tag from another system, or the record may not be published yet.')}</>}
         </Empty>
       </div></div>
     );
   }
 
-  if (!plant) return <LoadingBlock label="Loading plant record" />;
+  if (!plant) return <LoadingBlock label={t('Loading plant record')} />;
 
   const sp = plant.species || {};
-  const name = plant.scientific_name || plant.proposed_species_name || 'Unidentified specimen';
+  const name = plant.scientific_name || plant.proposed_species_name || t('Unidentified specimen');
   const meta = CONSERVATION[plant.conservation_code];
 
   const sections = [
-    ['Description', sp.description],
-    ['Distinguishing characteristics', sp.characteristics],
-    ['Leaves', sp.leaf_description],
-    ['Flowers', sp.flower_description],
-    ['Fruit', sp.fruit_description],
-    ['Habitat', sp.habitat],
-    ['Distribution', sp.distribution],
+    [t('Description'), sp.description],
+    [t('Distinguishing characteristics'), sp.characteristics],
+    [t('Leaves'), sp.leaf_description],
+    [t('Flowers'), sp.flower_description],
+    [t('Fruit'), sp.fruit_description],
+    [t('Habitat'), sp.habitat],
+    [t('Distribution'), sp.distribution],
   ].filter(([, v]) => v);
 
   return (
@@ -220,17 +222,16 @@ export default function PlantInfo({ byToken }) {
       <div className="wrap wrap-narrow">
         {plant.status !== 'approved' && (
           <div style={{ marginBottom: 16 }}>
-            <Notice kind="warn" title="Not published">
-              This record is <strong>{plant.status}</strong> and is not visible to the public.
-              You can see it because you are signed in as staff.
+            <Notice kind="warn" title={t('Not published')}>
+              {t('This record is {status} and is not visible to the public. You can see it because you are signed in as staff.', { status: <strong>{STATUS[plant.status]?.label || plant.status}</strong> })}
             </Notice>
           </div>
         )}
 
         {byToken && (
           <div className="row" style={{ gap: 8, marginBottom: 14 }}>
-            <span className="badge badge-ok"><I.Check style={{ width: 12, height: 12 }} /> Tag scanned</span>
-            <span className="tiny mute">Verified record from the park register</span>
+            <span className="badge badge-ok"><I.Check style={{ width: 12, height: 12 }} /> {t('Tag scanned')}</span>
+            <span className="tiny mute">{t('Verified record from the park register')}</span>
           </div>
         )}
 
@@ -248,9 +249,8 @@ export default function PlantInfo({ byToken }) {
           </div>
           {plant.species_not_listed && (
             <div style={{ marginTop: 12 }}>
-              <Notice kind="warn" title="Species not yet confirmed">
-                A ranger recorded this specimen as &ldquo;{plant.proposed_species_name}&rdquo;.
-                A botanist has not yet confirmed the identification.
+              <Notice kind="warn" title={t('Species not yet confirmed')}>
+                {t('A botanist recorded this specimen as {name}. The identification has not yet been confirmed.', { name: <>&ldquo;{plant.proposed_species_name}&rdquo;</> })}
               </Notice>
             </div>
           )}
@@ -262,38 +262,38 @@ export default function PlantInfo({ byToken }) {
           <div className="stack" style={{ '--gap': '16px' }}>
             {/* Taxonomy */}
             <div className="card">
-              <div className="card-head"><h3>Classification</h3></div>
+              <div className="card-head"><h3>{t('Classification')}</h3></div>
               <div className="card-body" style={{ paddingBlock: 6 }}>
                 <dl className="dl">
-                  <dt>Family</dt>
+                  <dt>{t('Family')}</dt>
                   <dd>{sp.family ? <Link to={'/browse?family=' + encodeURIComponent(sp.family)}>{sp.family}</Link> : '--'}</dd>
-                  <dt>Genus</dt>
+                  <dt>{t('Genus')}</dt>
                   <dd>{sp.genus ? <Link className="sci" to={'/browse?genus=' + encodeURIComponent(sp.genus)}>{sp.genus}</Link> : '--'}</dd>
-                  <dt>Scientific name</dt>
+                  <dt>{t('Scientific name')}</dt>
                   <dd className="sci">{plant.scientific_name || '--'}</dd>
-                  {plant.local_name && <><dt>Local name</dt><dd>{plant.local_name}</dd></>}
-                  <dt>Conservation</dt>
-                  <dd>{meta ? meta.label : 'Not evaluated'}</dd>
+                  {plant.local_name && <><dt>{t('Local name')}</dt><dd>{plant.local_name}</dd></>}
+                  <dt>{t('Conservation')}</dt>
+                  <dd>{meta ? meta.label : t('Not evaluated')}</dd>
                 </dl>
               </div>
             </div>
 
             {/* This specimen */}
             <div className="card">
-              <div className="card-head"><h3>This specimen</h3></div>
+              <div className="card-head"><h3>{t('This specimen')}</h3></div>
               <div className="card-body" style={{ paddingBlock: 6 }}>
                 <dl className="dl">
-                  <dt>Plant ID</dt>
+                  <dt>{t('Plant ID')}</dt>
                   <dd className="mono">{plant.plant_code}</dd>
-                  <dt>Location</dt>
+                  <dt>{t('Location')}</dt>
                   <dd>
                     {plant.location_protected
-                      ? <span className="row" style={{ gap: 6 }}><I.Shield style={{ width: 14, height: 14, color: 'var(--warn-fg)' }} /> Withheld</span>
+                      ? <span className="row" style={{ gap: 6 }}><I.Shield style={{ width: 14, height: 14, color: 'var(--warn-fg)' }} /> {t('Withheld')}</span>
                       : plant.site_name}
                   </dd>
                   {!plant.location_protected && coords(plant.latitude, plant.longitude) && (
                     <>
-                      <dt>Coordinates</dt>
+                      <dt>{t('Coordinates')}</dt>
                       <dd>
                         <span className="mono tiny">{coords(plant.latitude, plant.longitude)}</span>
                         <a
@@ -301,21 +301,21 @@ export default function PlantInfo({ byToken }) {
                           target="_blank" rel="noreferrer"
                           className="tiny nowrap" style={{ marginLeft: 8 }}
                         >
-                          Open map <I.External style={{ width: 11, height: 11, display: 'inline' }} />
+                          {t('Open map')} <I.External style={{ width: 11, height: 11, display: 'inline' }} />
                         </a>
                       </dd>
                     </>
                   )}
-                  {plant.height_m && <><dt>Height</dt><dd>{measure(plant.height_m, 'm')}</dd></>}
-                  {plant.trunk_diameter_cm && <><dt>Trunk diameter</dt><dd>{measure(plant.trunk_diameter_cm, 'cm')}</dd></>}
-                  {plant.life_stage && <><dt>Life stage</dt><dd>{LIFE_STAGE[plant.life_stage]}</dd></>}
-                  {plant.health_status && <><dt>Condition</dt><dd>{HEALTH[plant.health_status]}</dd></>}
-                  <dt>Registered</dt>
-                  <dd>{formatDate(plant.registered_at)}{plant.registered_by_name && <span className="mute"> by {plant.registered_by_name}</span>}</dd>
+                  {plant.height_m && <><dt>{t('Height')}</dt><dd>{measure(plant.height_m, 'm')}</dd></>}
+                  {plant.trunk_diameter_cm && <><dt>{t('Trunk diameter')}</dt><dd>{measure(plant.trunk_diameter_cm, 'cm')}</dd></>}
+                  {plant.life_stage && <><dt>{t('Life stage')}</dt><dd>{LIFE_STAGE[plant.life_stage]}</dd></>}
+                  {plant.health_status && <><dt>{t('Condition')}</dt><dd>{HEALTH[plant.health_status]}</dd></>}
+                  <dt>{t('Registered')}</dt>
+                  <dd>{formatDate(plant.registered_at)}{plant.registered_by_name && <span className="mute"> {t('by {name}', { name: plant.registered_by_name })}</span>}</dd>
                   {plant.verified_at && (
                     <>
-                      <dt>Verified</dt>
-                      <dd>{formatDate(plant.verified_at)}{plant.verified_by_name && <span className="mute"> by {plant.verified_by_name}</span>}</dd>
+                      <dt>{t('Verified')}</dt>
+                      <dd>{formatDate(plant.verified_at)}{plant.verified_by_name && <span className="mute"> {t('by {name}', { name: plant.verified_by_name })}</span>}</dd>
                     </>
                   )}
                 </dl>
@@ -323,20 +323,20 @@ export default function PlantInfo({ byToken }) {
             </div>
 
             {plant.location_protected && (
-              <Notice kind="warn" title="Location withheld">
-                {plant.location_withheld_reason}
-                {' '}Park staff can see it when signed in.
+              <Notice kind="warn" title={t('Location withheld')}>
+                {fromServer(plant.location_withheld_reason)}
+                {' '}{t('Park staff can see it when signed in.')}
               </Notice>
             )}
             {plant.location_notes && (
               <div className="inset">
-                <div className="label" style={{ marginBottom: 4 }}><I.MapPin style={{ width: 13, height: 13 }} /> Finding it</div>
+                <div className="label" style={{ marginBottom: 4 }}><I.MapPin style={{ width: 13, height: 13 }} /> {t('Finding it')}</div>
                 <div className="small">{plant.location_notes}</div>
               </div>
             )}
             {plant.morphology_notes && (
               <div className="inset">
-                <div className="label" style={{ marginBottom: 4 }}><I.Leaf style={{ width: 13, height: 13 }} /> Field notes</div>
+                <div className="label" style={{ marginBottom: 4 }}><I.Leaf style={{ width: 13, height: 13 }} /> {t('Field notes')}</div>
                 <div className="small">{plant.morphology_notes}</div>
               </div>
             )}
@@ -368,12 +368,12 @@ export default function PlantInfo({ byToken }) {
         <div className="row row-wrap row-between" style={{ marginTop: 24, gap: 12 }}>
           <div className="row row-wrap" style={{ gap: 8 }}>
             <button className="btn btn-sm" onClick={() => setReporting(true)}>
-              <I.Flag /> Report incorrect information
+              <I.Flag /> {t('Report incorrect information')}
             </button>
-            <CopyButton text={window.location.href} label="Copy link" />
+            <CopyButton text={window.location.href} label={t('Copy link')} />
             {user && can('plant.view_all') && (
               <Link className="btn btn-sm btn-soft" to={'/staff/plants/' + plant.id}>
-                <I.Edit /> Open in staff view
+                <I.Edit /> {t('Open in staff view')}
               </Link>
             )}
           </div>
@@ -384,9 +384,7 @@ export default function PlantInfo({ byToken }) {
         </div>
 
         <div className="tiny faint" style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
-          Photographs are contributed to iNaturalist under Creative Commons licences and credited to the
-          photographer; where no photograph exists the page falls back to a generated illustration.
-          Taxonomy and Red List categories come from GBIF.
+          {t('Photographs are contributed to iNaturalist under Creative Commons licences and credited to the photographer; where no photograph exists the page falls back to a generated illustration. Taxonomy and Red List categories come from GBIF.')}
         </div>
       </div>
 

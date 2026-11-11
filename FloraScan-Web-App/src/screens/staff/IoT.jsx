@@ -3,6 +3,7 @@ import { Empty, LoadingBlock, Modal, Notice, PageHead, Stat } from '../../compon
 import { api } from '../../lib/api.js';
 import { relativeTime, titleCase } from '../../lib/format.js';
 import * as I from '../../lib/icons.jsx';
+import { t } from '../../lib/i18n.js';
 
 /**
  * IoT plant monitoring.

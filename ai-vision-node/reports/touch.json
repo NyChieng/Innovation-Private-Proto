@@ -1,0 +1,51 @@
+{
+  "threshold": 0.6,
+  "all": {
+    "crops": 3034,
+    "touch": 1466,
+    "accuracy": 0.7880685563612393,
+    "touch_precision": 0.8284118116520351,
+    "touch_recall": 0.7080491132332879,
+    "false_touch_rate": 0.1371173469387755
+  },
+  "100doh": {
+    "crops": 2848,
+    "touch": 1459,
+    "accuracy": 0.776685393258427,
+    "touch_precision": 0.8289368505195843,
+    "touch_recall": 0.7107607950651131,
+    "false_touch_rate": 0.15406767458603313
+  },
+  "coco": {
+    "crops": 153,
+    "touch": 0,
+    "accuracy": 0.9934640522875817,
+    "touch_precision": 0.0,
+    "touch_recall": 0.0,
+    "false_touch_rate": 0.006535947712418301
+  },
+  "hico": {
+    "crops": 19,
+    "touch": 5,
+    "accuracy": 0.7894736842105263,
+    "touch_precision": 1.0,
+    "touch_recall": 0.2,
+    "false_touch_rate": 0.0
+  },
+  "vg": {
+    "crops": 14,
+    "touch": 2,
+    "accuracy": 0.8571428571428571,
+    "touch_precision": 0.0,
+    "touch_recall": 0.0,
+    "false_touch_rate": 0.0
+  },
+  "hard_negatives_near_plant": {
+    "crops": 96,
+    "touch": 0,
+    "accuracy": 0.9895833333333334,
+    "touch_precision": 0.0,
+    "touch_recall": 0.0,
+    "false_touch_rate": 0.010416666666666666
+  }
+}

@@ -77,3 +77,4 @@ export const Phone = (p) => (<Svg {...p}><rect x="6" y="2.5" width="12" height="
 export const Compass = (p) => (<Svg {...p}><circle cx="12" cy="12" r="9" /><path d="m15.2 8.8-1.7 4.7-4.7 1.7 1.7-4.7Z" /></Svg>);
 export const Sprout = (p) => (<Svg {...p}><path d="M12 21v-7" /><path d="M12 14c0-3.3 2-5.5 5.5-5.8 0 3.3-2 5.5-5.5 5.8Z" /><path d="M12 15.5c0-3-1.8-5-5-5.3 0 3 1.8 5 5 5.3Z" /></Svg>);
 export const Tree = (p) => (<Svg {...p}><path d="M12 21v-5" /><path d="M12 16 7 13h2.2L6 9.8h2.4L12 4l3.6 5.8H18L14.8 13H17l-5 3Z" /></Svg>);
+export const Globe = (p) => (<Svg {...p}><circle cx="12" cy="12" r="9" /><path d="M3 12h18" /><path d="M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3Z" /></Svg>);

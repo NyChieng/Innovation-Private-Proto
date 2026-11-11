@@ -1,7 +1,8 @@
 import { Suspense, useEffect } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useApp } from './lib/store.jsx';
-import { homeFor } from './lib/format.js';
+import { homeFor, roleLabel } from './lib/format.js';
+import { t } from './lib/i18n.js';
 import { shouldShowIntro } from './lib/intro.js';
 import { WebShell, MobileShell } from './components/Shell.jsx';
 import RoleSwitcher from './components/RoleSwitcher.jsx';
@@ -54,9 +55,11 @@ function Guard({ need, needAny, children }) {
   if (missing) {
     return (
       <div className="page"><div className="wrap wrap-narrow">
-        <Empty icon={I.Shield} title="Your role cannot open this page">
-          This screen needs the <span className="mono">{need || needAny.join(' or ')}</span> permission,
-          which the {user.role_label} role does not hold. The API enforces the same rule, so hiding the link is convenience, not the control itself.
+        <Empty icon={I.Shield} title={t('Your role cannot open this page')}>
+          {t('This screen needs the {permission} permission, which the {role} role does not hold. The API enforces the same rule, so hiding the link is convenience, not the control itself.', {
+            permission: <span className="mono">{need || needAny.join(' / ')}</span>,
+            role: roleLabel(user.role_label),
+          })}
         </Empty>
       </div></div>
     );
@@ -83,7 +86,7 @@ export default function App() {
   if (!ready) {
     return (
       <div style={{ minHeight: '100dvh', display: 'grid', placeItems: 'center' }}>
-        <div className="row" style={{ gap: 10 }}><span className="spinner" /><span className="mute">Starting FloraScan...</span></div>
+        <div className="row" style={{ gap: 10 }}><span className="spinner" /><span className="mute">{t('Starting FloraScan...')}</span></div>
       </div>
     );
   }
@@ -141,8 +144,8 @@ export default function App() {
               path="*"
               element={
                 <div className="page"><div className="wrap wrap-narrow">
-                  <Empty icon={I.Compass} title="Page not found">
-                    That address does not match any screen in the prototype.
+                  <Empty icon={I.Compass} title={t('Page not found')}>
+                    {t('That address does not match any screen in the prototype.')}
                   </Empty>
                 </div></div>
               }

@@ -2,15 +2,16 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useApp } from '../../lib/store.jsx';
 import { Avatar, Notice } from '../../components/ui.jsx';
 import { staffNav } from '../../components/Shell.jsx';
-import { relativeTime } from '../../lib/format.js';
+import { relativeTime, roleLabel } from '../../lib/format.js';
 import * as I from '../../lib/icons.jsx';
+import { LANGUAGES, t } from '../../lib/i18n.js';
 
 /**
  * Phone "Account" tab. On a narrow screen there is no sidebar, so this is
  * where the rest of the staff navigation lives.
  */
 export default function Me() {
-  const { user, can, counts, signOut, theme, setTheme, viewPref, setView } = useApp();
+  const { user, can, counts, signOut, theme, setTheme, viewPref, setView, lang, setLang } = useApp();
   const navigate = useNavigate();
   const groups = staffNav(can, counts);
 
@@ -23,7 +24,7 @@ export default function Me() {
             <div className="strong truncate">{user.full_name}</div>
             <div className="small mute truncate">{user.email}</div>
             <div className="row" style={{ gap: 6, marginTop: 5 }}>
-              <span className="tag">{user.role_label}</span>
+              <span className="tag">{roleLabel(user.role_label)}</span>
               {user.title && <span className="tiny mute">{user.title}</span>}
             </div>
           </div>
@@ -32,9 +33,9 @@ export default function Me() {
         <Link className="card card-pad row" to="/staff/notifications" style={{ gap: 12, marginBottom: 18, color: 'inherit', textDecoration: 'none' }}>
           <span className="avatar"><I.Bell style={{ width: 15, height: 15 }} /></span>
           <span className="grow">
-            <span className="strong small" style={{ display: 'block' }}>Notifications</span>
+            <span className="strong small" style={{ display: 'block' }}>{t('Notifications')}</span>
             <span className="tiny mute">
-              {counts?.unread_notifications ? `${counts.unread_notifications} unread` : 'Nothing new'}
+              {counts?.unread_notifications ? t('{n} unread', { n: counts.unread_notifications }) : t('Nothing new')}
             </span>
           </span>
           {!!counts?.unread_notifications && <span className="badge badge-danger">{counts.unread_notifications}</span>}
@@ -49,7 +50,7 @@ export default function Me() {
                 <Link key={it.to} className="side-link" to={it.to}>
                   <it.icon />
                   <span className="grow">{it.label}</span>
-                  {it.soon && <span className="tag tiny">Soon</span>}
+                  {it.soon && <span className="tag tiny">{t('Soon')}</span>}
                   {it.count > 0 && <span className={'count' + (it.alert ? ' alert' : '')}>{it.count}</span>}
                   <I.ChevronRight style={{ width: 15, height: 15, color: 'var(--text-faint)' }} />
                 </Link>
@@ -60,38 +61,45 @@ export default function Me() {
 
         <div className="card card-pad stack" style={{ '--gap': '14px', marginBottom: 18 }}>
           <div className="row row-between">
-            <span className="small">Theme</span>
+            <span className="small">{t('Theme')}</span>
             <div className="segmented">
-              {[['system', 'Auto'], ['light', 'Light'], ['dark', 'Dark']].map(([v, l]) => (
+              {[['system', t('Auto')], ['light', t('Light')], ['dark', t('Dark')]].map(([v, l]) => (
                 <button key={v} className={theme === v ? 'active' : ''} onClick={() => setTheme(v)}>{l}</button>
               ))}
             </div>
           </div>
           <div className="row row-between">
-            <span className="small">Layout</span>
+            <span className="small">{t('Layout')}</span>
             <div className="segmented">
-              {[['auto', 'Auto'], ['web', 'Web'], ['mobile', 'App']].map(([v, l]) => (
+              {[['auto', t('Auto')], ['web', t('Web')], ['mobile', t('App')]].map(([v, l]) => (
                 <button key={v} className={viewPref === v ? 'active' : ''} onClick={() => setView(v)}>{l}</button>
+              ))}
+            </div>
+          </div>
+          <div className="row row-between">
+            <span className="small">{t('Language')}</span>
+            <div className="segmented">
+              {LANGUAGES.map((l) => (
+                <button key={l.code} lang={l.html} className={lang === l.code ? 'active' : ''} onClick={() => setLang(l.code)}>{l.short}</button>
               ))}
             </div>
           </div>
         </div>
 
         <div className="small mute" style={{ marginBottom: 14 }}>
-          Last signed in {user.last_login_at ? relativeTime(user.last_login_at) : 'just now'}.
+          {t('Last signed in {when}.', { when: user.last_login_at ? relativeTime(user.last_login_at) : t('just now') })}
         </div>
 
         {user.must_change_password && (
           <div style={{ marginBottom: 14 }}>
-            <Notice kind="warn" title="Password change required">
-              An administrator reset your password. In the finished system you would be asked to choose a new
-              one before going any further.
+            <Notice kind="warn" title={t('Password change required')}>
+              {t('An administrator reset your password. In the finished system you would be asked to choose a new one before going any further.')}
             </Notice>
           </div>
         )}
 
         <button className="btn btn-danger btn-block" onClick={async () => { await signOut(); navigate('/'); }}>
-          <I.Logout /> Sign out
+          <I.Logout /> {t('Sign out')}
         </button>
       </div>
     </div>

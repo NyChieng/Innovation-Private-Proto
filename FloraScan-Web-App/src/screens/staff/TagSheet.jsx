@@ -4,6 +4,7 @@ import { api } from '../../lib/api.js';
 import { useApp } from '../../lib/store.jsx';
 import { Empty, LoadingBlock, Notice, PageHead, SearchInput } from '../../components/ui.jsx';
 import * as I from '../../lib/icons.jsx';
+import { t } from '../../lib/i18n.js';
 
 /**
  * Printable QR tag sheet.
@@ -88,21 +89,21 @@ export default function TagSheet() {
   const ready = chosen.filter((p) => codes[p.id]);
 
   const print = () => {
-    if (!ready.length) { toast('Choose at least one plant first.', 'err'); return; }
+    if (!ready.length) { toast(t('Choose at least one plant first.'), 'err'); return; }
     window.print();
   };
 
-  if (!plants) return <LoadingBlock label="Loading published records" />;
+  if (!plants) return <LoadingBlock label={t('Loading published records')} />;
 
   return (
     <div className="page">
       <div className="wrap wrap-wide">
         <PageHead
-          title="Print QR tags"
-          sub="Pick the plants you are tagging, then print. Three tags fit across an A4 page."
+          title={t('Print QR tags')}
+          sub={t('Pick the plants you are tagging, then print. Three tags fit across an A4 page.')}
         >
           <div className="segmented no-print">
-            {[['small', 'Small'], ['medium', 'Medium'], ['large', 'Large']].map(([v, l]) => (
+            {[['small', t('Small')], ['medium', t('Medium')], ['large', t('Large')]].map(([v, l]) => (
               <button key={v} className={size === v ? 'active' : ''} onClick={() => setSize(v)}>{l}</button>
             ))}
           </div>
@@ -114,42 +115,41 @@ export default function TagSheet() {
 
         <div className="no-print">
           <div style={{ marginBottom: 16 }}>
-            <Notice kind="plain" title="What gets printed">
-              Only the tags below, laid out for cutting. Each one encodes a permanent link to that
-              plant&rsquo;s public page, so editing the record later does not invalidate a printed tag.
+            <Notice kind="plain" title={t('What gets printed')}>
+              {t('Only the tags below, laid out for cutting. Each one encodes a permanent link to that plant’s public page, so editing the record later does not invalidate a printed tag.')}
             </Notice>
           </div>
 
           <div className="row row-wrap" style={{ gap: 10, marginBottom: 16 }}>
             <div className="grow" style={{ maxWidth: 380, minWidth: 210 }}>
-              <SearchInput value={q} onChange={setQ} placeholder="Filter by name, Plant ID or location" />
+              <SearchInput value={q} onChange={setQ} placeholder={t('Filter by name, Plant ID or location')} />
             </div>
             <button className="btn btn-sm" onClick={selectAll} disabled={busy}>
               <I.Check /> Select all {filtered?.length ? `(${filtered.length})` : ''}
             </button>
             <button className="btn btn-sm" onClick={() => setSelected(new Set())} disabled={!selected.size}>
-              <I.X /> Clear
+              <I.X /> {t('Clear')}
             </button>
             <span className="spacer" />
             {progress
               ? (
                 <span className="small mute row" style={{ gap: 7 }}>
                   <span className="spinner" />
-                  Preparing {progress.done} of {progress.total} tags
+                  {t('Preparing {done} of {total} tags', { done: progress.done, total: progress.total })}
                 </span>
               )
               : <span className="small mute">{selected.size} selected</span>}
           </div>
 
           {filtered.length === 0 ? (
-            <Empty icon={I.QrIcon} title="No published records match">
-              Only approved records have a QR tag. Approve something in the review queue first.
+            <Empty icon={I.QrIcon} title={t('No published records match')}>
+              {t('Only approved records have a QR tag. Approve something in the review queue first.')}
             </Empty>
           ) : (
             <div className="card table-wrap" style={{ maxHeight: 340, overflowY: 'auto', marginBottom: 24 }}>
               <table className="table">
                 <thead>
-                  <tr><th style={{ width: 44 }}></th><th>Species</th><th>Plant ID</th><th>Location</th></tr>
+                  <tr><th style={{ width: 44 }}></th><th>{t('Species')}</th><th>{t('Plant ID')}</th><th>{t('Location')}</th></tr>
                 </thead>
                 <tbody>
                   {filtered.map((p) => (
@@ -160,7 +160,7 @@ export default function TagSheet() {
                           checked={selected.has(p.id)}
                           onChange={() => toggle(p.id)}
                           onClick={(e) => e.stopPropagation()}
-                          aria-label={'Include ' + p.plant_code}
+                          aria-label={t('Include {code}', { code: p.plant_code })}
                           style={{ accentColor: 'var(--accent)' }}
                         />
                       </td>
@@ -181,8 +181,8 @@ export default function TagSheet() {
             Preview {ready.length > 0 && <span className="mute" style={{ fontWeight: 400 }}>({ready.length} tag{ready.length === 1 ? '' : 's'})</span>}
           </h2>
           {ready.length === 0 && (
-            <Empty icon={I.Printer} title="Nothing selected yet">
-              Tick the plants you are going out to tag and they will appear here.
+            <Empty icon={I.Printer} title={t('Nothing selected yet')}>
+              {t('Tick the plants you are going out to tag and they will appear here.')}
             </Empty>
           )}
         </div>
@@ -195,12 +195,12 @@ export default function TagSheet() {
                 const qr = codes[p.id];
                 return (
                   <div className="qr-tag" key={p.id}>
-                    <img src={qr.png} alt={'QR code for ' + p.plant_code} />
+                    <img src={qr.png} alt={t('QR code for {code}', { code: p.plant_code })} />
                     <div className="t-sci">{p.scientific_name}</div>
                     {p.common_name && <div className="t-com">{p.common_name}</div>}
                     {p.local_name && <div className="t-com" style={{ opacity: 0.75 }}>{p.local_name}</div>}
                     <div className="t-code">{p.plant_code}</div>
-                    <div className="t-foot">Scan for details &middot; Niah National Park</div>
+                    <div className="t-foot">{t('Scan for details · Niah National Park')}</div>
                   </div>
                 );
               })}
@@ -209,8 +209,8 @@ export default function TagSheet() {
         )}
 
         <div className="no-print tiny faint" style={{ marginTop: 20 }}>
-          Print on weatherproof synthetic paper or laminate after cutting. Check one tag with a phone before
-          printing the whole batch. <Link to="/staff/plants">Back to the register</Link>.
+          {t('Print on weatherproof synthetic paper or laminate after cutting. Check one tag with a phone before printing the whole batch.')}{' '}
+          <Link to="/staff/plants">{t('Back to the register')}</Link>.
         </div>
       </div>
     </div>

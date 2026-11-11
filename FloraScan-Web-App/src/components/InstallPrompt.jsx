@@ -5,6 +5,7 @@ import {
 } from '../lib/install.js';
 import { useApp } from '../lib/store.jsx';
 import * as I from '../lib/icons.jsx';
+import { t } from '../lib/i18n.js';
 
 /* ------------------------------------------------------------------ */
 
@@ -69,17 +70,17 @@ export default function InstallPrompt() {
         <div className="install-title">{advice.title}</div>
         <div className="install-body">
           {advice.kind === 'ios' ? (
-            <>Tap <ShareIcon style={{ width: 13, height: 13, display: 'inline', verticalAlign: -2 }} /> below, then <strong>Add to Home Screen</strong>.</>
+            <>{t('Tap {icon} below, then {item}.', { icon: <ShareIcon style={{ width: 13, height: 13, display: 'inline', verticalAlign: -2 }} />, item: <strong>{t('Add to Home Screen')}</strong> })}</>
           ) : advice.body}
         </div>
       </div>
 
       {advice.kind === 'prompt' ? (
-        <button className="btn btn-primary btn-sm" onClick={add}>Add</button>
+        <button className="btn btn-primary btn-sm" onClick={add}>{t('Add')}</button>
       ) : (
-        <button className="btn btn-sm" onClick={close}>Got it</button>
+        <button className="btn btn-sm" onClick={close}>{t('Got it')}</button>
       )}
-      <button className="btn btn-ghost btn-icon install-x" onClick={close} aria-label="Dismiss">
+      <button className="btn btn-ghost btn-icon install-x" onClick={close} aria-label={t('Dismiss')}>
         <I.X />
       </button>
     </div>
@@ -99,8 +100,8 @@ export function InstallCard() {
       <div className="card card-pad row" style={{ gap: 12 }}>
         <span className="avatar"><I.Check style={{ width: 16, height: 16 }} /></span>
         <div>
-          <h3 style={{ marginBottom: 2 }}>Running from your home screen</h3>
-          <div className="small mute">You are using the installed app, not the browser.</div>
+          <h3 style={{ marginBottom: 2 }}>{t('Running from your home screen')}</h3>
+          <div className="small mute">{t('You are using the installed app, not the browser.')}</div>
         </div>
       </div>
     );
@@ -123,17 +124,17 @@ export function InstallCard() {
 
       {advice.kind === 'ios' && (
         <ol className="install-steps">
-          <li><ShareIcon /> Tap the <strong>Share</strong> button in Safari&rsquo;s toolbar</li>
-          <li><I.Plus /> Scroll down and choose <strong>Add to Home Screen</strong></li>
-          <li><I.Check /> Tap <strong>Add</strong>, then open FloraScan from your home screen</li>
+          <li><ShareIcon /> {t('Tap the {button} button in Safari’s toolbar', { button: <strong>{t('Share')}</strong> })}</li>
+          <li><I.Plus /> {t('Scroll down and choose {item}', { item: <strong>{t('Add to Home Screen')}</strong> })}</li>
+          <li><I.Check /> {t('Tap {button}, then open FloraScan from your home screen', { button: <strong>{t('Add')}</strong> })}</li>
         </ol>
       )}
 
       {advice.kind === 'android' && (
         <ol className="install-steps">
-          <li><I.Menu /> Open the browser menu (&#8942;)</li>
-          <li><I.Plus /> Choose <strong>Add to Home screen</strong> or <strong>Install app</strong></li>
-          <li><I.Check /> Confirm, then open it from your home screen</li>
+          <li><I.Menu /> {t('Open the browser menu (⋮)')}</li>
+          <li><I.Plus /> {t('Choose {a} or {b}', { a: <strong>{t('Add to Home screen')}</strong>, b: <strong>{t('Install app')}</strong> })}</li>
+          <li><I.Check /> {t('Confirm, then open it from your home screen')}</li>
         </ol>
       )}
 
@@ -148,14 +149,14 @@ export function InstallCard() {
 
       {done && (
         <div style={{ marginTop: 12 }}>
-          <span className="badge badge-ok"><I.Check style={{ width: 12, height: 12 }} /> Added to your home screen</span>
+          <span className="badge badge-ok"><I.Check style={{ width: 12, height: 12 }} /> {t('Added to your home screen')}</span>
         </div>
       )}
 
       <div className="tiny faint" style={{ marginTop: 12 }}>
         {p === 'desktop'
-          ? 'On a phone this is how a ranger keeps the app one tap away in the field.'
-          : 'Once added it opens full screen, and pages you have already viewed still open with no signal.'}
+          ? t('On a phone this is how a botanist keeps the app one tap away in the field.')
+          : t('Once added it opens full screen, and pages you have already viewed still open with no signal.')}
       </div>
     </div>
   );
@@ -176,47 +177,44 @@ export function PlatformGuides() {
   return (
     <div className="card">
       <div className="card-head">
-        <h3 className="grow">Adding it to a home screen</h3>
-        <span className="tiny faint">Android and iOS differ</span>
+        <h3 className="grow">{t('Adding it to a home screen')}</h3>
+        <span className="tiny faint">{t('Android and iOS differ')}</span>
       </div>
 
       <div className="card-body">
         <div className="grid grid-2" style={{ gap: 18 }}>
           {/* ---- Android ---- */}
           <div>
-            <div className="row" style={{ gap: 8, marginBottom: 9 }}>
+            <div className="row row-wrap" style={{ gap: 8, marginBottom: 9 }}>
               <strong style={{ fontSize: '0.92rem' }}>Android</strong>
-              {here === 'android' && <span className="badge badge-ok">You are here</span>}
+              {here === 'android' && <span className="badge badge-ok">{t('You are here')}</span>}
               {overHttps
-                ? <span className="badge badge-ok">One tap</span>
-                : <span className="badge badge-warn">Menu only</span>}
+                ? <span className="badge badge-ok">{t('One tap')}</span>
+                : <span className="badge badge-warn">{t('Menu only')}</span>}
             </div>
 
             {overHttps ? (
               <>
                 <p className="small mute">
-                  Chrome shows its own <strong>Install app</strong> prompt, and the bar at the bottom of
-                  the screen installs it in one tap.
+                  {t('Chrome shows its own {prompt} prompt, and the bar at the bottom of the screen installs it in one tap.', { prompt: <strong>{t('Install app')}</strong> })}
                 </p>
                 <ol className="install-steps">
-                  <li><I.Download /> Tap <strong>Add</strong> on the prompt</li>
-                  <li><I.Check /> Confirm, and it lands on the home screen</li>
+                  <li><I.Download /> {t('Tap {button} on the prompt', { button: <strong>{t('Add')}</strong> })}</li>
+                  <li><I.Check /> {t('Confirm, and it lands on the home screen')}</li>
                 </ol>
               </>
             ) : (
               <>
                 <p className="small mute">
-                  One-tap install needs a genuinely secure origin. This page is on plain
-                  <span className="mono"> http://</span>, so Chrome will not offer it. The manual route
-                  still works, and gives the same result:
+                  {t('One-tap install needs a genuinely secure origin. This page is on plain {scheme}, so Chrome will not offer it. The manual route still works, and gives the same result:', { scheme: <span className="mono">http://</span> })}
                 </p>
                 <ol className="install-steps">
-                  <li><I.Menu /> Open the browser menu (&#8942;)</li>
-                  <li><I.Plus /> Choose <strong>Add to Home screen</strong></li>
-                  <li><I.Check /> Confirm</li>
+                  <li><I.Menu /> {t('Open the browser menu (⋮)')}</li>
+                  <li><I.Plus /> {t('Choose {item}', { item: <strong>{t('Add to Home screen')}</strong> })}</li>
+                  <li><I.Check /> {t('Confirm')}</li>
                 </ol>
                 <div className="tiny faint" style={{ marginTop: 9 }}>
-                  For the one-tap version, restart with <span className="mono">npm run https</span>.
+                  {t('For the one-tap version, restart with {command}.', { command: <span className="mono">npm run https</span> })}
                 </div>
               </>
             )}
@@ -224,28 +222,27 @@ export function PlatformGuides() {
 
           {/* ---- iOS ---- */}
           <div>
-            <div className="row" style={{ gap: 8, marginBottom: 9 }}>
-              <strong style={{ fontSize: '0.92rem' }}>iPhone and iPad</strong>
-              {(here === 'ios-safari' || here === 'ios-other') && <span className="badge badge-ok">You are here</span>}
-              <span className="badge badge-neutral">Always manual</span>
+            <div className="row row-wrap" style={{ gap: 8, marginBottom: 9 }}>
+              <strong style={{ fontSize: '0.92rem' }}>{t('iPhone and iPad')}</strong>
+              {(here === 'ios-safari' || here === 'ios-other') && <span className="badge badge-ok">{t('You are here')}</span>}
+              <span className="badge badge-neutral">{t('Always manual')}</span>
             </div>
             <p className="small mute">
-              iOS has no install API at all, on any browser, and only Safari can add to the home
-              screen. There is no one-tap route to offer.
+              {t('iOS has no install API at all, on any browser, and only Safari can add to the home screen. There is no one-tap route to offer.')}
             </p>
             <ol className="install-steps">
-              <li><I.Phone /> Open the page in <strong>Safari</strong></li>
-              <li><I.Download /> Tap <strong>Share</strong> in the toolbar</li>
-              <li><I.Plus /> Scroll to <strong>Add to Home Screen</strong></li>
+              <li><I.Phone /> {t('Open the page in {browser}', { browser: <strong>Safari</strong> })}</li>
+              <li><I.Download /> {t('Tap {button} in the toolbar', { button: <strong>{t('Share')}</strong> })}</li>
+              <li><I.Plus /> {t('Scroll to {item}', { item: <strong>{t('Add to Home Screen')}</strong> })}</li>
             </ol>
             {here === 'ios-other' && (
               <div className="tiny" style={{ marginTop: 9, color: 'var(--warn-fg)' }}>
-                You are not in Safari. Copy the address into Safari first.
+                {t('You are not in Safari. Copy the address into Safari first.')}
               </div>
             )}
             {overHttps && (
               <div className="tiny faint" style={{ marginTop: 9 }}>
-                Icon shows a plain letter? <a href="/connect#trust">Trust this server first</a>, then add it again.
+                {t('Icon shows a plain letter? {link}, then add it again.', { link: <a href="/connect#trust">{t('Trust this server first')}</a> })}
               </div>
             )}
           </div>
@@ -253,8 +250,7 @@ export function PlatformGuides() {
       </div>
 
       <div className="card-foot tiny mute">
-        Either way the result is the same: a home-screen icon that opens full screen, with no
-        browser bars, and pages already visited still open with no signal.
+        {t('Either way the result is the same: a home-screen icon that opens full screen, with no browser bars, and pages already visited still open with no signal.')}
       </div>
     </div>
   );

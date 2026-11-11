@@ -94,7 +94,9 @@ async function login(email, password = 'demo1234') {
 
 const ADMIN = 'admin@niah.sarawak.gov.my';
 const BOTANIST = 'suehan.lee@niah.sarawak.gov.my';
+const BOTANIST_2 = 'hans.yee@niah.sarawak.gov.my';
 const RANGER = 'edmund.yu@niah.sarawak.gov.my';
+const REVIEWER = 'meiling.wong@niah.sarawak.gov.my';
 const DEACTIVATED = 'jiaqi.hu@niah.sarawak.gov.my';
 
 /* ================================================================== */
@@ -103,9 +105,11 @@ console.log(`FloraScan API tests against ${BASE}\n`);
 
 const adminT = await login(ADMIN);
 const botT = await login(BOTANIST);
+const bot2T = await login(BOTANIST_2);
 const rangerT = await login(RANGER);
+const revT = await login(REVIEWER);
 
-if (!adminT || !botT || !rangerT) {
+if (!adminT || !botT || !bot2T || !rangerT || !revT) {
   console.error('Could not sign in the demo accounts. Is the server running?');
   process.exit(1);
 }
@@ -159,10 +163,13 @@ section('2. Access control - anonymous visitors (negative tests)');
 }
 
 /* ------------------------------------------------------------------ */
-section('3. Access control - ranger may not do a botanist or admin job');
+section('3. Access control - a ranger handles sensor alerts, not plant records (#8)');
 {
   const pending = (await get('/plants?status=pending', botT)).body.results[0];
   const cases = [
+    ['POST', '/plants', { site_name: 'Ranger test plot', proposed_species_name: 'Testus rangerus' }],
+    ['GET', '/plants', undefined],
+    ['POST', `/plants/${pending.id}/resubmit`, {}],
     ['POST', `/plants/${pending.id}/approve`, {}],
     ['POST', `/plants/${pending.id}/reject`, { note: 'no' }],
     ['PATCH', `/plants/${pending.id}`, { site_name: 'hijacked' }],
@@ -180,11 +187,24 @@ section('3. Access control - ranger may not do a botanist or admin job');
     const r = await call(m, p, { token: rangerT, body: b });
     eq(`ranger ${m} ${p}`, r.status, 403);
   }
+  const me = (await get('/auth/me', rangerT)).body.user;
+  check('a ranger holds the sensor permissions', me.permissions.includes('sensor.view') && me.permissions.includes('alert.resolve'));
+  check('...and no plant permission at all', !me.permissions.some((c) => c.startsWith('plant.') || c.startsWith('qr.')),
+    me.permissions.join(', '));
+  const sensors = await get('/sensors', rangerT);
+  eq('a ranger can open the IoT dashboard data', sensors.status, 200);
 }
 
 /* ------------------------------------------------------------------ */
-section('4. Access control - botanist may not do an admin job');
+section('4. Access control - a botanist registers but cannot publish, or do an admin job');
 {
+  const me = (await get('/auth/me', botT)).body.user;
+  check('a botanist holds plant.create', me.permissions.includes('plant.create'));
+  check('...but not plant.approve, so nothing they register publishes itself', !me.permissions.includes('plant.approve'));
+  const pending = (await get('/plants?status=pending', botT)).body.results[0];
+  eq('a botanist cannot approve a record', (await post(`/plants/${pending.id}/approve`, {}, botT)).status, 403);
+  eq('...or return one', (await post(`/plants/${pending.id}/reject`, { note: 'n' }, botT)).status, 403);
+
   const cases = [
     ['GET', '/users'], ['GET', '/activity'], ['GET', '/audit'], ['GET', '/settings'],
   ];
@@ -214,15 +234,38 @@ section('5. Access control - admin may not do botanical work');
 }
 
 /* ------------------------------------------------------------------ */
+section('5b. Access control - the reviewer checks records, and nothing else (#8)');
+{
+  const me = (await get('/auth/me', revT)).body.user;
+  eq('the reviewer role exists', me.role, 'reviewer');
+  check('a reviewer holds plant.approve', me.permissions.includes('plant.approve'));
+  check('...but cannot register a plant', !me.permissions.includes('plant.create'));
+  eq('a reviewer POST /plants is refused',
+    (await post('/plants', { site_name: 'x', proposed_species_name: 'y' }, revT)).status, 403);
+  for (const [m, p, b] of [
+    ['POST', '/species', { scientific_name: 'Testus reviewerus' }],
+    ['GET', '/users', undefined], ['GET', '/settings', undefined], ['GET', '/audit', undefined],
+  ]) {
+    eq(`reviewer ${m} ${p}`, (await call(m, p, { token: revT, body: b })).status, 403);
+  }
+  const queue = await get('/submissions', revT);
+  eq('the reviewer reads the whole queue', queue.status, 200);
+  check('...which holds the seeded botanist submissions', queue.body.results.length >= 6, 'got ' + queue.body.results.length);
+  check('...all from botanists', queue.body.results.every((x) => ['Dr Sue Han Lee', 'Hans Jia Syn Yee'].includes(x.submitted_by_name)));
+  const notes = (await get('/notifications', revT)).body.results;
+  check('the reviewer was notified of the waiting submissions', notes.some((n) => n.type === 'submission.new'));
+}
+
+/* ------------------------------------------------------------------ */
 section('6. Data scoping');
 {
-  const rangerList = (await get('/plants', rangerT)).body.results;
+  const revList = (await get('/plants', revT)).body.results;
   const botList = (await get('/plants', botT)).body.results;
-  check('a ranger sees only their own records',
-    rangerList.every((p) => p.registered_by_name === 'Edmund Guo Qian Yu'),
-    'found a record registered by someone else');
-  check('a botanist sees the whole register', botList.length > rangerList.length,
-    `botanist ${botList.length} vs ranger ${rangerList.length}`);
+  const mine = (await get('/plants?mine=1', botT)).body.results;
+  check('a botanist sees the whole register', botList.length > mine.length && mine.length > 0,
+    `all ${botList.length} vs own ${mine.length}`);
+  check('...and mine=1 narrows it to their own', mine.every((p) => p.registered_by_name === 'Dr Sue Han Lee'));
+  eq('a reviewer sees the same register', revList.length, botList.length);
 }
 
 /* ------------------------------------------------------------------ */
@@ -275,7 +318,7 @@ section('8. Input validation - plant registration');
     [{ site_name: 'T', species_id: 999999 }, 'species id that does not exist'],
   ];
   for (const [body, label] of bad) {
-    const r = await post('/plants', body, rangerT);
+    const r = await post('/plants', body, botT);
     eq(`rejected: ${label}`, r.status, 400);
   }
 
@@ -284,7 +327,7 @@ section('8. Input validation - plant registration');
     proposed_species_name: 'Hoya sp. (test record)',
     latitude: 3.8167, longitude: 113.7833,
     height_m: 2.4, health_status: 'fair', life_stage: 'sapling',
-  }, rangerT);
+  }, botT);
   eq('a valid registration is accepted', good.status, 201);
   check('it is given a Plant ID', /^PLT-\d{4}-\d{4}$/.test(good.body.plant.plant_code || ''),
     good.body.plant?.plant_code);
@@ -295,16 +338,16 @@ section('9. Input validation - review, species and users');
 {
   const pending = (await get('/plants?status=pending', botT)).body.results[0];
 
-  const noNote = await post(`/plants/${pending.id}/reject`, {}, botT);
+  const noNote = await post(`/plants/${pending.id}/reject`, {}, revT);
   eq('rejecting without a note is refused', noNote.status, 400);
 
-  const blankNote = await post(`/plants/${pending.id}/reject`, { note: '   ' }, botT);
+  const blankNote = await post(`/plants/${pending.id}/reject`, { note: '   ' }, revT);
   eq('a whitespace-only note is refused', blankNote.status, 400);
 
   const unidentified = (await get('/plants?status=pending', botT)).body.results
     .find((p) => p.species_not_listed);
   if (unidentified) {
-    const r = await post(`/plants/${unidentified.id}/approve`, {}, botT);
+    const r = await post(`/plants/${unidentified.id}/approve`, {}, revT);
     eq('a record with no species cannot be approved', r.status, 400);
   }
 
@@ -352,7 +395,7 @@ section('10. Hostile and awkward input is stored safely');
     proposed_species_name: sqlish,
     location_notes: unicode,
     morphology_notes: 'a'.repeat(1999),
-  }, rangerT);
+  }, botT);
   eq('an awkward payload is accepted as data', r.status, 201);
   eq('the script tag is stored verbatim, not executed or stripped', r.body.plant.site_name, nasty);
   eq('the SQL-looking string is stored verbatim', r.body.plant.proposed_species_name, sqlish);
@@ -363,7 +406,7 @@ section('10. Hostile and awkward input is stored safely');
 
   const tooLong = await post('/plants', {
     site_name: 'Test', proposed_species_name: 'x', morphology_notes: 'a'.repeat(5000),
-  }, rangerT);
+  }, botT);
   eq('an over-long note is refused', tooLong.status, 400);
 
   const searchInjection = await get('/public/plants?q=' + encodeURIComponent("' OR 1=1 --"));
@@ -374,46 +417,52 @@ section('10. Hostile and awkward input is stored safely');
 /* ------------------------------------------------------------------ */
 section('11. The verification workflow end to end');
 {
-  const before = (await get('/plants/counts', botT)).body.queue;
+  const before = (await get('/plants/counts', revT)).body.queue;
 
-  // A ranger registers a plant against a known species.
+  // A botanist registers a plant against a known species.
   const species = (await get('/species')).body.results.find((s) => s.scientific_name === 'Koompassia excelsa');
   const created = await post('/plants', {
     species_id: species.id,
     site_name: 'Workflow test, marker 1',
     latitude: 3.8, longitude: 113.78, height_m: 40,
-  }, rangerT);
-  eq('the ranger entry is created', created.status, 201);
+  }, botT);
+  eq('the botanist entry is created', created.status, 201);
   eq('...with the status pending', created.body.plant.status, 'pending');
   check('...and no QR tag yet', !created.body.plant.qr_token);
 
   const id = created.body.plant.id;
 
-  const queueAfter = (await get('/plants/counts', botT)).body.queue;
+  const queueAfter = (await get('/plants/counts', revT)).body.queue;
   eq('the review queue grew by one', queueAfter, before + 1);
 
-  const botNotes = (await get('/notifications', botT)).body.results;
-  check('the botanist was notified',
-    botNotes.some((n) => n.type === 'submission.new' && (n.body || '').includes(created.body.plant.plant_code)));
+  const revNotes = (await get('/notifications', revT)).body.results;
+  check('the reviewer was notified',
+    revNotes.some((n) => n.type === 'submission.new' && (n.body || '').includes(created.body.plant.plant_code)));
 
   const anonBefore = await get('/public/plants/' + id);
   eq('the pending record is not public', anonBefore.status, 404);
 
-  // The botanist approves it.
-  const approved = await post(`/plants/${id}/approve`, {}, botT);
+  // The reviewer approves it.
+  const approved = await post(`/plants/${id}/approve`, {}, revT);
   eq('approval succeeds', approved.status, 200);
   eq('...the status becomes approved', approved.body.plant.status, 'approved');
   check('...a QR tag is issued automatically', !!approved.body.plant.qr_token);
-  check('...the verifier is recorded', approved.body.plant.verified_by_name === 'Dr Sue Han Lee');
+  check('...the verifier is recorded', approved.body.plant.verified_by_name === 'Dr Mei Ling Wong',
+    approved.body.plant.verified_by_name);
+
+  const again = await post(`/plants/${id}/approve`, {}, revT);
+  eq('approving a record that is already published is refused', again.status, 409);
+  const lateReturn = await post(`/plants/${id}/reject`, { note: 'too late' }, revT);
+  eq('...and so is returning it', lateReturn.status, 409);
 
   const token = approved.body.plant.qr_token;
   const scan = await get('/public/plants/token/' + token);
   eq('scanning the new tag resolves to the record', scan.status, 200);
   eq('...and returns the right plant', scan.body.plant.id, id);
 
-  const rangerNotes = (await get('/notifications', rangerT)).body.results;
-  check('the ranger was told it was published',
-    rangerNotes.some((n) => n.type === 'submission.approved' && (n.body || '').includes('approved')));
+  const botNotes = (await get('/notifications', botT)).body.results;
+  check('the botanist was told it was published',
+    botNotes.some((n) => n.type === 'submission.approved' && (n.body || '').includes('approved')));
 
   // Editing must not invalidate a printed tag.
   await patch(`/plants/${id}`, { site_name: 'Workflow test, marker 2 (moved)' }, botT);
@@ -423,6 +472,8 @@ section('11. The verification workflow end to end');
 
   // Archive withdraws it; restore brings the same token back.
   await post(`/plants/${id}/archive`, { reason: 'test' }, botT);
+  const reApprove = await post(`/plants/${id}/approve`, {}, revT);
+  eq('approving an archived record does not republish it', reApprove.status, 409);
   const archivedScan = await get('/public/plants/token/' + token);
   eq('an archived record is withdrawn from the public site', archivedScan.status, 404);
   eq('...with the archived reason', archivedScan.body.reason, 'archived');
@@ -438,60 +489,88 @@ section('12. Rejection path');
   const species = (await get('/species')).body.results[0];
   const created = await post('/plants', {
     species_id: species.id, site_name: 'Rejection test plot',
-  }, rangerT);
+  }, botT);
   const id = created.body.plant.id;
 
   const note = 'Photographs do not show the diagnostic features. Please re-photograph.';
-  const rejected = await post(`/plants/${id}/reject`, { note }, botT);
+  const rejected = await post(`/plants/${id}/reject`, { note }, revT);
   eq('rejection succeeds with a note', rejected.status, 200);
   eq('...the status becomes rejected', rejected.body.plant.status, 'rejected');
 
   const anon = await get('/public/plants/' + id);
   eq('a rejected record is not public', anon.status, 404);
 
-  const mine = (await get('/submissions?status=all&mine=1', rangerT)).body.results;
+  const mine = (await get('/submissions?status=all&mine=1', botT)).body.results;
   const found = mine.find((s) => s.plant_id === id);
-  check('the ranger can see it under their submissions', !!found);
-  eq('...with the botanist note attached', found?.review_comment, note);
+  check('the botanist can see it under their submissions', !!found);
+  eq('...with the reviewer note attached', found?.review_comment, note);
 
-  const notes = (await get('/notifications', rangerT)).body.results;
-  check('the ranger was notified of the return',
+  const notes = (await get('/notifications', botT)).body.results;
+  check('the botanist was notified of the return',
     notes.some((n) => n.type === 'submission.rejected'));
+
+  /* -------- fix and resubmit (#6) -------- */
+  const fixed = await patch(`/plants/${id}`, { site_name: 'Rejection test plot (re-photographed)' }, botT);
+  eq('the botanist can correct a returned record', fixed.status, 200);
+  eq('a ranger cannot resubmit it', (await post(`/plants/${id}/resubmit`, {}, rangerT)).status, 403);
+  eq('a reviewer cannot resubmit it either', (await post(`/plants/${id}/resubmit`, {}, revT)).status, 403);
+
+  const reply = 'Re-photographed the fruit and the bark slash.';
+  const resub = await post(`/plants/${id}/resubmit`, { note: reply }, botT);
+  eq('the botanist resubmits it', resub.status, 200);
+  eq('...and it is pending again', resub.body.plant.status, 'pending');
+  eq('resubmitting twice is refused', (await post(`/plants/${id}/resubmit`, {}, botT)).status, 409);
+
+  const queue = (await get('/submissions?status=pending', revT)).body.results;
+  const back = queue.find((x) => x.plant_id === id);
+  check('it is back in the reviewer queue', !!back);
+  eq('...showing what was asked last time', back?.plant?.previous_return?.review_comment, note);
+  const pc = typeof back?.proposed_changes === 'string' ? JSON.parse(back.proposed_changes) : back?.proposed_changes;
+  eq("...and the botanist's reply", pc?.resubmission_note, reply);
+
+  const ok = await post(`/plants/${id}/approve`, {}, revT);
+  eq('the reviewer approves the resubmission', ok.status, 200);
+  const history = (await get('/submissions?status=all&mine=1', botT)).body.results.filter((x) => x.plant_id === id);
+  check('both decisions are kept, not overwritten',
+    history.some((x) => x.status === 'rejected') && history.some((x) => x.status === 'approved'),
+    history.map((x) => x.status).join(','));
 }
 
 /* ------------------------------------------------------------------ */
-section('13. Botanist entries publish immediately');
+section('13. A botanist cannot publish their own record (#8)');
 {
   const species = (await get('/species')).body.results[1];
   const created = await post('/plants', {
     species_id: species.id, site_name: 'Botanist direct entry test',
   }, botT);
   eq('the botanist entry is created', created.status, 201);
-  eq('...and is approved straight away', created.body.plant.status, 'approved');
-  check('...with a QR tag already issued', !!created.body.plant.qr_token);
+  eq('...and waits for a reviewer rather than publishing', created.body.plant.status, 'pending');
+  check('...with no QR tag yet', !created.body.plant.qr_token);
+  eq('the botanist cannot approve it', (await post(`/plants/${created.body.plant.id}/approve`, {}, botT)).status, 403);
+  eq('...nor can a second botanist', (await post(`/plants/${created.body.plant.id}/approve`, {}, bot2T)).status, 403);
 }
 
 /* ------------------------------------------------------------------ */
-section('14. The require_approval setting changes ranger behaviour');
+section('14. The require_approval setting changes botanist behaviour');
 {
   const species = (await get('/species')).body.results[2];
 
   await patch('/settings/require_approval', { value: false }, adminT);
   const direct = await post('/plants', {
     species_id: species.id, site_name: 'Approval-off test',
-  }, rangerT);
-  eq('with approval off, a ranger entry publishes immediately', direct.body.plant.status, 'approved');
+  }, botT);
+  eq('with approval off, a botanist entry publishes immediately', direct.body.plant.status, 'approved');
 
   const unlisted = await post('/plants', {
     proposed_species_name: 'Unknown sp. (approval-off test)', site_name: 'Approval-off test 2',
-  }, rangerT);
-  eq('...but an unidentified record still needs a botanist', unlisted.body.plant.status, 'pending');
+  }, botT);
+  eq('...but an unidentified record still needs a reviewer', unlisted.body.plant.status, 'pending');
 
   await patch('/settings/require_approval', { value: true }, adminT);
   const reviewed = await post('/plants', {
     species_id: species.id, site_name: 'Approval-on test',
-  }, rangerT);
-  eq('with approval on, a ranger entry waits for review', reviewed.body.plant.status, 'pending');
+  }, botT);
+  eq('with approval on, a botanist entry waits for review', reviewed.body.plant.status, 'pending');
 }
 
 /* ------------------------------------------------------------------ */
@@ -576,7 +655,7 @@ section('17. Admin account management');
   await patch(`/users/${id}`, { role_id: 3 }, adminT);
   const asBotanist = await get('/auth/me', backOn);
   eq('a role change takes effect', asBotanist.body.user.role, 'botanist');
-  check('...and brings the new permissions', asBotanist.body.user.permissions.includes('plant.approve'));
+  check('...and brings the new permissions', asBotanist.body.user.permissions.includes('plant.create'));
 
   const reset = await post(`/users/${id}/reset-password`, {}, adminT);
   eq('a password reset succeeds', reset.status, 200);
@@ -972,21 +1051,21 @@ section('31. Archiving a record that was still awaiting review');
     site_name: 'Debug plot, archive-while-pending',
     proposed_species_name: 'Unknown archive case',
     species_not_listed: true,
-  }, rangerT);
-  eq('a ranger submits a record', made.status, 201);
+  }, botT);
+  eq('a botanist submits a record', made.status, 201);
   const id = made.body.plant.id;
 
-  const queued = await get('/submissions?status=pending', botT);
-  check('it shows in the botanist queue', queued.body.results.some((s) => s.plant.id === id));
+  const queued = await get('/submissions?status=pending', revT);
+  check('it shows in the review queue', queued.body.results.some((s) => s.plant.id === id));
 
   const arch = await post(`/plants/${id}/archive`, { reason: 'Withdrawn, wrong tree' }, botT);
   eq('a botanist archives it before reviewing', arch.status, 200);
 
-  const after = await get('/submissions?status=pending', botT);
+  const after = await get('/submissions?status=pending', revT);
   check('it no longer sits in the queue', !after.body.results.some((s) => s.plant.id === id),
     'an archived record left in the queue could be approved and published');
 
-  const closed = (await get('/submissions?status=all', botT)).body.results.find((s) => s.plant.id === id);
+  const closed = (await get('/submissions?status=all', revT)).body.results.find((s) => s.plant.id === id);
   check('the submission is closed, not just hidden', closed && closed.status !== 'pending');
   check('...and says why', !!closed?.review_comment);
 }
@@ -1056,14 +1135,14 @@ section('32. Uploading a photograph');
       site_name: 'Debug plot, pending photo',
       proposed_species_name: 'Unconfirmed', species_not_listed: true,
       photos: [{ data_url: dataUrl }],
-    }, rangerT);
-    eq('a ranger entry with a photograph is accepted', pending.status, 201);
+    }, botT);
+    eq('a botanist entry with a photograph is accepted', pending.status, 201);
     const anon = await fetch(ORIGIN + pending.body.plant.photo);
     eq('its photograph is not public while the record is pending', anon.status, 404);
     const asStaff = await fetch(ORIGIN + pending.body.plant.photo, {
-      headers: { Authorization: 'Bearer ' + rangerT },
+      headers: { Authorization: 'Bearer ' + revT },
     });
-    eq('...but the ranger who took it can still see it', asStaff.status, 200);
+    eq('...but the reviewer checking it can see it', asStaff.status, 200);
   }
 }
 

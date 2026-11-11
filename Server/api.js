@@ -190,7 +190,9 @@ async function plantExtras(rows) {
     userIds.length
       ? q(`SELECT id, full_name FROM users WHERE id IN (${placeholders(userIds)})`, userIds)
       : [],
-    q(`SELECT * FROM plant_submissions WHERE plant_id IN (${ph}) ORDER BY submitted_at DESC`, ids),
+    // id breaks the tie: DATETIME keeps whole seconds, and a record returned
+    // and resubmitted within one second has two rows with the same time.
+    q(`SELECT * FROM plant_submissions WHERE plant_id IN (${ph}) ORDER BY submitted_at DESC, id DESC`, ids),
     q(`SELECT plant_id, COUNT(*) n FROM qr_scans WHERE plant_id IN (${ph}) GROUP BY plant_id`, ids),
     q(`SELECT plant_id, COUNT(*) n FROM plant_reports WHERE plant_id IN (${ph}) GROUP BY plant_id`, ids),
     // The whole species row, not just the columns joined onto the plant: a
@@ -276,6 +278,9 @@ function shapePlant(p, ex, { full = false, viewer = null } = {}) {
     } : null,
     photos,
     submission: sub,
+    // On a resubmitted record the reviewer needs what was asked last time,
+    // and the botanist's reply, side by side.
+    previous_return: (ex.subs.get(p.id) || []).find((x) => x !== sub && x.status === 'rejected') || null,
     scan_count: ex.scans.get(p.id) || 0,
     reports: ex.reports.get(p.id) || 0,
   };
@@ -810,11 +815,16 @@ export function createApi() {
 
   api.get('/plants', route(async (req, res) => {
     if (!req.user) return res.status(401).json({ error: 'Sign in required' });
+    // The staff register is for the people who handle plant records. A ranger
+    // has neither code and reads the public register like anyone else.
+    if (!req.can('plant.view_all') && !req.can('plant.create')) {
+      return res.status(403).json({ error: 'Your role does not have permission: plant.view_all' });
+    }
     const { q: search = '', status = '', family = '', conservation = '', site = '', mine = '' } = req.query;
 
     const where = ['p.deleted_at IS NULL'];
     const params = [];
-    // A ranger without plant.view_all sees only their own records.
+    // Someone who can register but not see everything sees only their own.
     if (!req.can('plant.view_all') || mine === '1') {
       where.push('p.registered_by = ?');
       params.push(req.user.id);
@@ -884,8 +894,10 @@ export function createApi() {
 
     const requireApproval = getSetting('require_approval');
     const canPublish = req.can('plant.approve');
-    // Botanist entries publish immediately. Ranger entries follow the setting,
-    // but a "species not listed" entry always needs review.
+    // Entries follow the setting, but a "species not listed" entry always
+    // needs review. A role that holds plant.approve as well as plant.create
+    // would publish its own - none does, by design: a second person checks
+    // every record a botanist registers.
     let status = 'pending';
     if (canPublish && b.species_id) status = 'approved';
     else if (!requireApproval && b.species_id) status = 'approved';
@@ -1034,9 +1046,36 @@ export function createApi() {
   const pendingSubmission = (plantId) =>
     one("SELECT * FROM plant_submissions WHERE plant_id = ? AND status = 'pending' LIMIT 1", [plantId]);
 
+  /**
+   * Approving and returning both act on a submission that is still waiting.
+   *
+   * Without this, Approve on a record that was already published, returned or
+   * archived re-publishes it - an archived plant comes back to the public site
+   * with its tag reactivated, and nobody asked for that. A reviewer may not
+   * decide on their own submission either; the whole point of the second pair
+   * of eyes is that it is a different person.
+   *
+   * Sends the refusal and returns null, or returns the plant and submission.
+   */
+  async function reviewable(req, res) {
+    const plant = await byId('plants', req.params.id);
+    if (!plant || plant.deleted_at) { res.status(404).json({ error: 'Not found' }); return null; }
+    const sub = await pendingSubmission(plant.id);
+    if (plant.status !== 'pending' || !sub) {
+      res.status(409).json({ error: 'This record is not awaiting review (it is ' + plant.status + ').' });
+      return null;
+    }
+    if (sub.submitted_by === req.user.id || plant.registered_by === req.user.id) {
+      res.status(403).json({ error: 'You cannot review a record you submitted yourself. Another reviewer must check it.' });
+      return null;
+    }
+    return { before: plant, sub };
+  }
+
   api.post('/plants/:id/approve', need('plant.approve'), route(async (req, res) => {
-    const before = await byId('plants', req.params.id);
-    if (!before) return res.status(404).json({ error: 'Not found' });
+    const found = await reviewable(req, res);
+    if (!found) return;
+    const { before, sub } = found;
     if (!before.species_id) {
       return res.status(400).json({
         error: 'This record has no confirmed species. Set the species first, then approve it.',
@@ -1050,20 +1089,17 @@ export function createApi() {
     });
 
     const qr = await issueQr(before.id, req.user.id);
-    const sub = await pendingSubmission(before.id);
-    if (sub) {
-      await update('plant_submissions', sub.id, {
-        status: 'approved', reviewed_by: req.user.id,
-        reviewed_at: nowIso(), review_comment: req.body?.note || null,
-      });
-      await notify({
-        user_id: sub.submitted_by, type: 'submission.approved',
-        title: 'Submission published: ' + after.plant_code,
-        body: req.user.full_name + ' approved your record. It is now on the public site and its tag can be printed.',
-        related_type: 'plant', related_id: after.id,
-      });
-    }
-    await recordRevisions(before.id, req.user.id, before, after, 'Approved by botanist');
+    await update('plant_submissions', sub.id, {
+      status: 'approved', reviewed_by: req.user.id,
+      reviewed_at: nowIso(), review_comment: req.body?.note || null,
+    });
+    await notify({
+      user_id: sub.submitted_by, type: 'submission.approved',
+      title: 'Submission published: ' + after.plant_code,
+      body: req.user.full_name + ' approved your record. It is now on the public site and its tag can be printed.',
+      related_type: 'plant', related_id: after.id,
+    });
+    await recordRevisions(before.id, req.user.id, before, after, 'Approved at review');
     audit({
       user_id: req.user.id, action: 'approve', entity_type: 'plants', entity_id: before.id,
       old_values: { status: before.status }, new_values: { status: 'approved', qr_token: qr.qr_token },
@@ -1074,28 +1110,67 @@ export function createApi() {
 
   api.post('/plants/:id/reject', need('plant.approve'), route(async (req, res) => {
     const note = String(req.body?.note || '').trim();
-    if (!note) return res.status(400).json({ error: 'A note is required when rejecting, so the ranger knows what to change.' });
-    const before = await byId('plants', req.params.id);
-    if (!before) return res.status(404).json({ error: 'Not found' });
+    if (!note) return res.status(400).json({ error: 'A note is required when returning a record, so the botanist knows what to change.' });
+    if (note.length > 2000) return res.status(400).json({ error: `The note is too long (${note.length} characters, maximum 2000).` });
+    const found = await reviewable(req, res);
+    if (!found) return;
+    const { before, sub } = found;
 
     const after = await update('plants', before.id, { status: 'rejected', updated_at: nowIso() });
-    const sub = await pendingSubmission(before.id);
-    if (sub) {
-      await update('plant_submissions', sub.id, {
-        status: 'rejected', reviewed_by: req.user.id,
-        reviewed_at: nowIso(), review_comment: note,
-      });
-      await notify({
-        user_id: sub.submitted_by, type: 'submission.rejected',
-        title: 'Submission returned: ' + after.plant_code,
-        body: req.user.full_name + ' asked for changes. ' + note.slice(0, 120),
-        related_type: 'plant', related_id: after.id,
-      });
-    }
+    await update('plant_submissions', sub.id, {
+      status: 'rejected', reviewed_by: req.user.id,
+      reviewed_at: nowIso(), review_comment: note,
+    });
+    await notify({
+      user_id: sub.submitted_by, type: 'submission.rejected',
+      title: 'Submission returned: ' + after.plant_code,
+      body: req.user.full_name + ' asked for changes. ' + note.slice(0, 120),
+      related_type: 'plant', related_id: after.id,
+    });
     await recordRevisions(before.id, req.user.id, before, after, note);
     audit({
       user_id: req.user.id, action: 'reject', entity_type: 'plants', entity_id: before.id,
       old_values: { status: before.status }, new_values: { status: 'rejected', note },
+    });
+    const joined = (await plantsWhere('p.id = ?', [before.id]))[0];
+    res.json({ plant: await shapeOne(joined, { full: true, viewer: req.user }) });
+  }));
+
+  /**
+   * Send a returned record back for review, once the botanist has made the
+   * changes the reviewer asked for. A fresh submission row is opened rather
+   * than the old one reopened, so the history keeps both decisions.
+   */
+  api.post('/plants/:id/resubmit', need('plant.create'), route(async (req, res) => {
+    const before = await byId('plants', req.params.id);
+    if (!before || before.deleted_at) return res.status(404).json({ error: 'Not found' });
+    if (before.registered_by !== req.user.id && !req.can('plant.edit')) {
+      return res.status(403).json({ error: 'Only the person who registered this record can resubmit it.' });
+    }
+    if (before.status !== 'rejected') {
+      return res.status(409).json({ error: 'Only a returned record can be resubmitted (this one is ' + before.status + ').' });
+    }
+    const note = String(req.body?.note || '').trim().slice(0, 2000) || null;
+
+    const after = await update('plants', before.id, { status: 'pending', updated_at: nowIso() });
+    const sub = await insert('plant_submissions', {
+      // 'new', not 'edit': the schema keeps 'edit' for proposed corrections to
+      // a published record. This is the same new record, asked about again.
+      plant_id: before.id, submission_type: 'new', status: 'pending',
+      proposed_changes: note ? { resubmission_note: note } : null,
+      submitted_by: req.user.id, submitted_at: nowIso(),
+      reviewed_by: null, reviewed_at: null, review_comment: null,
+    });
+    await notifyPermission('plant.approve', {
+      type: 'submission.new',
+      title: 'Resubmitted for review',
+      body: req.user.full_name + ' resubmitted ' + after.plant_code + ' after changes.' + (note ? ' ' + note.slice(0, 120) : ''),
+      related_type: 'submission', related_id: sub.id,
+    });
+    await recordRevisions(before.id, req.user.id, before, after, note || 'Resubmitted for review');
+    audit({
+      user_id: req.user.id, action: 'update', entity_type: 'plants', entity_id: before.id,
+      old_values: { status: 'rejected' }, new_values: { status: 'pending', resubmitted: true },
     });
     const joined = (await plantsWhere('p.id = ?', [before.id]))[0];
     res.json({ plant: await shapeOne(joined, { full: true, viewer: req.user }) });
@@ -1116,7 +1191,7 @@ export function createApi() {
     }
 
     // Archiving something that was still awaiting review has to close the
-    // submission too. Left pending it stays in the botanist queue, where
+    // submission too. Left pending it stays in the review queue, where
     // approving it would publish a record somebody had already withdrawn.
     const pending = await pendingSubmission(before.id);
     if (pending) {
@@ -1188,7 +1263,7 @@ export function createApi() {
          LEFT JOIN users submitter ON submitter.id = sub.submitted_by
          LEFT JOIN users reviewer  ON reviewer.id  = sub.reviewed_by
          ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
-        ORDER BY sub.submitted_at ASC`,
+        ORDER BY sub.submitted_at ASC, sub.id ASC`,
       params,
     );
 

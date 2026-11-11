@@ -6,8 +6,8 @@
 --   mysql -u root plant_registry < server/schema-extensions.sql
 --
 -- plant_registry_schema.sql is the submitted design. Its only change since
--- is in the IoT tables, to match the real sensor kit (see section 7).
--- Everything here is additive, apart from section 7, and exists because the
+-- is in the IoT tables, to match the real sensor kit (see section 8).
+-- Everything here is additive, apart from section 8, and exists because the
 -- prototype does two things the schema was written before: it imports real
 -- species data from GBIF, iNaturalist and Wikipedia, and it withholds the
 -- locations of threatened plants from the public.
@@ -135,7 +135,59 @@ CREATE TABLE IF NOT EXISTS plant_photo_data (
 
 
 -- ---------------------------------------------------------------------
--- 6. Extra fields from the sensor node
+-- 6. Who does what with a plant (issue #8)
+-- ---------------------------------------------------------------------
+-- After the client consultation the roles were redrawn:
+--
+--   ranger    in charge only when an IoT sensor raises an alert. No longer
+--             registers, edits or tags plants.
+--   botanist  owns the ground-truthing: registers, edits and archives plant
+--             and species records and prints tags. No longer approves, so a
+--             botanist cannot publish their own record.
+--   reviewer  new. Double-checks every record a botanist submits, can correct
+--             it during review, and approves it or returns it with a note.
+--
+-- The API checks permission codes, never role names, so this is data only -
+-- no code depends on the role being called "reviewer".
+--
+-- Safe to re-run: the role is upserted and the three roles' grants are
+-- rebuilt from scratch each time. That also means a grant changed by hand
+-- for these roles is put back on the next "npm run db:setup". Keep the lists
+-- in step with the grant() calls in Server/seed.js.
+
+INSERT INTO roles (id, name, label, description) VALUES
+  (4, 'reviewer', 'Reviewer',
+   'Double-checks every plant a botanist registers, then approves it for publication or returns it with a note')
+ON DUPLICATE KEY UPDATE label = VALUES(label), description = VALUES(description);
+
+UPDATE roles SET description = 'Responds to IoT sensor alerts in the field. Does not register or edit plant records'
+ WHERE name = 'ranger';
+UPDATE roles SET description = 'Ground-truths plants: registers, edits and archives plant and species records, prints QR tags; sets up sensors'
+ WHERE name = 'botanist';
+
+DELETE rp FROM role_permissions rp
+  JOIN roles r ON r.id = rp.role_id
+ WHERE r.name IN ('ranger', 'botanist', 'reviewer');
+
+INSERT INTO role_permissions (role_id, permission_id)
+SELECT r.id, p.id
+  FROM roles r
+  JOIN permissions p
+ WHERE (r.name = 'ranger'   AND p.code IN ('sensor.view', 'alert.resolve'))
+    OR (r.name = 'botanist' AND p.code IN (
+          'plant.view_all', 'plant.create', 'plant.edit', 'plant.archive', 'plant.history',
+          'species.manage', 'qr.print', 'qr.manage', 'report.view', 'report.resolve',
+          'sensor.view', 'sensor.manage'))
+    OR (r.name = 'reviewer' AND p.code IN (
+          'plant.view_all', 'plant.edit', 'plant.approve', 'plant.history'));
+
+UPDATE settings
+   SET description = 'true = botanist entries wait for a reviewer; false = they publish immediately. A "species not listed" entry always waits'
+ WHERE setting_key = 'require_approval';
+
+
+-- ---------------------------------------------------------------------
+-- 7. Extra fields from the sensor node
 -- ---------------------------------------------------------------------
 -- The ESP32 node (iot-kit/FloraScan_Node) sends more than the three readings
 -- the schema stores: the kit also has a raindrop plate, a PIR motion sensor
@@ -160,7 +212,7 @@ ALTER TABLE sensor_readings
 
 
 -- ---------------------------------------------------------------------
--- 7. Real kit: light sensor out, distance sensor in
+-- 8. Real kit: light sensor out, distance sensor in
 -- ---------------------------------------------------------------------
 -- The real kit has no light sensor, so the light columns and the 'light'
 -- alert type are gone from plant_registry_schema.sql. It does have an

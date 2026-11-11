@@ -1,84 +1,89 @@
-# FloraScan — Prototype X
+# FloraScan
 
-Clickable prototype for the **Smart Ground-Truthing and Digital Biodiversity System**
-(COS30049 Computing Technology Innovation Project — NeuonAI / Sarawak Forestry Corporation,
-framed around Niah National Park).
+A working prototype of the **Smart Ground-Truthing and Digital Biodiversity System**
+(COS30049 Computing Technology Innovation Project, for NeuonAI / Sarawak Forestry
+Corporation, set in Niah National Park).
 
-It runs the whole chain end to end: a ranger registers a plant in the field, a botanist
-verifies it, the record is published with a QR tag, and a visitor scans that tag and reads
-the page. Administrators manage accounts and roles, and every change is recorded against
-the person who made it.
+What it does:
 
-Everything is stored in **MySQL**, in the schema defined by
-[`plant_registry_schema.sql`](plant_registry_schema.sql) — 24 tables and one view. There is
-no in-memory mode and no demo fallback: if the database is not reachable the server refuses
-to start and says why, because a prototype quietly serving empty data that is never saved
-would be worse than one that stops.
+- A **botanist** registers a plant found in the field.
+- A **reviewer** checks the record, then approves it or sends it back.
+- An approved record is published with a **QR tag** that can be printed.
+- A **visitor** scans the tag and reads the plant's page.
+- An **administrator** manages staff accounts, roles and settings.
+- Every change is logged with who made it and when.
+
+The interface is available in **English, Bahasa Melayu and 中文**.
+
+All data lives in **MySQL**. If the server cannot reach the database, it stops and tells
+you why. There is no offline or in-memory mode.
 
 ---
 
-## Run it
+## Getting started
 
-You need **Node 20.12 or newer** and a **MySQL** server. XAMPP is what the team uses, so
-that is what these instructions assume.
+### What you need
+
+- **Node.js 22.12 or newer** (older versions cannot run the browser tests)
+- **MySQL** or **MariaDB**. The team uses **XAMPP**, so these steps assume that.
 
 ### 1. Start MySQL
 
-Open the **XAMPP Control Panel** and press **Start** next to **MySQL**. Start **Apache**
-too if you want phpMyAdmin — the app itself does not need it.
+Open the **XAMPP Control Panel** and click **Start** next to **MySQL**. Start **Apache**
+as well if you want to use phpMyAdmin. The app itself does not need Apache.
 
-### 2. Set up the project
+### 2. Install and run
 
 ```bash
 npm install
-cp .env.example .env     # already points at mysql://root@127.0.0.1:3306/plant_registry
+cp .env.example .env
 npm run db:setup
 npm run dev
 ```
 
-That is the whole setup. `db:setup` does four things in order:
+The default `.env` connects to `mysql://root@127.0.0.1:3306/plant_registry`, which matches
+a fresh XAMPP install.
 
-1. connects to your MySQL server and **creates the `plant_registry` database** if it is not
-   already there
-2. applies [`plant_registry_schema.sql`](plant_registry_schema.sql)
-3. applies [`Server/schema-extensions.sql`](Server/schema-extensions.sql), which adds the
-   columns and the photo-blob table the prototype needs on top of the schema proper
-4. loads the demo dataset — **5,856 rows**: staff, species, specimens, submissions, tags,
-   scans and audit history
+`npm run db:setup` does this:
 
-Run it again and it leaves your data alone. Add `-- --reset` to rebuild from scratch:
+1. Creates the `plant_registry` database if it does not exist.
+2. Runs [`plant_registry_schema.sql`](plant_registry_schema.sql), the main schema
+   (23 tables and 1 view).
+3. Runs [`Server/schema-extensions.sql`](Server/schema-extensions.sql), which adds a few
+   extra columns, settings, the Reviewer role, and the table that stores uploaded photos.
+4. Loads the demo data: staff, species, plants, submissions, QR tags, scans and audit history.
+
+If the database already has plants in it, step 4 is skipped so your data is kept.
+To wipe everything and start again:
 
 ```bash
 npm run db:setup -- --reset
 ```
 
-### 3. Have a look at the data
+### 3. Look at the data
 
-The database shows up in **phpMyAdmin** at `http://localhost/phpmyadmin` as
-`plant_registry`. Anything you change there appears in the app on the next request, and
-anything you do in the app is visible there — it is one database, not a copy.
+Open phpMyAdmin at `http://localhost/phpmyadmin` and pick `plant_registry`. The app and
+phpMyAdmin use the same database, so a change in one shows up in the other straight away.
 
-### If something goes wrong
+### Common errors
 
-| Message | What it means |
+| Message | Fix |
 | --- | --- |
-| `No database configured` | There is no `.env`, or it has no `DATABASE_URL`. Copy `.env.example`. |
-| `Could not reach the database` | MySQL is not running. Start it in the XAMPP panel. |
-| `Unknown database 'plant_registry'` | You have not run `npm run db:setup` yet. |
-| `Access denied for user 'root'` | Your MySQL root account has a password. Put it in `.env`: `mysql://root:yourpassword@127.0.0.1:3306/plant_registry`. |
+| `No database configured` | You have no `.env` file, or it has no `DATABASE_URL`. Copy `.env.example` to `.env`. |
+| `Could not reach the database` | MySQL is not running. Start it in XAMPP. |
+| `Unknown database 'plant_registry'` | Run `npm run db:setup`. |
+| `Access denied for user 'root'` | Your MySQL root user has a password. Add it to `.env`: `mysql://root:yourpassword@127.0.0.1:3306/plant_registry` |
 
-`.env` is **gitignored**. Never commit it, and never paste it into a chat or an issue.
+**Never commit `.env`** or paste it anywhere public. It is already in `.gitignore`.
 
-### Photographs
+### Photos
 
-A fresh clone has no local photograph cache — `Server/data/photos/` is about 28 MB and
-gitignored — so images are fetched from iNaturalist instead, using the `remote_url` each
-record carries. They still appear, but you need to be online. `npm run import:species`
-rebuilds the cache locally; it takes about ten minutes and is safe to re-run.
-
-Photographs **uploaded through the app** are different: they go into the database as bytes,
-in `plant_photo_data`, and are served back from `/api/photos/upload/:id`. They work offline
-and survive a reseed only if you reseed without `--reset`.
+- **Species photos** come from iNaturalist. A fresh clone does not have them saved locally
+  (`Server/data/photos/` is about 28 MB and is gitignored), so they load from the internet.
+  Run `npm run import:species` to download them locally. It takes about 10 minutes and is
+  safe to run again.
+- **Photos uploaded in the app** are saved in the database (`plant_photo_data` table) and
+  work offline. Running `db:setup -- --reset` deletes them.
 
 ---
 
@@ -86,152 +91,133 @@ and survive a reseed only if you reseed without `--reset`.
 
 | Command | What it does |
 | --- | --- |
-| `npm run dev` | Start the server over HTTPS (the default) |
-| `npm run http` | Same, over plain HTTP — the camera and install will not work |
-| `npm run db:setup` | Create the database and schema, then load the demo data |
-| `npm run db:setup -- --reset` | The same, but rebuild from scratch |
-| `npm run db:seed` | Reload the demo data only, leaving the schema alone |
-| `npm test` | Both test suites — reseeds the database first |
-| `npm run test:api` | API checks only, no browser needed |
-| `npm run test:ui` | Browser checks only |
-| `npm run port` | Assign a new random port |
-| `npm run import:species` | Rebuild the species dataset from GBIF, iNaturalist and Wikipedia |
-| `npm run import:tints` | Sample an average colour per photo, used as the loading placeholder |
-| `npm run build` / `npm run preview` | Production build, and serve it |
+| `npm run dev` (or `npm start`) | Start the app over HTTPS |
+| `npm run http` | Start over plain HTTP. The camera and "add to home screen" will not work. |
+| `npm run db:setup` | Create the database and tables, and load demo data if empty |
+| `npm run db:setup -- --reset` | Delete everything and rebuild from scratch |
+| `npm run db:reset` | Same as above |
+| `npm run db:seed` | Reload only the demo data (tables stay as they are) |
+| `npm test` | Run all three test suites. **This reseeds your database first.** |
+| `npm run test:i18n` | Check translations only. No server needed. |
+| `npm run test:api` | Check the API only. No browser needed. |
+| `npm run test:ui` | Check the screens in a real browser only |
+| `npm run port` | Pick a new random port |
+| `npm run import:species` | Rebuild the species list from GBIF, iNaturalist and Wikipedia |
+| `npm run import:tints` | Work out a background colour for each photo (shown while it loads) |
+| `npm run build`, then `npm run preview` | Make a production build and serve it |
 
 ---
 
-## How the team works on this
+## How the team works
 
-The repository is split by **layer**, and so are the branches. Each one owns a folder, and
-nobody edits a folder that is not theirs — which is what keeps two people from ever
-touching the same file.
+### Branches
 
-| Branch | Owns | Who works there |
+The code is split into layers. Each layer has its own branch and its own folder.
+**Only work inside your own folder.** That way two people never edit the same file.
+
+| Branch | Folder | Who |
 | --- | --- | --- |
-| `main` | the integration branch — everything merges here | NY only |
-| `frontend` | `FloraScan-Web-App/` — screens, components, styles, the client API wrapper | the web app people |
-| `backend` | `Server/` — the API, the data layer, auth, QR, certificates | the server people |
-| `database` | `plant_registry_schema.sql`, `scripts/` — schema, migrations, the seeder | whoever owns the data model |
+| `main` | Everything. All work is merged here. | NY only |
+| `frontend` | `FloraScan-Web-App/` (screens, components, styles, API client) | Web app team |
+| `backend` | `Server/` (API, database code, login, QR, certificates) | Server team |
+| `database` | `plant_registry_schema.sql`, `scripts/` (schema, seed data) | Data model owner |
 
-This works here because the layers really are independent: nothing in
-`FloraScan-Web-App/` imports anything from `Server/` or the other way round. They talk
-over HTTP and nothing else, so two branches changing a screen and an endpoint at the same
-time do not collide at the file level at all.
+The frontend and backend never import each other's code. They only talk over HTTP, so a
+screen change and an API change can happen at the same time without conflicts.
 
-`main` must always run. Anything a teammate can clone and `npm run dev` straight into is
-worth protecting, so work never lands on it directly.
+`main` must always work. Nobody pushes to it directly.
 
-### The loop
+### Day-to-day
 
-Your layer branch is long-lived — you do not delete it after a merge, you keep working on
-it.
+Keep your layer branch. Do not delete it after a merge.
 
 ```bash
-git checkout frontend        # your layer, once
+git checkout frontend
 git pull
 
-#  ... work, inside your own folder ...
-npm test                     # both suites, against your own database
+# ... make your changes inside your own folder ...
+npm test
 
 git add -A
 git commit -m "Sort the species picker by scientific name"
 git push
 ```
 
-Then open a pull request into `main` on GitHub. NY does the connectivity check — that the
-layers still agree with each other and both suites pass — and merges it.
+Then open a pull request into `main` on GitHub. NY checks that the layers still work
+together and the tests pass, then merges it.
 
-**Then pull `main` back into your branch:**
+**After anything is merged into `main`, update your branch:**
 
 ```bash
 git checkout frontend
 git merge main
 ```
 
-Do this every time something lands on `main`, not once a week. A layer branch that has not
-seen `main` for ten days is where merge pain comes from; one that merges daily never has
-any.
+Do this every time, not once a week. Branches that fall behind are what cause painful
+merge conflicts.
 
-### The shared files
+### Shared files
 
-Seven files at the root belong to no layer, and they are the only place two branches can
-genuinely conflict:
+These files do not belong to any one layer, so they are the only place two branches can
+clash:
 
 ```
 package.json  package-lock.json  vite.config.js
 README.md  .env.example  .gitignore  tests/
 ```
 
-**Changes to these go through NY**, on `main`, rather than being made on a layer branch.
-If you need a new dependency, say so rather than editing `package.json` on your branch and
-hoping — two branches each adding a package produce a `package-lock.json` conflict that is
-miserable to resolve by hand.
+- **Changes to these go through NY on `main`.**
+- Need a new package? Ask NY. Don't add it to `package.json` on your branch. Two branches
+  adding packages at the same time break `package-lock.json`.
+- You can add tests in `tests/` on your branch. If two branches change the same spot,
+  NY sorts it out.
 
-`tests/` is shared on purpose. Both suites test the whole stack end to end, so they belong
-to nobody in particular; add to them freely on your branch, but expect NY to be the one who
-resolves it if two branches add checks in the same place.
+### A feature that needs both frontend and backend
 
-### When a change spans two layers
+1. **Backend first.** Build the API endpoint and its tests on `backend`, and get it merged.
+2. **Frontend second.** Merge `main` into `frontend` so the endpoint is there, then build
+   the screen.
 
-A new feature usually needs both halves — an endpoint in `Server/` and a screen in
-`FloraScan-Web-App/` that calls it. That does not fit in one layer branch, so do it in
-this order:
+If the two parts really can't be split, make one short-lived branch from `main` for that
+feature, merge it, and tell the layer owners to pull.
 
-1. **Backend first.** Add the endpoint on `backend`, with its API checks, and get it
-   merged into `main`.
-2. **Then the frontend.** `git merge main` into `frontend` so the endpoint is actually
-   there, and build the screen against it.
+### Rules
 
-Two merges rather than one, and the API gets settled before anything is built on top of it
-— which is the right order anyway.
-
-If the two halves genuinely cannot be separated, make one short-lived branch off `main`
-for that feature alone, merge it, and tell the layer owners to pull.
-
-### Rules worth keeping
-
-- **Stay in your folder.** This is the whole reason the split works. A frontend branch that
-  edits `Server/` has given up the guarantee.
-- **Run `npm test` before you push.** Both suites, against your own database. A red suite
-  on `main` blocks everybody.
-- **Merge `main` into your branch often**, and never merge one layer branch into another.
-  Everything meets on `main`.
-- **Never commit `.env`**, your database password, or anything under `.certs/`. All three
-  are gitignored; keep it that way.
-- **Connectivity checks and merges to `main` are NY's**, so that one person is always
-  looking at whether the layers still fit together.
+- **Stay in your own folder.**
+- **Run `npm test` before you push.** A broken `main` blocks everyone.
+- **Merge `main` into your branch often.** Never merge one layer branch into another.
+- **Never commit** `.env`, passwords, or anything in `.certs/`.
+- **Only NY merges into `main`.**
 
 ---
 
-## Running it on your phone
+## Using it on a phone
 
-The terminal prints two addresses and a QR code:
+When the server starts, the terminal shows two addresses and a QR code:
 
 ```
 This computer    https://localhost:44xxx
 Phone / tablet   https://192.168.0.133:44xxx   (same Wi-Fi or hotspot)
 ```
 
-A **random port** is chosen on first run and saved to `proto.config.json`, so the URL and
-the printed QR keep working between restarts. `npm run port` picks a new one.
+- The port is picked at random the first time and saved in `proto.config.json`, so it stays
+  the same after a restart. Run `npm run port` to change it.
+- Scan the QR code with your phone, or open `/connect` for a bigger QR code and other
+  network addresses.
+- Your phone and computer must be on the **same Wi-Fi or hotspot**.
 
-Scan the QR code in the terminal, or open `/connect` in the browser for a bigger one plus
-the alternative network addresses. Your phone must be on the same Wi-Fi or hotspot.
+On a laptop the app looks like a website. On a phone it looks like an app with a tab bar
+at the bottom. You can switch between the two from the role switcher, which is handy for
+showing the phone layout on a projector.
 
-The layout follows the screen size: a website on a laptop, an app shell with a bottom tab
-bar on a phone. You can force either from the role switcher, so the Android layout can be
-demonstrated on a projector.
+### Why HTTPS, and the security warning
 
-### Why HTTPS, and the certificate warning
+Phone browsers block the camera, GPS and "add to home screen" on plain `http://` addresses.
+So the server uses HTTPS by default, with a certificate it creates itself on first start
+(saved in `.certs/`, which is gitignored).
 
-The server runs over **HTTPS by default**, with a certificate signed by a small local
-certificate authority generated on first start (kept in `.certs/`, which is gitignored).
-This is not optional polish: a phone browser refuses the camera, GPS and the
-add-to-home-screen prompt on a plain `http://192.168.x.x` address, and those are most of
-what this prototype is for.
-
-Every browser warns once about the local certificate. Accept it and it is remembered:
+Because this certificate is made locally, every browser shows a warning the first time.
+This is expected. Nothing leaves your network. Accept it once:
 
 | Browser | What to tap |
 | --- | --- |
@@ -239,329 +225,339 @@ Every browser warns once about the local certificate. Accept it and it is rememb
 | Safari / iOS | **Show Details** → **visit this website** → **Visit Website** |
 | Edge | **Advanced** → **Continue to** |
 
-The warning is expected: the certificate is generated locally, because there is no public
-domain to certify. Nothing leaves your network. If you need plain HTTP for some reason,
-`npm run http` serves it, but the camera will not work.
-
-**Trusting it on an iPhone (needed for the home-screen icon).** Accepting the warning covers
-the page, but iOS fetches the home-screen icon separately, refuses the untrusted certificate,
-and puts a plain letter "F" on the home screen instead. Trust the local CA once and the icon,
-camera and offline mode all work with no warning. Open **`/connect`** on the phone in Safari
-and follow **Trust this server on your phone**:
+**On iPhone, also trust the certificate.** Otherwise the home-screen icon shows as a plain
+letter "F", and the camera may not work. Open **`/connect`** in Safari on the phone and follow
+**Trust this server on your phone**:
 
 1. **Download certificate** → **Allow**
 2. **Settings** → **Profile Downloaded** → **Install**
-3. **Settings** → **General** → **About** → **Certificate Trust Settings** → switch on **FloraScan local CA**
+3. **Settings** → **General** → **About** → **Certificate Trust Settings** → turn on **FloraScan local CA**
 4. Delete the old home-screen icon and add it again
 
-The CA is name-constrained to `localhost` and private network addresses, so a phone that
-trusts it will never accept it for a public website. The server certificate is reissued
-automatically when the laptop's address changes, and the phone keeps trusting it. Remove the
-profile when you are done (**General** → **VPN & Device Management**), and never share
-`.certs/ca-key.pem`. Deleting `.certs/` makes a new CA, which phones must trust again.
+Good to know:
 
-### Add it to your home screen
+- The certificate only works for `localhost` and private network addresses, so it cannot be
+  used to fake a real website.
+- If your laptop's IP address changes, the server makes a new certificate automatically and
+  the phone keeps trusting it.
+- When you are finished, remove the profile in **Settings** → **General** → **VPN & Device
+  Management**.
+- Never share `.certs/ca-key.pem`. Deleting `.certs/` creates a new certificate, and phones
+  will need to trust it again.
 
-Open the site on your phone and a bar offers to add FloraScan to the home screen. The two
-platforms genuinely differ, and the app detects which one you are on:
+### Add it to the home screen
 
-| | How it installs |
+When you open the site on a phone, a bar offers to add FloraScan to your home screen.
+
+| Phone | How |
 | --- | --- |
-| **Android** (Chrome) | **One tap.** Chrome fires its own install prompt and the bar installs it directly. This needs HTTPS and a registered service worker, which is why the server defaults to HTTPS. Over plain HTTP the button never appears and you have to use the browser menu instead. |
-| **iPhone / iPad** | **Always manual.** iOS has no install API on any browser, and only Safari can add to the home screen: **Share** → **Add to Home Screen**. There is no one-tap route to offer. |
+| **Android** (Chrome) | Tap the button in the bar. This only works over HTTPS. |
+| **iPhone / iPad** | Must be done by hand in Safari: **Share** → **Add to Home Screen**. iOS has no one-tap install. |
 
-The **Open on phone** screen shows both sets of instructions side by side, which is useful
-when you are demonstrating on one device and talking about the other.
+The **Open on phone** screen (`/connect`) shows the steps for both.
 
-Either way the result is the same: a home-screen icon that opens full screen with no browser
-bars, and pages already visited still open with no signal.
+Once added, the app opens full screen, and pages you have already visited still open
+without a signal.
 
-**If the icon comes out blank on an iPhone**, it is almost always one of two things: the
-icon had an alpha channel (iOS fills transparency with black rather than compositing it),
-or the `apple-touch-icon` link carried no `sizes` attribute. Both are handled here — opaque
-PNGs at 152, 167 and 180, declared with explicit sizes, plus `/apple-touch-icon.png` and
-`/apple-touch-icon-precomposed.png` at the site root for iOS to probe. iOS caches these
-hard, so delete the old shortcut before adding it again.
+**Blank icon on iPhone?** iOS caches icons heavily. Delete the old shortcut and add it again.
 
 ---
 
-## The demo role switcher
+## Demo role switcher
 
-A floating control, bottom right, present on every screen:
+A floating button in the bottom-right corner on every screen. It lets you:
 
-- jumps straight into the public visitor or any staff account, no password
-- **Ctrl/Cmd + K** opens it; **0** is the visitor, **1–9** are the listed accounts
-- also carries the theme and website/phone layout toggles
-- shows the deactivated account as unselectable, which is the same check the API applies
+- jump into the visitor view or any staff account with no password
+- open it with **Ctrl/Cmd + K**, press **0** for visitor or **1–9** for an account
+- change theme, language, and website/phone layout
+- replay the welcome screen (**Intro**)
 
-This is scaffolding for the demo. It calls `POST /api/auth/switch`, which is clearly marked
-prototype-only and comes out before anything ships. The normal login form at `/login` works
-too — every demo account uses the password `demo1234`, stored bcrypt-hashed like any other.
+It is for demos only (it uses `POST /api/auth/switch`, which will be removed before release).
+The normal login page at `/login` also works. **Every demo account's password is `demo1234`.**
 
-### Accounts
+### Demo accounts
 
-| Role | Who | Can |
+| Role | Name | What they can do |
 | --- | --- | --- |
 | Administrator | Neng Yi Chieng | Accounts, roles, activity log, audit trail, settings |
-| Botanist | Dr Sue Han Lee, Hans Jia Syn Yee | Publish, verify, edit, archive, species list, visitor reports |
-| Ranger | Edmund Guo Qian Yu, Lim Yon, Edward Ngie Jie Ling, Darren Chong Yue Yang | Register plants, track own submissions, print tags |
-| Administrator | Jiaqi Hu | Deactivated, to demonstrate the check |
+| Botanist | Dr Sue Han Lee, Hans Jia Syn Yee | Register, edit, archive and resubmit plants; manage species; print tags; view visitor reports; set up sensors |
+| Reviewer | Dr Mei Ling Wong | Check every botanist submission: fix it, approve it, or send it back with a note |
+| Ranger | Edmund Guo Qian Yu, Lim Yon, Edward Ngie Jie Ling, Darren Chong Yue Yang | IoT sensor alerts only. Cannot register or edit plants. |
+| Administrator | Jiaqi Hu | Deactivated, to show that disabled accounts cannot sign in |
 
-Roles are **permission sets**, not hard-coded names. The API checks codes such as
-`plant.approve`, so a superuser can be added later as one more role holding every
-permission — no new tables, no fourth dashboard.
+How roles work:
 
----
-
-## The welcome screen
-
-A first-time visitor gets a one-screen introduction before the register. What it offers
-next depends on the device: a desktop visitor gets **Start exploring**, while a phone
-visitor is offered the home-screen install first, because that is what makes it usable on
-a trail. It is shown once per browser.
-
-Scanning a tag never shows it — somebody standing in front of a plant wants that plant,
-not an introduction. Replay it any time from the role switcher (**Intro**).
+- A role is a set of permissions such as `plant.create` or `plant.approve`. The API checks
+  the permission, not the role name. Adding a new role means adding database rows, not
+  changing code. (This is how the Reviewer role was added in issue #8.)
+- **Nobody can approve their own record.** No role has both `plant.create` and
+  `plant.approve`, and the API also blocks a reviewer from approving something they submitted.
+- Only records waiting for review can be approved or returned. Archived or already-published
+  records can't be published again by mistake.
+- Running `npm run db:setup` on an older database adds the Reviewer role and updates the
+  permissions. It does **not** add the demo reviewer account. Use `npm run db:setup -- --reset`
+  for that, or create one in **Staff accounts**.
 
 ---
 
-## What to try
+## Welcome screen
 
-1. **The QR journey.** Sign in as a botanist → open any published record → **QR tag** tab →
-   download or print it. Scan it with your phone, or open `/scan` and pick a tag from the list.
-2. **The verification workflow.** Switch to a ranger → **Register a plant** → submit it.
-   Switch to a botanist → **Review queue** → approve it, or return it with a note. Switch
-   back to the ranger → **My submissions** shows what happened.
-3. **Species not listed.** Register a plant without choosing a species. It always goes to a
-   botanist, whatever the approval setting says, and Approve stays disabled until the
-   botanist confirms a species.
-4. **The approval switch.** Admin → **System settings** → turn `require_approval` off, then
-   register as a ranger again. The entry publishes immediately.
-5. **Archiving.** Archive a published record, then scan its tag: "no longer on display".
-   Restore it and the same printed tag works again.
-6. **Access control.** As a ranger, open `/staff/users` directly. The screen explains which
-   permission is missing — and the API refuses the request regardless.
-7. **The audit trail.** Admin → **Audit trail**. Every change carries actor, field, old
-   value, new value and timestamp. **Activity log** has sign-ins, failed attempts and
-   refused requests.
-8. **Protected locations.** Open a critically endangered plant as a visitor: the location is
-   withheld. Switch to a botanist and the real coordinates appear. Searching the trail name
-   does not reveal it either.
-9. **Printing tags.** Botanist or ranger → **Print QR tags** → select all → print. Three tags
-   per row on A4, ready to cut out.
-10. **Upload a photograph.** Register a plant with a photo from your phone's camera. It is
-    stored in the database and served back, so it survives a restart.
+First-time visitors see a short introduction screen. On a computer it offers **Start
+exploring**. On a phone it offers to add the app to the home screen first. It only shows
+once per browser.
+
+It never appears when someone arrives by scanning a QR tag. They go straight to the plant.
 
 ---
 
-## What a printed tag points at
+## Things to try
 
-A QR tag is printed once and then screwed to a post, so the address it carries has to be
-one that still works. The server decides it, never the browser that asked for the code —
-a botanist printing from a laptop is on `localhost`, and a tag encoding `localhost` sends
-every phone that scans it to its own device.
-
-Order of preference:
-
-1. the `public_base_url` setting, which the park points at its real domain
-2. this machine's network address, which is what makes the demo work on a phone
-
-**Set `public_base_url` in Admin → System settings before printing tags for real.**
-Tags printed now encode a `192.168.x.x` address that only works on this Wi-Fi.
-
-### Scanning a tag
-
-Three ways, all working out of the box now that the server runs over HTTPS:
-
-1. **The in-app scanner.** Scan screen → **Start camera**. Needs the certificate accepted
-   first (see above).
-2. **Upload a photo.** Scan screen → **Upload a photo** reads the code out of a picture
-   already in your gallery. Handy when the light is poor, or you photographed the tag earlier.
-3. **Your phone's own camera app.** The tags encode ordinary URLs, so this always works and
-   needs nothing installed. This is the real design — the in-app scanner is a shortcut.
-
-On iOS, Safari sometimes still refuses the camera for an untrusted certificate even after
-you accept the warning. Trusting the local CA (see above) avoids it; otherwise use options 2 or 3.
+1. **QR tags.** As a botanist, open a published plant → **QR tag** tab → download or print.
+   Scan it with your phone, or go to `/scan` and pick a tag.
+2. **Review workflow.** As a botanist, **Register a plant** and submit it. Switch to the
+   reviewer → **Review queue**. Use **Correct details** to fix something, then approve it or
+   send it back with a note. Back as the botanist, **My submissions** shows the result. A
+   returned record has **Fix and resubmit**, and the reviewer then sees both notes.
+3. **Unknown species.** Register a plant without choosing a species. It always goes to
+   review, and the reviewer can't approve it until a species is set.
+4. **Skip review.** As admin, go to **System settings** and turn off `require_approval`.
+   Now a botanist's new plant is published straight away.
+5. **Archiving.** Archive a published plant and scan its tag: it says "no longer on
+   display". Restore it and the same tag works again.
+6. **Access control.** As a ranger, go to `/staff/register`. The screen says which
+   permission is missing, and the API refuses the request too.
+7. **Audit trail.** As admin, open **Audit trail** and click a quick question, such as
+   **Who approved a plant?** or **Who changed a system setting?**. Each entry shows who did
+   it, what they did, which record (plants link to the record), the value before and after,
+   and when. **Activity log** shows sign-ins, failed logins and blocked requests.
+8. **Hidden locations.** Open a critically endangered plant as a visitor: no location is
+   shown. Switch to a botanist and the coordinates appear. Searching by trail name doesn't
+   reveal it either.
+9. **Printing tags.** As a botanist, **Print QR tags** → select all → print. Three tags per
+   row on A4.
+10. **Photo upload.** Register a plant with a photo from your phone's camera. It is saved in
+    the database and is still there after a restart.
+11. **Languages.** Click the globe in the header (or use the role switcher, or **Account** on
+    the phone) and pick **BM** or **中文**. Every screen changes, and the choice is remembered.
 
 ---
 
-## How it is put together
+## Translations
+
+Supported: English, Bahasa Melayu and Simplified Chinese (issue #5).
+
+In a component, wrap English text in `t()` from `FloraScan-Web-App/src/lib/i18n.js`:
+
+```jsx
+<h1>{t('Plant register')}</h1>
+toast(t('{code} published.', { code: plant.plant_code }))
+t('{name} submitted {code}', { name: <strong>{who}</strong>, code })  // placeholders can be elements
+```
+
+- The English text is the key. Malay and Chinese go in `lib/locales.js` like this:
+  `'English': ['Melayu', '中文']`.
+- Use `{placeholders}` instead of joining strings, so each language can put words in its
+  own order.
+- For text stored in a list and translated later, mark it with `msg('...')` so the checker
+  finds it.
+
+`npm run test:i18n` fails if a string is missing its Malay or Chinese version, if a
+translation drops a `{placeholder}`, or if a key is built at runtime.
+`node tests/i18n.test.mjs --report` also lists text that was never wrapped in `t()`.
+
+Only the interface is translated. Plant data (Wikipedia descriptions, field notes, staff
+names) is shown as written. Common server messages are translated; other server messages
+stay in English.
+
+---
+
+## QR tags and scanning
+
+### What address a tag uses
+
+A printed tag is fixed to a post for years, so its link must keep working. The server
+chooses the address, in this order:
+
+1. the `public_base_url` setting (Admin → **System settings**)
+2. the `PUBLIC_BASE_URL` environment variable
+3. this computer's network address (fine for a demo on the same Wi-Fi)
+
+**Set `public_base_url` before printing real tags.** Otherwise they point at a
+`192.168.x.x` address that only works on your Wi-Fi.
+
+### Three ways to scan
+
+1. **In-app scanner.** Scan screen → **Start camera**. You need to accept the certificate
+   warning first.
+2. **From a photo.** Scan screen → **Upload a photo** to read a QR code from your gallery.
+3. **Your phone's normal camera app.** Tags are ordinary web links, so this always works.
+
+On iPhone, Safari may still block the camera unless you trust the certificate (see above).
+If so, use option 2 or 3.
+
+---
+
+## Project structure
 
 ```
-plant_registry_schema.sql   The design of record: 24 tables, one view, the enums,
-                            the CHECK constraints, the roles and permissions
+plant_registry_schema.sql   Main database design: 23 tables, 1 view, roles and permissions
 Server/
-  index.js          Express + Vite on one port, HTTPS by default, startup QR code
-  api.js            The whole REST API: auth, permissions, plants, review, QR, admin
-  sql.js            The only module that talks to MySQL: pool, transactions, conversions
-  db.js             Data access on top of sql.js, plus the reference cache
-  passwords.js      bcrypt hashing and verification
-  schema-extensions.sql   Additions the prototype needs on top of the schema proper
-  seed.js           Demo content: staff, species, specimens, submissions, audit history
-  seed-store.js     The fixture arrays the generator reads - never touched at runtime
-  seed-species.js   20 hand-written Bornean species with full botanical detail
-  species-data.js   Loads the imported dataset, falling back to the hand-written list
-  data/species.json Generated by the importer: 80 species, photos, coordinates
-  images.js         Procedural SVG illustrations, used where no photograph exists
-  certs.js          The local certificate authority and server certificate
-  port.js, net.js   Random-port assignment and LAN address detection
+  index.js          Starts Express + Vite on one port, HTTPS, prints the QR code
+  api.js            All the API routes: login, permissions, plants, review, QR, admin
+  sql.js            The only file that talks to MySQL
+  db.js             Data functions built on sql.js, plus cached settings and permissions
+  passwords.js      Password hashing (bcrypt)
+  schema-extensions.sql   Extra tables, columns and settings the prototype needs
+  seed.js           Builds the demo data
+  seed-store.js     Data lists used by seed.js (not used while the app runs)
+  seed-species.js   20 hand-written Bornean species
+  species-data.js   Loads species.json, or the hand-written list if it's missing
+  data/species.json 80 species with photos and coordinates (made by the importer)
+  images.js         Drawn SVG pictures for species with no photo
+  certs.js          Creates the local HTTPS certificates
+  port.js, net.js   Random port and network address detection
 FloraScan-Web-App/
   index.html
   src/
-    App.jsx         Routes and permission guards
-    components/     Shell (web + phone), role switcher, motion helpers, shared UI
-    screens/        Public site, then staff/ for the dashboards
-    lib/            API client, session store, formatting, icons
+    App.jsx         Page routes and permission checks
+    components/     Layout (web + phone), role switcher, animations, shared UI
+    screens/        Public pages; staff/ holds the staff pages
+    lib/            API client, session, formatting, icons, translations
     styles/         theme.css, app.css, motion.css
-  public/           manifest.webmanifest, sw.js, icons - the installable web app
+  public/           App manifest, service worker and icons (for home-screen install)
 .github/
   CODEOWNERS                Who reviews the shared files
-  pull_request_template.md  The connectivity-check questions every PR answers
+  pull_request_template.md  Checklist every pull request fills in
 scripts/
-  db-setup.mjs        Create the database and schema, then seed it
-  seed-mysql.mjs      Load the demo dataset into MySQL
-  test-db.mjs         Reseed before a test run, and refuse a remote database
-  import-species.mjs  Pull species, photographs and coordinates from the open databases
-  photo-tints.mjs     Sample an average colour per cached photograph
+  db-setup.mjs        Create the database and tables, then load demo data
+  seed-mysql.mjs      Load demo data into MySQL
+  test-db.mjs         Reset the database before tests; refuses a remote database
+  import-species.mjs  Download species, photos and locations from public sources
+  photo-tints.mjs     Work out each photo's placeholder colour
   build-icons.mjs     Generate the app icons
 tests/
-  api.test.mjs      306 API checks: access control, publication control, validation,
-                    audit, withheld locations, photo upload and serving, the web app
-                    manifest, printed-tag addressing, archiving a record under review
-  ui.test.mjs       279 browser checks: every route under every role, form input,
-                    QR-from-gallery, hidden locations, pagination, reduced motion,
-                    the welcome screen, image loading, dialog overlays, and layout
-                    under long text
+  i18n.test.mjs     Translation checks
+  api.test.mjs      API checks: permissions, publishing, validation, audit, hidden
+                    locations, photo upload, QR addresses, archiving
+  ui.test.mjs       Browser checks: every page under every role, forms, QR from photo,
+                    hidden locations, paging, reduced motion, popups, narrow screens
 ```
 
-**One Node process, one port.** Vite runs in middleware mode inside Express, so the API and
-the app share a single origin — which is what makes the phone hand-off a single URL. Vite's
-hot-reload websocket is attached to the same server, so it inherits the TLS rather than
-opening a second plain-ws port the HTTPS page would refuse to talk to.
+### How it works
 
-**Everything is real SQL.** `Server/sql.js` is the only module that speaks to MySQL, and
-every query is parameterised — no value is ever concatenated into a statement. What stays in
-memory is reference data only: roles, permissions, role_permissions and settings, because
-the API checks a permission code on every request and reads settings nearly as often. Those
-few dozen rows are loaded at boot and reloaded whenever they are written, so the cache
-cannot go stale behind an administrator's back.
+- **One server, one port.** Vite runs inside Express, so the API and the web app share one
+  address. That is why the phone only needs one link.
+- **All data is in MySQL.** Only `Server/sql.js` talks to the database, and every query uses
+  parameters (no values are pasted into SQL strings).
+- **Small cache.** Roles, permissions and settings are kept in memory because they are
+  checked on every request. They are reloaded whenever they change.
+- **Fast list pages.** A page of plants loads in a fixed number of queries, not one per plant.
 
-List pages load their context in batches rather than per row — seven queries for a page of
-plants, whatever its length, instead of one per plant per relation.
+### About the tech stack
 
-### A note on the stack
-
-The proposal specifies React Native (Expo) with React Native Web for the real build. This
-prototype is plain React with Vite, because for a clickable demo it is faster to stand up
-and looks better. The screens, the API contract, the data model and the permission design
-all carry over unchanged; only the component library differs.
+The proposal says the final app will use React Native (Expo) with React Native Web. This
+prototype uses plain React with Vite because it is quicker to build for a demo. The screens,
+API, database and permissions all carry over. Only the UI components would change.
 
 ---
 
 ## Tests
 
+Start the server first (`npm run dev`), then in a second terminal:
+
 ```bash
-npm test             # both suites
-npm run test:api     # no browser needed
-npm run test:ui      # drives headless Chrome or Edge
+npm test             # all three suites
+npm run test:i18n    # translations only (no server needed)
+npm run test:api     # API only (no browser needed)
+npm run test:ui      # opens headless Chrome or Edge
 ```
 
-Start the server first (`npm run dev`), then run these in a second terminal. Both suites
-detect whether the server is on HTTPS or HTTP and follow it.
+Things to know:
 
-**They reseed your database before running.** The suites register, approve and archive real
-records to exercise the workflow, so they need a known starting state; `pretest` reloads the
-demo data first. They also **refuse to run against a database that is not on this machine**,
-because that litter is not something to leave in a database anyone else is using.
+- **Tests reset your database first**, because they create, approve and archive real records.
+- **Tests refuse to run on a database that isn't on your computer**, so they never mess up
+  a shared database.
+- The tests work with HTTPS or HTTP. They detect which one the server uses.
+- The UI tests find Chrome or Edge on their own. If yours is somewhere unusual, set
+  `CHROME_PATH`.
 
-`test:api` covers the quality targets named in the proposal: access control as negative
-tests across the three roles and anonymous visitors, publication control (nothing
-unapproved reachable from a public URL), input validation mirroring the schema's CHECK
-constraints, the full verification workflow, and audit completeness.
+What they cover:
 
-`test:ui` drives a real browser: it renders every route under every role and fails on any
-console error, uploads a generated QR photograph to prove the gallery scanner decodes it,
-checks that a critically endangered plant's location stays hidden from a visitor but not
-from a botanist, and confirms motion collapses under `prefers-reduced-motion`. It also
-exercises the forms — empty submits, out-of-range numbers, script tags, SQL-looking
-strings, unicode and emoji — checking the interface says something useful each time. It
-also checks for horizontal overflow at 360, 390 and 414 px, which is how the narrow-screen
-bugs in the tag and account pickers were found.
+- **`test:api`**: who can and can't do what (for each role and for visitors), that nothing
+  unapproved is ever public, input checks that match the database rules, the full review
+  workflow, and that every change is audited.
+- **`test:ui`**: opens every page as every role and fails on any console error. It also tests
+  QR scanning from a photo, hidden locations, reduced-motion mode, bad form input (empty,
+  out of range, script tags, SQL-like text, emoji), and checks nothing scrolls sideways at
+  360, 390 and 414 px wide.
 
-The UI tests find Chrome or Edge automatically; set `CHROME_PATH` if yours is elsewhere.
+### Three layout bugs that are easy to bring back
 
-### Three faults worth knowing about, because all three are easy to reintroduce
-
-- A grid track written as `1fr` keeps an implicit `min-width: auto`, so a single unbroken
-  string — a pasted URL in a ranger's field note — widens the track and drags the whole
-  page sideways. The review queue overflowed by nearly 6,000 px this way. Value lists and
-  free-text insets now use `minmax(0, 1fr)` with `overflow-wrap: anywhere`, and the UI
-  suite registers a record with a 900-character unbroken note to keep it that way.
-- A `position: fixed` overlay is contained by any ancestor carrying a transform or
-  `will-change: transform` — which every page wrapper does, for the enter animation. A
-  dialog rendered in place was clipped to the page element instead of covering the
-  viewport. `Modal` portals into `document.body`, and the suite checks the backdrop really
-  does fill the viewport, which asserting `.modal` exists never did.
-- The demo role switcher is fixed to the bottom-right, so it sits over whatever the
-  document ends with. The footer reserves room for it, and the suite scrolls to the
-  bottom and checks no footer link is left underneath.
+- **Long text widening the page.** A grid column set to `1fr` can grow to fit one long
+  unbroken string (like a pasted URL) and push the page sideways. Use `minmax(0, 1fr)` with
+  `overflow-wrap: anywhere`. The UI tests submit a 900-character note to catch this.
+- **Popups not covering the screen.** A `position: fixed` element inside a parent that has a
+  `transform` (every page has one, for the page animation) only covers that parent. `Modal`
+  is rendered into `document.body` to avoid this, and the tests check the backdrop fills the
+  screen.
+- **Role switcher covering the footer.** The switcher sits in the bottom-right corner, so the
+  footer leaves space for it. The tests scroll to the bottom and check no link is hidden.
 
 ---
 
 ## Where the data comes from
 
-`npm run import:species` builds `Server/data/species.json` from three open sources:
+`npm run import:species` builds `Server/data/species.json` from:
 
 | Source | Used for | Licence |
 | --- | --- | --- |
-| [GBIF](https://www.gbif.org) | Which plants are actually recorded in Sarawak, accepted taxonomy, IUCN Red List category, vernacular names (including Malay), and real georeferenced occurrences | CC BY-NC 4.0 / CC0 per dataset |
-| [iNaturalist](https://www.inaturalist.org) | Photographs | Creative Commons, per photo; the photographer and licence are shown on every image |
+| [GBIF](https://www.gbif.org) | Which plants are recorded in Sarawak, names (including Malay), IUCN Red List status, real sighting locations | CC BY-NC 4.0 / CC0, depending on the dataset |
+| [iNaturalist](https://www.inaturalist.org) | Photos | Creative Commons; the photographer and licence are shown on each photo |
 | [Wikipedia](https://en.wikipedia.org) | Species descriptions | CC BY-SA 4.0 |
 
-The importer only keeps photographs under a Creative Commons licence, stores the credit
-string and licence code alongside each one, and never alters the image. Every plant page
-shows the photographer under the photograph.
+- Only Creative Commons photos are used. They are never edited, and every photo shows its
+  credit.
+- **The species are real. The individual plant records are made up** for the demo (plant
+  IDs, trail locations, who registered them). Real GBIF locations are kept on the species
+  record only, not passed off as the location of a demo plant.
+- Each conservation status is marked as either a real IUCN assessment or a project estimate.
+  Many Bornean trees have never been assessed, so lots show **NE** (Not Evaluated). That is
+  accurate, not missing data.
 
-Specimen records themselves — the Plant IDs, the trail locations, the rangers who
-registered them — are invented for the demo. The **species** are real; the **specimens**
-are not. Real GBIF occurrence coordinates are kept on the species record as evidence of
-where the species has been found, not passed off as the location of a demo specimen.
+### Hidden locations for endangered plants
 
-Conservation categories come from the Red List where an assessment exists, and each one
-records whether it is a real assessment or a project estimate. Many Bornean trees have
-never been assessed, so plenty show as **NE** — that is the real picture, not a gap.
+Showing exactly where a rare plant grows helps poachers. So for visitors who are not signed
+in as staff, the API removes the coordinates, location notes and site name. Search and
+filters can't be used to get around this.
 
-### Protected locations
+The `protect_locations` setting decides which plants are protected: `off`, `VU`, `EN` or
+`CR` (that level and anything more endangered). The demo data sets it to `CR`.
 
-Publishing an exact coordinate for a critically endangered plant tells collectors where to
-go. The API withholds the coordinates, the finding notes and the site name from anyone who
-is not signed in as staff, and the protection cannot be worked around through the search
-box or the location filter. The `protect_locations` setting controls how far up the Red
-List the rule reaches (`off`, `VU`, `EN`, `CR`); it ships set to `CR`.
+This happens **on the server**, so the hidden data is never sent to the browser at all.
 
-The rule is applied **server-side**, in the query that builds the response. A hidden field
-is never sent to a browser that is not entitled to it, so there is nothing to find in the
-network tab.
+### How photos load
 
-### How photographs load
-
-Every image sits on its own average colour while it decodes, so a photo resolves out of a
-related green rather than out of a grey box. `npm run import:tints` samples those colours
-once from the cached files into `Server/data/photo-tints.json`; without it the placeholder
-falls back to a tint derived from the filename. Slots reserve their aspect ratio so nothing
-jumps as pictures arrive, the first row of each grid is fetched eagerly while the rest stay
-lazy, and an image already sitting in cache is detected on mount rather than waiting for a
-load event that has already been and gone.
-
-Where no Creative Commons photograph exists for a species, the page falls back to a
-generated SVG drawn deterministically from the species name and the shot angle (habit, leaf,
-bark, flower, fruit, habitat), clearly marked *Illustrative placeholder*. The angles are
-chosen per species, so the conifer never gets a flower and Rafflesia never gets a leaf — a
-botanist looking at the demo would notice.
+- While a photo loads, its space shows the photo's average colour instead of grey (from
+  `npm run import:tints`; without it, a colour is picked from the file name).
+- Each photo's space is reserved in advance so the page doesn't jump.
+- The first row of photos loads straight away; the rest load as you scroll.
+- If a species has no Creative Commons photo, a drawn SVG picture is shown instead, labelled
+  *Illustrative placeholder*. It only shows parts the plant actually has (for example, no
+  flower for a conifer).
 
 ---
 
-## What is not built
+## Not built yet
+
+**IoT plant monitoring.** The page (`/staff/iot`) exists but just says *Coming soon* and
+lists what is planned, because the sensor hardware hasn't arrived. The database tables
+(`sensor_devices`, `sensor_readings`, `sensor_alerts`) and the device-key check are already
+in place.
+
+**Also not built yet** (as planned in the proposal): saved drafts, a separate "changes
+requested" status, password reset by email, a superuser role, a map of plants, and
+registering plants offline. (Pages you've visited do work offline, but you can't submit a
+new plant without a signal yet.)
 
 **IoT plant monitoring** is built: `/staff/iot` shows live readings and alerts from the
 ESP32 sensor kit over MQTT. The firmware and setup steps are in `iot-kit/README.md`.
@@ -571,27 +567,17 @@ state, self-service password reset, the superuser role, a map view of specimens,
 offline field data capture (the service worker caches pages already visited, but a ranger
 cannot yet register a plant with no signal and sync it later).
 
-**Hosting is on hold.** The code does not care where MySQL is — `DATABASE_URL`, or
-`DB_HOST`/`DB_USER`/`DB_PASSWORD`, is the whole of it, and a provider that needs TLS
-verification takes its CA certificate from `MYSQL_SSL_CA_CERT` or a path in `MYSQL_SSL_CA`.
-No certificate is kept in this repository. Until a deployment target is settled, everyone
-develops and tests against their own machine.
+No certificates are stored in this repository.
 
 ---
 
 ## Troubleshooting
 
-**The server will not start.** See the table under *Run it* — it is almost always MySQL not
-running, or `db:setup` not run yet.
-
-**The phone cannot reach it.** Almost always Windows Firewall blocking Node on the private
-network — allow it when prompted, or check `/connect` for an alternative address. Adapters
-marked *virtual* there belong to WSL, Docker or a VM and are not reachable from a phone.
-
-**The port is taken.** `npm run port` assigns a new random one.
-
-**The camera will not open on the phone.** Expected over plain HTTP — see above.
-
-**The tests fail in a way they did not yesterday.** Reseed and try again:
-`npm run db:setup -- --reset`. If they fail with *"refusing to run against a remote
-database"*, your `.env` is pointing somewhere that is not this machine.
+| Problem | What to do |
+| --- | --- |
+| The server won't start | MySQL probably isn't running, or you haven't run `npm run db:setup`. See *Common errors* above. |
+| The phone can't open the site | Usually Windows Firewall is blocking Node. Allow it on private networks, or try another address from `/connect`. Addresses marked *virtual* (WSL, Docker, VMs) won't work from a phone. |
+| The port is already in use | Run `npm run port`. |
+| The camera won't open on the phone | You're probably on plain HTTP. Use `npm run dev` (HTTPS). |
+| Tests suddenly fail | Reset the database: `npm run db:setup -- --reset`. |
+| Tests say *"refusing to run against a remote database"* | Your `.env` points to a database that isn't on your computer. |

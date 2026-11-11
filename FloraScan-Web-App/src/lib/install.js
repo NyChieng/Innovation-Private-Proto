@@ -15,6 +15,8 @@
  * the right instructions for the browser actually in use.
  */
 
+import { t } from './i18n.js';
+
 const DISMISS_KEY = 'florascan.install-dismissed';
 
 let deferredPrompt = null;
@@ -85,17 +87,17 @@ export function installAdvice() {
   if (deferredPrompt) {
     return {
       kind: 'prompt',
-      title: 'Add FloraScan to your home screen',
-      body: 'It opens full screen, without the browser bars, and remembers the pages you have already visited.',
-      action: 'Add to home screen',
+      title: t('Add FloraScan to your home screen'),
+      body: t('It opens full screen, without the browser bars, and remembers the pages you have already visited.'),
+      action: t('Add to home screen'),
     };
   }
 
   if (p === 'ios-safari') {
     return {
       kind: 'ios',
-      title: 'Add FloraScan to your home screen',
-      body: 'Tap the Share button at the bottom of Safari, then choose "Add to Home Screen".',
+      title: t('Add FloraScan to your home screen'),
+      body: t('Tap the Share button at the bottom of Safari, then choose "Add to Home Screen".'),
       steps: ['Tap Share', 'Scroll to "Add to Home Screen"', 'Tap Add'],
     };
   }
@@ -103,8 +105,8 @@ export function installAdvice() {
   if (p === 'ios-other') {
     return {
       kind: 'ios-other',
-      title: 'Open this in Safari to install it',
-      body: 'Only Safari can add a site to the iPhone home screen. Open the same address in Safari, then use Share → Add to Home Screen.',
+      title: t('Open this in Safari to install it'),
+      body: t('Only Safari can add a site to the iPhone home screen. Open the same address in Safari, then use Share → Add to Home Screen.'),
     };
   }
 
@@ -116,18 +118,18 @@ export function installAdvice() {
     const overHttps = window.location.protocol === 'https:';
     return {
       kind: 'android',
-      title: 'Add FloraScan to your home screen',
+      title: t('Add FloraScan to your home screen'),
       body: overHttps
-        ? 'Chrome has not offered its install button yet. Open the browser menu and choose "Install app" or "Add to Home screen".'
-        : 'Open the browser menu and choose "Add to Home screen". Android’s one-tap install button only appears over HTTPS — start the server with "npm run https" to get it.',
+        ? t('Chrome has not offered its install button yet. Open the browser menu and choose "Install app" or "Add to Home screen".')
+        : t('Open the browser menu and choose "Add to Home screen". Android’s one-tap install button only appears over HTTPS — start the server with "npm run https" to get it.'),
       one_tap_blocked_by_http: !overHttps,
     };
   }
 
   return {
     kind: 'desktop',
-    title: 'Install FloraScan',
-    body: 'Most desktop browsers show an install icon at the right-hand end of the address bar.',
+    title: t('Install FloraScan'),
+    body: t('Most desktop browsers show an install icon at the right-hand end of the address bar.'),
   };
 }
 

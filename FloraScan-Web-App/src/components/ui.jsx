@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
-import { CONSERVATION, STATUS, initials, relativeTime, titleCase } from '../lib/format.js';
+import { CONSERVATION, STATUS, fromServer, initials, relativeTime, titleCase } from '../lib/format.js';
 import { useApp } from '../lib/store.jsx';
 import { SmartImage } from './motion.jsx';
+import { t } from '../lib/i18n.js';
 import * as I from '../lib/icons.jsx';
 
 /* ------------------------------------------------------------------ */
@@ -91,11 +92,11 @@ export function Skeleton({ h = 16, w = '100%', r, style }) {
   return <div className="skel" style={{ height: h, width: w, borderRadius: r, ...style }} />;
 }
 
-export function LoadingBlock({ label = 'Loading' }) {
+export function LoadingBlock({ label }) {
   return (
     <div className="empty">
       <div className="row" style={{ justifyContent: 'center', gap: 10 }}>
-        <span className="spinner" /> <span className="mute">{label}...</span>
+        <span className="spinner" /> <span className="mute">{label ?? t('Loading')}...</span>
       </div>
     </div>
   );
@@ -131,7 +132,7 @@ export function Modal({ title, onClose, children, footer, wide }) {
       <div className={'modal' + (wide ? ' modal-wide' : '')} role="dialog" aria-modal="true" aria-label={title} ref={ref}>
         <div className="modal-head">
           <h2>{title}</h2>
-          <button className="btn btn-ghost btn-icon" onClick={onClose} aria-label="Close"><I.X /></button>
+          <button className="btn btn-ghost btn-icon" onClick={onClose} aria-label={t('Close')}><I.X /></button>
         </div>
         <div className="modal-body">{children}</div>
         {footer && <div className="modal-foot">{footer}</div>}
@@ -153,7 +154,7 @@ export function ConfirmButton({ label, confirmLabel, onConfirm, className = 'btn
           onClose={() => setOpen(false)}
           footer={
             <>
-              <button className="btn" onClick={() => setOpen(false)}>Cancel</button>
+              <button className="btn" onClick={() => setOpen(false)}>{t('Cancel')}</button>
               <button
                 className="btn btn-primary"
                 disabled={busy}
@@ -162,7 +163,7 @@ export function ConfirmButton({ label, confirmLabel, onConfirm, className = 'btn
                   try { await onConfirm(); setOpen(false); } finally { setBusy(false); }
                 }}
               >
-                {busy && <span className="spinner" />}{confirmLabel || 'Confirm'}
+                {busy && <span className="spinner" />}{confirmLabel || t('Confirm')}
               </button>
             </>
           }
@@ -183,10 +184,10 @@ export function Toasts() {
   if (!toasts.length) return null;
   return (
     <div className="toasts" role="status" aria-live="polite">
-      {toasts.map((t) => (
-        <div key={t.id} className={'toast toast-' + t.kind} onClick={() => dismissToast(t.id)}>
-          {t.kind === 'err' ? <I.Alert /> : <I.CheckCircle />}
-          <span className="grow">{t.message}</span>
+      {toasts.map((item) => (
+        <div key={item.id} className={'toast toast-' + item.kind} onClick={() => dismissToast(item.id)}>
+          {item.kind === 'err' ? <I.Alert /> : <I.CheckCircle />}
+          <span className="grow">{item.message}</span>
         </div>
       ))}
     </div>
@@ -198,7 +199,7 @@ export function Toasts() {
 /* ------------------------------------------------------------------ */
 
 export function PlantCard({ plant, to, showStatus, eager = false }) {
-  const name = plant.scientific_name || plant.proposed_species_name || 'Unidentified specimen';
+  const name = plant.scientific_name || plant.proposed_species_name || t('Unidentified specimen');
   return (
     <Link className="plant-card" to={to || `/plant/${plant.id}`}>
       <div className="plant-photo">
@@ -207,14 +208,14 @@ export function PlantCard({ plant, to, showStatus, eager = false }) {
           : <div style={{ width: '100%', height: '100%', display: 'grid', placeItems: 'center' }}><I.Leaf style={{ width: 34, height: 34, color: 'var(--text-faint)' }} /></div>}
         <div className="overlay-tl">
           {showStatus && <StatusBadge status={plant.status} />}
-          {plant.species_not_listed && <span className="badge badge-info">Species not listed</span>}
+          {plant.species_not_listed && <span className="badge badge-info">{t('Species not listed')}</span>}
         </div>
         {plant.conservation_code && (
           <div className="overlay-tr"><ConservationBadge code={plant.conservation_code} showLabel={false} /></div>
         )}
         <div className="overlay-b">
           <I.MapPin style={{ width: 13, height: 13 }} />
-          <span className="truncate">{plant.site_name}</span>
+          <span className="truncate">{fromServer(plant.site_name)}</span>
         </div>
       </div>
       <div className="plant-card-body">
@@ -235,7 +236,7 @@ export function PlantCard({ plant, to, showStatus, eager = false }) {
 }
 
 export function PlantRow({ plant, onClick, children }) {
-  const name = plant.scientific_name || plant.proposed_species_name || 'Unidentified';
+  const name = plant.scientific_name || plant.proposed_species_name || t('Unidentified');
   return (
     <tr onClick={onClick} style={onClick ? { cursor: 'pointer' } : undefined}>
       <td style={{ width: 54 }}>
@@ -245,10 +246,10 @@ export function PlantRow({ plant, onClick, children }) {
       </td>
       <td>
         <div className={plant.scientific_name ? 'sci strong' : 'strong'}>{name}</div>
-        <div className="tiny mute">{plant.common_name || (plant.species_not_listed ? 'Awaiting identification' : '—')}</div>
+        <div className="tiny mute">{plant.common_name || (plant.species_not_listed ? t('Awaiting identification') : '—')}</div>
       </td>
       <td className="mono tiny nowrap">{plant.plant_code}</td>
-      <td className="small"><span className="truncate" style={{ maxWidth: 210, display: 'block' }}>{plant.site_name}</span></td>
+      <td className="small"><span className="truncate" style={{ maxWidth: 210, display: 'block' }}>{fromServer(plant.site_name)}</span></td>
       <td>{plant.conservation_code ? <ConservationBadge code={plant.conservation_code} showLabel={false} /> : <span className="faint">--</span>}</td>
       <td><StatusBadge status={plant.status} /></td>
       <td className="tiny mute nowrap">{relativeTime(plant.registered_at)}</td>
@@ -261,10 +262,10 @@ export function PlantRow({ plant, onClick, children }) {
 /* Filter chips                                                        */
 /* ------------------------------------------------------------------ */
 
-export function ChipRow({ options, value, onChange, allLabel = 'All' }) {
+export function ChipRow({ options, value, onChange, allLabel }) {
   return (
     <div className="row row-wrap" style={{ gap: 7 }}>
-      <button className="chip" aria-pressed={!value} onClick={() => onChange('')}>{allLabel}</button>
+      <button className="chip" aria-pressed={!value} onClick={() => onChange('')}>{allLabel ?? t('All')}</button>
       {options.map((o) => {
         const val = typeof o === 'string' ? o : o.value;
         const label = typeof o === 'string' ? o : o.label;
@@ -279,7 +280,8 @@ export function ChipRow({ options, value, onChange, allLabel = 'All' }) {
   );
 }
 
-export function SearchInput({ value, onChange, placeholder = 'Search', large, autoFocus }) {
+export function SearchInput({ value, onChange, placeholder: given, large, autoFocus }) {
+  const placeholder = given ?? t('Search');
   return (
     <div className={'search' + (large ? ' search-lg' : '')}>
       <I.Search />
@@ -292,7 +294,7 @@ export function SearchInput({ value, onChange, placeholder = 'Search', large, au
         type="search"
       />
       {value && (
-        <button className="btn btn-ghost btn-icon" onClick={() => onChange('')} aria-label="Clear search"><I.X /></button>
+        <button className="btn btn-ghost btn-icon" onClick={() => onChange('')} aria-label={t('Clear search')}><I.X /></button>
       )}
     </div>
   );
@@ -302,7 +304,7 @@ export function SearchInput({ value, onChange, placeholder = 'Search', large, au
 /* Copy-to-clipboard                                                   */
 /* ------------------------------------------------------------------ */
 
-export function CopyButton({ text, label = 'Copy', className = 'btn btn-sm' }) {
+export function CopyButton({ text, label, className = 'btn btn-sm' }) {
   const [done, setDone] = useState(false);
   return (
     <button
@@ -312,13 +314,13 @@ export function CopyButton({ text, label = 'Copy', className = 'btn btn-sm' }) {
           await navigator.clipboard.writeText(text);
         } catch {
           // Clipboard API needs a secure context; fall back to a selectable prompt.
-          window.prompt('Copy this:', text);
+          window.prompt(t('Copy this:'), text);
         }
         setDone(true);
         setTimeout(() => setDone(false), 1600);
       }}
     >
-      {done ? <I.Check /> : <I.Copy />}{done ? 'Copied' : label}
+      {done ? <I.Check /> : <I.Copy />}{done ? t('Copied') : (label ?? t('Copy'))}
     </button>
   );
 }

@@ -154,7 +154,7 @@ async function run(file, label) {
       // be an error; anything else is. So a table, row, column, key or check
       // that is already there is skipped (MySQL 8 reports a repeated check
       // name before a repeated column), and so is a DROP of a column or
-      // constraint that is already gone (section 7 of the extensions).
+      // constraint that is already gone (section 8 of the extensions).
       if ([
         'ER_TABLE_EXISTS_ERROR', 'ER_DUP_ENTRY', 'ER_DUP_FIELDNAME', 'ER_DUP_KEYNAME',
         'ER_CHECK_CONSTRAINT_DUP_NAME',

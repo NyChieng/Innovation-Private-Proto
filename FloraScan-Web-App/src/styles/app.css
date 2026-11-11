@@ -25,9 +25,12 @@
 .spacer { flex: 1; }
 
 .grid { display: grid; gap: 16px; }
-.grid-2 { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
-.grid-3 { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
-.grid-4 { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+/* min(100%, ...) lets a single column shrink below the track minimum. A bare
+   minmax(300px, 1fr) inside a padded card on a 320px phone has less than
+   300px to work with, so it pushed the page 15px sideways (issue #4). */
+.grid-2 { grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); }
+.grid-3 { grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); }
+.grid-4 { grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr)); }
 
 .stack > * + * { margin-top: var(--gap, 14px); }
 .mute { color: var(--text-mute); }
@@ -327,6 +330,24 @@
 .theme-switch .ico { width: 16px; height: 16px; }
 .theme-switch button:hover { color: var(--text); }
 .theme-switch button.active { color: var(--accent-text); }
+
+/* Header language switch: a native select laid invisibly over a small pill,
+   so it looks like the theme switch beside it but opens the platform picker.
+   16px on the select stops iOS zooming the page when it is tapped. */
+.lang-switch {
+  position: relative; flex: none; display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 9px; border-radius: var(--r-sm); border: 1px solid var(--border);
+  background: var(--surface-3); color: var(--text-mute);
+  font-size: 0.78rem; font-weight: 620; line-height: 1; cursor: pointer;
+}
+.lang-switch .ico { width: 15px; height: 15px; }
+.lang-switch:hover { color: var(--text); }
+.lang-switch:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.lang-switch select {
+  position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0;
+  cursor: pointer; font-size: 16px; border: 0;
+}
+.lang-short { white-space: nowrap; }
 
 /* ==================================================================
    Tables
@@ -664,6 +685,23 @@
 .tl-old { color: var(--danger-fg); text-decoration: line-through; opacity: 0.8; }
 .tl-new { color: var(--ok-fg); font-weight: 560; }
 
+/* The edit dialog: species picker, and the summary of what a save changes.
+   Every track is minmax(0, ...) so a long site name wraps instead of
+   widening the dialog (see the README's note on 1fr tracks). */
+.picker-list { display: grid; gap: 6px; max-height: 300px; overflow-y: auto; overscroll-behavior: contain; }
+.label-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.change-list { display: grid; gap: 6px; }
+.change-row { display: grid; grid-template-columns: minmax(0, 11em) minmax(0, 1fr); gap: 10px; align-items: baseline; }
+.change-row .tl-diff { margin-top: 0; min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 480px) { .change-row { grid-template-columns: minmax(0, 1fr); gap: 2px; } }
+
+/* Review queue card: photo beside the details, stacked on a phone. The old
+   inline minmax(180px, 250px) track could not shrink below 180px, which is
+   what pushed the 360px layout 9px sideways. */
+.review-grid { display: grid; gap: 18px; grid-template-columns: minmax(0, 250px) minmax(0, 1fr); align-items: start; }
+@media (max-width: 620px) { .review-grid { grid-template-columns: minmax(0, 1fr); } }
+.review-history { display: grid; gap: 8px; }
+
 /* ==================================================================
    QR panel
    ================================================================== */
@@ -698,6 +736,7 @@
 .avatar-admin   { background: var(--info-bg);    color: var(--info-fg);    border-color: var(--info-br); }
 .avatar-botanist{ background: var(--accent-soft);color: var(--accent-text);border-color: var(--accent-border); }
 .avatar-ranger  { background: var(--warn-bg);    color: var(--warn-fg);    border-color: var(--warn-br); }
+.avatar-reviewer{ background: var(--surface-3);  color: var(--text);       border-color: var(--border-strong, var(--border)); }
 
 /* ==================================================================
    Role switcher (prototype only)
@@ -777,6 +816,15 @@
   min-height: calc(54px + env(safe-area-inset-top));
 }
 .m-header h1 { font-size: 1.05rem; flex: 1; min-width: 0; }
+/* Brand, language and theme have to share 288px on a 320px phone. Below
+   400px the language pill drops its label to just the globe (the select
+   still names each language in full), and the controls sit closer. */
+@media (max-width: 400px) {
+  .m-header { gap: 8px; }
+  .m-header .lang-switch { padding: 5px 7px; }
+  .m-header .lang-switch .lang-short { display: none; }
+  .m-header .theme-switch button { padding: 5px; }
+}
 
 .bottom-nav {
   position: fixed; z-index: 100; inset-inline: 0; bottom: 0;
