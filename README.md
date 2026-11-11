@@ -580,3 +580,7 @@ No certificates are stored in this repository.
 | The camera won't open on the phone | You're probably on plain HTTP. Use `npm run dev` (HTTPS). |
 | Tests suddenly fail | Reset the database: `npm run db:setup -- --reset`. |
 | Tests say *"refusing to run against a remote database"* | Your `.env` points to a database that isn't on your computer. |
+
+## Security demonstration
+
+Rate limits and browser security headers are documented in [docs/security-demo.md](docs/security-demo.md), including the classroom presentation and a framing test. Run `npm run test:security` and `npm run demo:security` without a database to verify them.
