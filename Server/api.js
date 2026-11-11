@@ -12,6 +12,7 @@ import { renderPhoto } from './images.js';
 import { photoExists, PHOTO_DIR, SPECIES_DATA, hasRealPhotos } from './species-data.js';
 import { lanAddresses } from './net.js';
 import { hashPassword, verifyPassword, DEMO_PASSWORD } from './passwords.js';
+import { createApiRateLimits } from './security.js';
 
 /**
  * An async handler that rejects does not reach Express 4's error middleware on
@@ -502,6 +503,8 @@ function matchesQuery(p, needleRaw, { viewer = null } = {}) {
 
 export function createApi() {
   const api = express.Router();
+  // Reject excess traffic before JSON decoding, session SQL, or bcrypt work.
+  api.use(createApiRateLimits());
   api.use(express.json({ limit: '12mb' }));
 
   /* -------- auth context on every request -------- */

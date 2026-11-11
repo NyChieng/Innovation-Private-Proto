@@ -7,6 +7,7 @@ import express from 'express';
 import qrTerminal from 'qrcode-terminal';
 
 import { createApi } from './api.js';
+import { configureSecurity } from './security.js';
 import { connect, close as closeDb, databaseUrl } from './sql.js';
 import { loadReference } from './db.js';
 import { resolvePort } from './port.js';
@@ -60,13 +61,7 @@ try {
 const mqttClient = startMqttSubscriber();
 
 const app = express();
-app.disable('x-powered-by');
-
-// Hosted behind a platform's proxy, the only truthful account of the public
-// scheme and host is in the forwarded headers - the app itself sees plain HTTP
-// on a private container address. Trusting them locally would let any caller
-// spoof the origin, so this is production only.
-if (prod) app.set('trust proxy', 1);
+configureSecurity(app, { production: prod, trustProxy: process.env.TRUST_PROXY });
 
 app.use('/api', createApi());
 
