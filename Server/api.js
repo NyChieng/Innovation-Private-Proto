@@ -12,6 +12,7 @@ import { renderPhoto } from './images.js';
 import { photoExists, PHOTO_DIR, SPECIES_DATA, hasRealPhotos } from './species-data.js';
 import { lanAddresses, localHostName } from './net.js';
 import { hashPassword, verifyPassword, DEMO_PASSWORD } from './passwords.js';
+import { createApiRateLimits } from './security.js';
 import * as passkeys from './passkeys.js';
 import { sendMail, maskEmail } from './mailer.js';
 import * as totp from './totp.js';
@@ -710,6 +711,9 @@ function matchesQuery(p, needleRaw, { viewer = null } = {}) {
 
 export function createApi() {
   const api = express.Router();
+  // Reject excess traffic before JSON decoding, session SQL, or bcrypt work.
+  api.use(createApiRateLimits());
+
   // Every audit and activity row written while handling this request records
   // who it came from - the caller's address and browser - not placeholders.
   api.use((req, res, next) => requestContext.run({ ip: req.ip, userAgent: req.get('user-agent') }, next));
