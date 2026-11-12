@@ -109,18 +109,16 @@ export function AppProvider({ children }) {
     setToken(res.token);
     setUser(res.user);
     await refreshCounts();
-    // The demo roster shows who is active, so keep it fresh after admin edits.
-    try { setBoot(await api.bootstrap()); } catch { /* non-fatal */ }
     return res.user;
   }, [refreshCounts]);
 
+  /**
+   * The signed-in user - or, with two-step verification on, { twoFactor:
+   * ticket }, for the sign-in page to ask for the authenticator code.
+   */
   const signIn = useCallback(async (email, password) => {
     const res = await api.login(email, password);
-    return applySession(res);
-  }, [applySession]);
-
-  const switchRole = useCallback(async (userId) => {
-    const res = await api.switchRole(userId);
+    if (res.two_factor) return { twoFactor: res.ticket };
     return applySession(res);
   }, [applySession]);
 
@@ -150,10 +148,10 @@ export function AppProvider({ children }) {
     toasts, toast, dismissToast,
     theme, setTheme, viewPref, setView, mobile, narrow,
     lang, setLang,
-    signIn, signOut, switchRole, can, run,
+    signIn, signOut, applySession, can, run,
   }), [boot, user, counts, refreshCounts, ready, toasts, toast, dismissToast,
        theme, setTheme, viewPref, setView, mobile, narrow, lang, setLang,
-       signIn, signOut, switchRole, can, run]);
+       signIn, signOut, applySession, can, run]);
 
   return <AppCtx.Provider value={value}>{children}</AppCtx.Provider>;
 }

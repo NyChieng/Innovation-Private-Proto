@@ -83,17 +83,20 @@ const eq = (label, a, b) => check(label, a === b, `expected ${JSON.stringify(b)}
 /* ------------------------------------------------------------------ */
 
 const ACCOUNTS = {
-  admin: 'admin@niah.sarawak.gov.my',
-  botanist: 'suehan.lee@niah.sarawak.gov.my',
-  reviewer: 'meiling.wong@niah.sarawak.gov.my',
-  ranger: 'edmund.yu@niah.sarawak.gov.my',
+  admin: 'nengyichieng@gmail.com',
+  botanist: 'drsuehanlee@gmail.com',
+  reviewer: 'drmeilingwong@gmail.com',
+  ranger: 'edmundguoqianyu@gmail.com',
 };
+
+// Seeded accounts use the email's local part + 123 (Server/seed.js).
+const passwordFor = (email) => email.split('@')[0] + '123';
 
 async function tokenFor(email) {
   const res = await fetch(BASE + '/api/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password: 'demo1234' }),
+    body: JSON.stringify({ email, password: passwordFor(email) }),
   });
   if (!res.ok) throw new Error('login failed for ' + email);
   return (await res.json()).token;
@@ -287,54 +290,77 @@ section('3. Search and filters');
 }
 
 /* ------------------------------------------------------------------ */
-section('4. The role switcher');
+section('4. Staff sign in');
 {
   const page = await newPage();
   await go(page, '/');
 
-  check('the switcher is on screen', await page.evaluate(() => !!document.querySelector('.rs-fab')));
+  check('the prototype controls are on screen', await page.evaluate(() => !!document.querySelector('.rs-fab')));
   eq('it starts as the public visitor',
     await page.evaluate(() => document.querySelector('.rs-fab').innerText.trim().split('\n')[0]), 'Visitor');
 
   await page.click('.rs-fab');
   await sleep(250);
-  const accounts = await page.evaluate(() => document.querySelectorAll('.rs-panel .rs-item').length);
-  check('it lists the visitor plus every demo account', accounts >= 8, 'found ' + accounts);
+  const roster = await page.evaluate(() => document.querySelectorAll('.rs-panel .rs-item').length);
+  eq('it no longer lists accounts to jump into', roster, 1);
 
-  // Pick the first botanist in the list.
-  const clicked = await page.evaluate(() => {
-    const items = [...document.querySelectorAll('.rs-panel .rs-item')];
-    const target = items.find((i) => /Botanist/i.test(i.innerText) && !i.disabled);
-    if (!target) return null;
-    target.click();
-    return target.innerText.split('\n')[0];
-  });
-  await sleep(900);
-  check('switching to a botanist works', !!clicked);
+  // Its sign-in button leads to the real form.
+  await page.evaluate(() => [...document.querySelectorAll('.rs-panel button')].find((b) => /sign in/i.test(b.innerText)).click());
+  await sleep(500);
+  check('the controls lead to the sign-in page', page.url().endsWith('/login'), page.url());
+  check('sign in is full screen, outside the site header',
+    await page.evaluate(() => !!document.querySelector('.signin') && !document.querySelector('.topbar, .m-header')));
+
+  // Select-all then type, so React sees the old value replaced. (A triple
+  // click stops at the "@" and "." in an email address.)
+  const fill = async (sel, value) => {
+    await page.click(sel);
+    await page.keyboard.down('Control'); await page.keyboard.press('KeyA'); await page.keyboard.up('Control');
+    await page.keyboard.press('Backspace');
+    await page.type(sel, value);
+  };
+  const type = async (email, password) => {
+    await fill('.signin input[type=email]', email);
+    await fill('.signin input[autocomplete=current-password]', password);
+    await page.click('.signin-submit');
+  };
+
+  await type(ACCOUNTS.botanist, 'wrong-password');
+  const shown = await page.waitForSelector('.signin-error', { timeout: 8000 }).then(() => true, () => false);
+  check('a wrong password shows an error', shown);
+  check('...and stays on the sign-in page', page.url().endsWith('/login'), page.url());
+
+  await page.click('.signin-reveal');
+  eq('the eye button reveals the password',
+    await page.$eval('.signin input[autocomplete=current-password]', (i) => i.type), 'text');
+
+  await type(ACCOUNTS.botanist, passwordFor(ACCOUNTS.botanist));
+  // Where the browser reports a fingerprint / face sensor, the first password
+  // sign-in offers to use it next time. Turned down here; tests/passkey.test.mjs
+  // covers saying yes.
+  await page.waitForFunction(() => location.pathname.startsWith('/staff/')
+    || [...document.querySelectorAll('button')].some((b) => b.textContent.trim() === 'Not now'), { timeout: 8000 }).catch(() => {});
+  await page.evaluate(() => [...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Not now')?.click());
+  await page.waitForFunction(() => location.pathname.startsWith('/staff/'), { timeout: 8000 }).catch(() => {});
+  await sleep(400);
+  check('the right password lands on a staff screen', page.url().includes('/staff/'),
+    page.url() + ' ' + await page.evaluate(() => JSON.stringify({
+      error: document.querySelector('.signin-error')?.innerText,
+      fields: [...document.querySelectorAll('.signin input')].map((i) => i.value),
+    })).catch(() => ''));
   const after = await page.evaluate(() => document.querySelector('.rs-fab').innerText);
-  check('the switcher shows the new role', /Botanist/i.test(after), after);
-  check('it lands on a staff screen', page.url().includes('/staff/'), page.url());
+  check('the controls show the new role', /Botanist/i.test(after), after);
 
-  // Keyboard shortcut.
+  // Keyboard shortcut, then sign out from the panel.
   await page.keyboard.down('Control'); await page.keyboard.press('KeyK'); await page.keyboard.up('Control');
   await sleep(250);
-  check('Ctrl+K opens the switcher', await page.evaluate(() => !!document.querySelector('.rs-panel')));
-
-  await page.keyboard.press('Digit0');
+  check('Ctrl+K opens the controls', await page.evaluate(() => !!document.querySelector('.rs-panel')));
+  await page.evaluate(() => [...document.querySelectorAll('.rs-panel button')].find((b) => /sign out/i.test(b.innerText)).click());
   await sleep(800);
   const back = await page.evaluate(() => document.querySelector('.rs-fab').innerText);
-  check('pressing 0 returns to the public visitor', /Visitor/i.test(back), back);
+  check('signing out returns to the public visitor', /Visitor/i.test(back), back);
 
-  const deactivated = await page.evaluate(() => {
-    document.querySelector('.rs-fab').click();
-    return new Promise((res) => setTimeout(() => {
-      const items = [...document.querySelectorAll('.rs-panel .rs-item')];
-      res(items.some((i) => i.disabled && /deactivated/i.test(i.innerText)));
-    }, 250));
-  });
-  check('the deactivated account is shown but not selectable', deactivated);
-
-  await expectNoErrors(page, 'no console errors from the switcher');
+  await expectNoErrors(page, 'no console errors from sign in');
   await page.close();
 }
 

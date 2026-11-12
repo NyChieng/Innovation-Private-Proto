@@ -246,3 +246,148 @@ DELETE FROM sensor_alerts WHERE alert_type = 'light';
 
 ALTER TABLE sensor_alerts
   MODIFY COLUMN alert_type ENUM('soil_moisture','temperature','humidity','offline') NOT NULL;
+
+
+-- ---------------------------------------------------------------------
+-- 9. Locking an account after repeated wrong passwords
+-- ---------------------------------------------------------------------
+-- Without this, sign in could be tried as fast as the server answers. After
+-- five wrong passwords in a row the account is locked for fifteen minutes;
+-- a correct sign in resets the count, and an administrator can unlock early.
+-- The limits live in Server/api.js (MAX_FAILED_LOGINS, LOCK_MINUTES).
+
+ALTER TABLE users
+  ADD COLUMN failed_login_count TINYINT UNSIGNED NOT NULL DEFAULT 0 AFTER last_login_at,
+  ADD COLUMN locked_until       DATETIME         NULL              AFTER failed_login_count;
+
+
+-- ---------------------------------------------------------------------
+-- 10. Recovery codes for a forgotten password
+-- ---------------------------------------------------------------------
+-- The demo accounts have made-up email addresses, so a reset link by email
+-- could never arrive - or worse, could arrive at a stranger's real inbox.
+-- Instead each user is shown a one-time recovery code when they set a
+-- password. Email + code + new password resets it without an administrator.
+-- Only a hash is kept, like the password; using the code replaces it, and an
+-- administrator's reset clears it. Wrong codes count towards the lockout in
+-- section 9, so the code cannot be guessed any faster than a password.
+
+ALTER TABLE users
+  ADD COLUMN recovery_code_hash CHAR(64) NULL AFTER password_hash;
+
+
+-- ---------------------------------------------------------------------
+-- 11. Passkeys - Face ID, fingerprint, or the phone's own pattern / PIN
+-- ---------------------------------------------------------------------
+-- WebAuthn: the phone keeps a private key behind its own screen lock and
+-- FloraScan keeps only the public half, so no fingerprint or face ever
+-- reaches the server. A passkey belongs to the address it was made on
+-- (rp_id), so one made on localhost does not work from the phone address.
+-- An administrator's password reset removes them, like the recovery code.
+
+CREATE TABLE passkeys (
+  id             INT UNSIGNED    NOT NULL AUTO_INCREMENT,
+  user_id        INT UNSIGNED    NOT NULL,
+  credential_id  VARCHAR(255)    NOT NULL,   -- base64url, as the browser reports it
+  public_key     TEXT            NOT NULL,   -- base64url COSE key
+  counter        BIGINT UNSIGNED NOT NULL DEFAULT 0,
+  transports     VARCHAR(120)    NULL,
+  rp_id          VARCHAR(255)    NOT NULL,
+  device_label   VARCHAR(120)    NULL,
+  created_at     DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  last_used_at   DATETIME        NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_passkey_credential (credential_id),
+  KEY idx_passkey_user (user_id),
+  CONSTRAINT fk_passkey_user
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+
+-- ---------------------------------------------------------------------
+-- 12. Asking an administrator to approve a password reset
+-- ---------------------------------------------------------------------
+-- For someone who forgot their password and never saved a recovery code.
+-- "Forgot password?" lets them ask from the sign-in page; every
+-- administrator is notified, and the request shows on the account until it
+-- is dealt with. Administrators are notified at most every 15 minutes per
+-- account, so the button cannot be used to flood them.
+
+ALTER TABLE users
+  ADD COLUMN reset_requested_at DATETIME NULL AFTER locked_until;
+
+-- The requests themselves. The person's screen shows a six-digit check code
+-- and holds a secret token; they read the code to an administrator, who types
+-- it in to approve. Only the browser holding the token can then set the new
+-- password, so approving one request cannot be used from anywhere else.
+-- users.reset_requested_at above marks the newest one for the staff list.
+
+CREATE TABLE password_reset_requests (
+  id           INT UNSIGNED     NOT NULL AUTO_INCREMENT,
+  user_id      INT UNSIGNED     NOT NULL,
+  token_hash   CHAR(64)         NOT NULL,              -- SHA-256 of the browser's secret
+  check_code   CHAR(6)          NOT NULL,              -- read out to the administrator
+  status       VARCHAR(12)      NOT NULL DEFAULT 'pending', -- pending, approved, denied, used, closed
+  wrong_codes  TINYINT UNSIGNED NOT NULL DEFAULT 0,
+  created_at   DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  expires_at   DATETIME         NOT NULL,
+  decided_by   INT UNSIGNED     NULL,
+  decided_at   DATETIME         NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_prr_token (token_hash),
+  KEY idx_prr_user (user_id, status),
+  CONSTRAINT fk_prr_user
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT fk_prr_decider
+    FOREIGN KEY (decided_by) REFERENCES users(id) ON DELETE SET NULL
+);
+
+
+-- ---------------------------------------------------------------------
+-- 13. Administrators' recovery email
+-- ---------------------------------------------------------------------
+-- An administrator has nobody above them to approve a reset, and may be the
+-- only one. Each keeps a second, real email address; a forgotten password
+-- sends a six-digit code there. The address is only saved once a code sent to
+-- it has been typed back, so a mistyped or made-up address can never receive
+-- reset codes - which would hand the account to whoever owns that inbox.
+
+ALTER TABLE users
+  ADD COLUMN recovery_email             VARCHAR(190) NULL AFTER recovery_code_hash,
+  ADD COLUMN recovery_email_verified_at DATETIME     NULL AFTER recovery_email;
+
+CREATE TABLE email_codes (
+  id          INT UNSIGNED     NOT NULL AUTO_INCREMENT,
+  user_id     INT UNSIGNED     NOT NULL,
+  purpose     VARCHAR(12)      NOT NULL,   -- 'verify' (confirming the address) or 'reset'
+  email       VARCHAR(190)     NOT NULL,   -- where it was sent
+  code_hash   CHAR(64)         NOT NULL,
+  attempts    TINYINT UNSIGNED NOT NULL DEFAULT 0,
+  expires_at  DATETIME         NOT NULL,
+  used_at     DATETIME         NULL,
+  created_at  DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_ec_user (user_id, purpose),
+  CONSTRAINT fk_ec_user
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+
+-- ---------------------------------------------------------------------
+-- 14. Two-step verification with an authenticator app (TOTP)
+-- ---------------------------------------------------------------------
+-- Scan a QR code once with Google Authenticator, Microsoft Authenticator or
+-- similar; from then on sign-in asks for the password and the app's current
+-- six-digit code. Free to run - the code is worked out on the phone from a
+-- shared secret, nothing is sent. See Server/totp.js.
+--
+-- totp_secret holds the secret encrypted with a key kept outside the database
+-- (.certs/totp.key). totp_pending holds one while it is being set up, until a
+-- code proves the app has it. totp_last_step stops a code being used twice.
+-- An administrator's password reset switches it off, for a lost phone.
+
+ALTER TABLE users
+  ADD COLUMN totp_secret     VARCHAR(255)    NULL AFTER recovery_email_verified_at,
+  ADD COLUMN totp_pending    VARCHAR(255)    NULL AFTER totp_secret,
+  ADD COLUMN totp_enabled_at DATETIME        NULL AFTER totp_pending,
+  ADD COLUMN totp_last_step  BIGINT UNSIGNED NULL AFTER totp_enabled_at;

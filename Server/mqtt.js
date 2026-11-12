@@ -15,7 +15,7 @@ const MAX_MESSAGE_BYTES = 2048;
 // Fields saved into sensor_readings, with their allowed ranges.
 // integer: the column is a whole-number type, so fractions are refused.
 // To save another field the node sends, add its column to sensor_readings
-// (see sections 6 and 7 of schema-extensions.sql) and list it here. Fields
+// (see sections 7 and 8 of schema-extensions.sql) and list it here. Fields
 // not listed here are ignored.
 const FIELDS = {
   soil_moisture_pct: { range: [0, 100] },

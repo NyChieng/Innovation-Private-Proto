@@ -1,6 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useApp } from '../../lib/store.jsx';
-import { Avatar, Notice } from '../../components/ui.jsx';
+import { Avatar } from '../../components/ui.jsx';
 import { staffNav } from '../../components/Shell.jsx';
 import { relativeTime, roleLabel } from '../../lib/format.js';
 import * as I from '../../lib/icons.jsx';
@@ -90,13 +90,11 @@ export default function Me() {
           {t('Last signed in {when}.', { when: user.last_login_at ? relativeTime(user.last_login_at) : t('just now') })}
         </div>
 
-        {user.must_change_password && (
-          <div style={{ marginBottom: 14 }}>
-            <Notice kind="warn" title={t('Password change required')}>
-              {t('An administrator reset your password. In the finished system you would be asked to choose a new one before going any further.')}
-            </Notice>
-          </div>
-        )}
+        <Link className="card card-pad row" to="/staff/password" style={{ gap: 12, marginBottom: 14, color: 'inherit', textDecoration: 'none' }}>
+          <span className="avatar"><I.Lock style={{ width: 15, height: 15 }} /></span>
+          <span className="grow strong small">{t('Sign-in and security')}</span>
+          <I.ChevronRight style={{ width: 16, height: 16, color: 'var(--text-faint)' }} />
+        </Link>
 
         <button className="btn btn-danger btn-block" onClick={async () => { await signOut(); navigate('/'); }}>
           <I.Logout /> {t('Sign out')}

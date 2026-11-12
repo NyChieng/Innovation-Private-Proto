@@ -207,7 +207,7 @@ Phone / tablet   https://192.168.0.133:44xxx   (same Wi-Fi or hotspot)
 - Your phone and computer must be on the **same Wi-Fi or hotspot**.
 
 On a laptop the app looks like a website. On a phone it looks like an app with a tab bar
-at the bottom. You can switch between the two from the role switcher, which is handy for
+at the bottom. You can switch between the two from the floating demo button, which is handy for
 showing the phone layout on a projector.
 
 ### Why HTTPS, and the security warning
@@ -263,27 +263,58 @@ without a signal.
 
 ---
 
-## Demo role switcher
+## Signing in
 
-A floating button in the bottom-right corner on every screen. It lets you:
+Staff sign in at **`/login`** with their email address and password, the same way the real
+system will work. There is no longer a way to jump into an account without its password.
 
-- jump into the visitor view or any staff account with no password
-- open it with **Ctrl/Cmd + K**, press **0** for visitor or **1–9** for an account
+A floating button in the bottom-right corner (**Ctrl/Cmd + K**) shows who is signed in and
+lets you:
+
+- go to **Staff sign in**, or sign out
 - change theme, language, and website/phone layout
 - replay the welcome screen (**Intro**)
 
-It is for demos only (it uses `POST /api/auth/switch`, which will be removed before release).
-The normal login page at `/login` also works. **Every demo account's password is `demo1234`.**
+It is for demos only and comes out before release.
 
-### Demo accounts
+### Staff accounts
 
-| Role | Name | What they can do |
-| --- | --- | --- |
-| Administrator | Neng Yi Chieng | Accounts, roles, activity log, audit trail, settings |
-| Botanist | Dr Sue Han Lee, Hans Jia Syn Yee | Register, edit, archive and resubmit plants; manage species; print tags; view visitor reports; set up sensors |
-| Reviewer | Dr Mei Ling Wong | Check every botanist submission: fix it, approve it, or send it back with a note |
-| Ranger | Edmund Guo Qian Yu, Lim Yon, Edward Ngie Jie Ling, Darren Chong Yue Yang | IoT sensor alerts only. Cannot register or edit plants. |
-| Administrator | Jiaqi Hu | Deactivated, to show that disabled accounts cannot sign in |
+Each seeded account's password is the part of the email before the `@`, followed by `123`.
+
+| Role | Name | Email | Password |
+| --- | --- | --- | --- |
+| Administrator | Neng Yi Chieng | `nengyichieng@gmail.com` | `nengyichieng123` |
+| Administrator | Jiaqi Hu | `jiaqihu@gmail.com` | `jiaqihu123` |
+| Botanist | Dr Sue Han Lee | `drsuehanlee@gmail.com` | `drsuehanlee123` |
+| Botanist | Hans Jia Syn Yee | `hansjiasynyee@gmail.com` | `hansjiasynyee123` |
+| Reviewer | Dr Mei Ling Wong | `drmeilingwong@gmail.com` | `drmeilingwong123` |
+| Ranger | Edmund Guo Qian Yu | `edmundguoqianyu@gmail.com` | `edmundguoqianyu123` |
+| Ranger | Lim Yon | `limyon@gmail.com` | `limyon123` |
+| Ranger | Edward Ngie Jie Ling | `edwardngiejieling@gmail.com` | `edwardngiejieling123` |
+| Ranger | Darren Chong Yue Yang | `darrenyueyangchong@gmail.com` | `darrenyueyangchong123` |
+
+What each role can do:
+
+| Role | What they can do |
+| --- | --- |
+| Administrator | Accounts, roles, activity log, audit trail, settings |
+| Botanist | Register, edit, archive and resubmit plants; manage species; print tags; view visitor reports; set up sensors |
+| Reviewer | Check every botanist submission: fix it, approve it, or send it back with a note |
+| Ranger | IoT sensor alerts only. Cannot register or edit plants. |
+
+**Five wrong passwords in a row lock the account for 15 minutes.** The sign-in page counts
+down the attempts left, and while the lock lasts even the right password is refused. A correct
+sign in resets the count. An administrator can unlock early from **Staff accounts** (open the
+person, then **Unlock account**), and resetting the password also clears the lock. Locks show in
+the activity log and audit trail. The limits are `MAX_FAILED_LOGINS` and `LOCK_MINUTES` in
+`Server/api.js`.
+
+An account an administrator creates, or a password an administrator resets, starts on the
+temporary password `demo1234`. To see a deactivated account refused at sign in, deactivate
+one from **Users** in the admin dashboard.
+
+**Already have the database from before this change?** Run `npm run db:setup -- --reset` to
+load these accounts. It deletes and rebuilds your local database.
 
 How roles work:
 

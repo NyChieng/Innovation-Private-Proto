@@ -124,6 +124,19 @@ export default function Connect() {
           </div>
         )}
 
+        {info.passkey_url && (
+          <div className="card card-pad" style={{ marginBottom: 20 }}>
+            <h3 className="section-title" style={{ marginBottom: 8 }}><I.Shield /> {t('Face ID / fingerprint sign-in')}</h3>
+            <p className="small mute" style={{ marginTop: 0 }}>
+              {t('Phones can only use Face ID or a fingerprint on a named address. Trust the certificate above first, then open:')}
+            </p>
+            <a href={info.passkey_url + '/login'} className="mono strong" style={{ overflowWrap: 'anywhere' }}>{info.passkey_url}</a>
+            <p className="tiny mute" style={{ marginBottom: 0 }}>
+              {t('Works on iPhone and most recent Android phones on the same Wi-Fi. If it does not open, keep using the number address and sign in with your password.')}
+            </p>
+          </div>
+        )}
+
         <div style={{ marginBottom: 20 }}>
           <PlatformGuides />
         </div>

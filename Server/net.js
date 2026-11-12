@@ -24,6 +24,18 @@ export function lanAddresses() {
   });
 }
 
+/**
+ * This machine's name on the local network, e.g. laptop-bgomh23a.local.
+ * Passkeys (Face ID, fingerprint) refuse a bare IP address, so a phone signs
+ * in with one through this name instead. Windows, macOS and iOS answer .local
+ * names by multicast DNS with nothing to set up; null when the computer name
+ * is not a usable DNS label.
+ */
+export function localHostName() {
+  const name = os.hostname().toLowerCase();
+  return /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(name) ? `${name}.local` : null;
+}
+
 export function lanAddress() {
   return lanAddresses()[0]?.address || '127.0.0.1';
 }

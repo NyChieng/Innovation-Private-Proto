@@ -1,149 +1,242 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { api } from '../lib/api.js';
 import { useApp } from '../lib/store.jsx';
-import { Avatar, Notice } from '../components/ui.jsx';
+import { Avatar } from '../components/ui.jsx';
+import Recover from './Recover.jsx';
+import { PasskeyOffer, PasskeySignIn, shouldOfferPasskey } from '../components/Passkeys.jsx';
+import { TwoFactorStep } from '../components/TwoFactor.jsx';
+import { SmartImage } from '../components/motion.jsx';
 import { homeFor, roleLabel } from '../lib/format.js';
 import * as I from '../lib/icons.jsx';
 import { t } from '../lib/i18n.js';
 
+/**
+ * Staff sign in.
+ *
+ * Full screen and outside the site shell, like the welcome screen: this is
+ * the front door to the staff side, so it gets the whole viewport rather than
+ * a card in the middle of the public register. A photograph from the register
+ * on one side, the form on the other; on a phone the photograph becomes a band
+ * above the form.
+ *
+ * Accounts are created by an administrator - there is no self sign-up. A
+ * forgotten password is reset here with a recovery code (Recover.jsx).
+ */
+/**
+ * The API locks an account after five wrong passwords in a row. Say how close
+ * someone is, and once it happens, how long it lasts and what to do.
+ */
+function describe(err) {
+  const b = err.body || {};
+  if (err.status === 423) {
+    return t('Too many wrong passwords. This account is locked for {minutes} min. Try again later, or ask an administrator to unlock it.', { minutes: b.minutes ?? 15 });
+  }
+  if (err.status === 401 && b.attempts_left === 1) {
+    return t('Incorrect password. 1 attempt left before the account is locked.');
+  }
+  if (err.status === 401 && b.attempts_left) {
+    return t('Incorrect password. {count} attempts left before the account is locked.', { count: b.attempts_left });
+  }
+  return err.message;
+}
+
 export default function Login() {
-  const { boot, signIn, switchRole, toast, user } = useApp();
+  const { boot, signIn, signOut, toast, user } = useApp();
   const navigate = useNavigate();
   const loc = useLocation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [reveal, setReveal] = useState(false);
+  const [caps, setCaps] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  // Set on every failed attempt and cleared when the animation ends, so the
+  // shake replays each time without remounting (and unfocusing) the inputs.
+  const [shake, setShake] = useState(false);
+  const [hero, setHero] = useState(null);
+  const [recovering, setRecovering] = useState(false);
+  // Signed in with a password just now, and being offered fingerprint / face.
+  const [offer, setOffer] = useState(null);
+  // Password accepted, waiting for the authenticator app's code.
+  const [ticket, setTicket] = useState(null);
+  const emailRef = useRef(null);
+
+  useEffect(() => {
+    api.publicPlants({ limit: 12, sort: 'popular' })
+      .then((r) => {
+        const pick = r.results.find((p) => p.photo && ['tree', 'palm', 'fern'].includes(p.growth_form))
+          || r.results.find((p) => p.photo);
+        if (pick) setHero({ src: pick.photo, credit: pick.photo_credit });
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => { if (!user) emailRef.current?.focus(); }, [user]);
 
   const land = (u) => navigate(loc.state?.from || homeFor(u), { replace: true });
+
+  /** Signed in at last, by password alone or password and code. */
+  const signedIn = async (u) => {
+    toast(t('Signed in as {name}', { name: u.full_name }));
+    // First password sign-in on a device that can: offer fingerprint / face for next time.
+    if (await shouldOfferPasskey(u)) { setOffer(u); setBusy(false); return; }
+    land(u);
+  };
 
   const submit = async (e) => {
     e.preventDefault();
     setBusy(true); setError(null);
     try {
-      const u = await signIn(email, password);
-      toast(t('Signed in as {name}', { name: u.full_name }));
-      land(u);
+      const r = await signIn(email, password);
+      // Right password, two-step verification on: now the authenticator code.
+      if (r.twoFactor) { setTicket(r.twoFactor); setBusy(false); return; }
+      await signedIn(r);
     } catch (err) {
-      setError(err.message);
-    } finally { setBusy(false); }
+      setError(describe(err));
+      setShake(true);
+      setBusy(false);
+    }
   };
 
-  const quick = async (account) => {
-    setBusy(true); setError(null);
-    try {
-      const u = await switchRole(account.id);
-      toast(t('Signed in as {name}', { name: u.full_name }));
-      land(u);
-    } catch (err) {
-      setError(err.message);
-    } finally { setBusy(false); }
+  const switchAccount = async () => {
+    await signOut();
+    setEmail(''); setPassword(''); setError(null);
   };
 
-  const accounts = boot?.demo_accounts || [];
-  // Grouped by role, in the order a walkthrough tells the story. A role the
-  // demo does not know about still appears, at the end.
-  const ORDER = ['admin', 'botanist', 'reviewer', 'ranger'];
-  const byRole = [...ORDER, ...new Set(accounts.map((a) => a.role).filter((r) => !ORDER.includes(r)))];
+  const onKey = (e) => setCaps(!!e.getModifierState?.('CapsLock'));
+
+  const park = boot?.park_name ? t(boot.park_name) : t('Niah National Park');
 
   return (
-    <div className="page">
-      <div className="wrap" style={{ maxWidth: 940 }}>
-        {user && (
-          <div style={{ marginBottom: 18 }}>
-            <Notice kind="ok" title={t('Already signed in as {name}', { name: user.full_name })}>
-              {t('{link}, or sign in as somebody else below.', { link: <Link to={homeFor(user)}>{t('Go to your dashboard')}</Link> })}
-            </Notice>
-          </div>
-        )}
+    <div className="signin">
+      <aside className="signin-art">
+        {hero && <SmartImage src={hero.src} alt="" eager />}
+        <div className="signin-art-inner">
+          <Link to="/" className="signin-brand">
+            <img src="/icons/icon-192.png" alt="" width="40" height="40" />
+            <span>
+              <strong>FloraScan</strong>
+              <em>{t('{park}, Sarawak', { park })}</em>
+            </span>
+          </Link>
 
-        <div style={{ display: 'grid', gap: 26, gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 310px), 1fr))', alignItems: 'start' }}>
-          {/* Real login form */}
-          <div className="card card-pad">
-            <h1 style={{ fontSize: '1.45rem', marginBottom: 4 }}>{t('Staff sign in')}</h1>
-            <div className="small mute" style={{ marginBottom: 18 }}>
-              {t('Accounts are created by an administrator. Visitors do not need one.')}
-            </div>
-
-            <form onSubmit={submit} className="stack" style={{ '--gap': '14px' }}>
-              <div className="field">
-                <label htmlFor="email">{t('Email address')}</label>
-                <input
-                  id="email" type="email" className={'input' + (error ? ' input-invalid' : '')}
-                  value={email} onChange={(e) => setEmail(e.target.value)}
-                  autoComplete="username" placeholder="name@niah.sarawak.gov.my" required
-                />
-              </div>
-              <div className="field">
-                <label htmlFor="password">{t('Password')}</label>
-                <input
-                  id="password" type="password" className={'input' + (error ? ' input-invalid' : '')}
-                  value={password} onChange={(e) => setPassword(e.target.value)}
-                  autoComplete="current-password" placeholder="demo1234" required
-                />
-                <div className="hint">{t('Demo password for every account: {password}', { password: <span className="mono">demo1234</span> })}</div>
-              </div>
-
-              {error && <div className="err" role="alert">{error}</div>}
-
-              <button className="btn btn-primary btn-lg btn-block" disabled={busy}>
-                {busy && <span className="spinner" />} {t('Sign in')}
-              </button>
-            </form>
-
-            <div className="tiny faint" style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
-              {t('Passwords are stored as bcrypt hashes in the real system. This prototype keeps sessions in memory only, so everything resets when the server restarts.')}
-            </div>
-          </div>
-
-          {/* Demo roster */}
-          <div className="card">
-            <div className="card-head">
-              <h3 className="grow">{t('Sign in as a demo account')}</h3>
-              <span className="badge badge-warn">{t('Prototype')}</span>
-            </div>
-            <div className="card-body" style={{ paddingTop: 12 }}>
-              <div className="small mute" style={{ marginBottom: 14 }}>
-                {t('One click, no password. The same list is in the floating switcher (Ctrl+K), so you can change role from any screen.')}
-              </div>
-
-              {byRole.map((role) => {
-                const list = accounts.filter((a) => a.role === role);
-                if (!list.length) return null;
-                return (
-                  <div key={role} style={{ marginBottom: 14 }}>
-                    <div className="side-title" style={{ paddingLeft: 0 }}>{roleLabel(list[0].role_label)}</div>
-                    <div style={{ display: 'grid', gap: 6 }}>
-                      {list.map((a) => (
-                        <button
-                          key={a.id}
-                          className="rs-item"
-                          style={{ border: '1px solid var(--border)', background: 'var(--surface)' }}
-                          onClick={() => quick(a)}
-                          disabled={busy || !a.is_active}
-                          title={a.is_active ? a.email : t('Deactivated account')}
-                        >
-                          <Avatar name={a.full_name} role={a.role} />
-                          <span className="grow" style={{ minWidth: 0 }}>
-                            <span className="nm truncate">{a.full_name}</span>
-                            <span className="rl truncate">{a.title}{!a.is_active && ' · ' + t('deactivated')}</span>
-                          </span>
-                          {a.is_active ? <I.ChevronRight style={{ width: 15, height: 15, color: 'var(--text-faint)' }} /> : <span className="tag tiny">{t('Off')}</span>}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
-
-              <div className="inset small">
-                <strong>{t('Try the deactivated account.')}</strong>{' '}
-                {t('It is refused at sign in, which is the same check the API applies on every request after login.')}
-              </div>
-            </div>
+          <div className="signin-quote">
+            <h2>{t('Every plant on the trail, recorded and verified.')}</h2>
+            <ul className="signin-roles">
+              <li><span>{t('Administrator')}</span>{t('Staff accounts and settings')}</li>
+              <li><span>{t('Botanist')}</span>{t('Registers and identifies plants')}</li>
+              <li><span>{t('Reviewer')}</span>{t('Checks every record before it is published')}</li>
+              <li><span>{t('Ranger')}</span>{t('Responds to sensor alerts in the field')}</li>
+            </ul>
           </div>
         </div>
-      </div>
+        {/* Creative Commons photographs: the credit travels with the image. */}
+        {hero?.credit && <span className="signin-credit">{hero.credit}</span>}
+      </aside>
+
+      <main className="signin-panel">
+        <div className="signin-card">
+          <div className="signin-eyebrow"><I.Lock /> {t('Staff portal')}</div>
+
+          {/* Ahead of the signed-in view: recovering signs the user in, and the
+              new recovery code must stay on screen until they have saved it. */}
+          {offer ? (
+            <PasskeyOffer user={offer} onDone={() => land(offer)} />
+          ) : ticket ? (
+            <TwoFactorStep
+              ticket={ticket} email={email}
+              onSignedIn={signedIn}
+              onBack={() => { setTicket(null); setPassword(''); }}
+            />
+          ) : recovering ? (
+            <Recover initialEmail={email} onBack={() => setRecovering(false)} />
+          ) : user ? (
+            <>
+              <h1>{t('You are signed in')}</h1>
+              <div className="signin-who">
+                <Avatar name={user.full_name} role={user.role} />
+                <span>
+                  <strong>{user.full_name}</strong>
+                  <em>{roleLabel(user.role_label)}{user.title ? ' · ' + user.title : ''}</em>
+                </span>
+              </div>
+              <button className="btn btn-primary btn-lg btn-block signin-submit" onClick={() => land(user)}>
+                {t('Continue to your dashboard')} <I.ChevronRight />
+              </button>
+              <button className="btn btn-lg btn-block signin-secondary" onClick={switchAccount}>
+                <I.Logout /> {t('Sign out and use another account')}
+              </button>
+            </>
+          ) : (
+            <>
+              <h1>{t('Welcome back')}</h1>
+              <p className="signin-lead">{t('Sign in with the email address and password your administrator gave you.')}</p>
+
+              <form onSubmit={submit} noValidate>
+                <div
+                  className={'signin-fields' + (error ? ' is-error' : '') + (shake ? ' is-shaking' : '')}
+                  onAnimationEnd={() => setShake(false)}
+                >
+                  <label className="signin-field">
+                    <span className="signin-label">{t('Email address')}</span>
+                    <span className="signin-control">
+                      <I.Mail />
+                      <input
+                        // "webauthn" lets the browser offer a saved fingerprint / face sign-in here.
+                        ref={emailRef} type="email" inputMode="email" autoComplete="username webauthn"
+                        value={email} onChange={(e) => setEmail(e.target.value)}
+                        placeholder="name@gmail.com" required aria-invalid={!!error}
+                      />
+                    </span>
+                  </label>
+
+                  <label className="signin-field">
+                    <span className="signin-label">{t('Password')}</span>
+                    <span className="signin-control">
+                      <I.Lock />
+                      <input
+                        type={reveal ? 'text' : 'password'} autoComplete="current-password"
+                        value={password} onChange={(e) => setPassword(e.target.value)}
+                        onKeyDown={onKey} onKeyUp={onKey}
+                        required aria-invalid={!!error}
+                      />
+                      <button
+                        type="button" className="signin-reveal"
+                        onClick={() => setReveal((r) => !r)}
+                        aria-label={reveal ? t('Hide password') : t('Show password')}
+                        title={reveal ? t('Hide password') : t('Show password')}
+                      >
+                        {reveal ? <I.EyeOff /> : <I.Eye />}
+                      </button>
+                    </span>
+                  </label>
+                </div>
+
+                {caps && !error && <div className="signin-note"><I.Alert /> {t('Caps Lock is on')}</div>}
+                {error && <div className="signin-error" role="alert"><I.Alert /> {error}</div>}
+
+                <button className="btn btn-primary btn-lg btn-block signin-submit" disabled={busy || !email || !password}>
+                  {busy ? <><span className="spinner" /> {t('Signing in...')}</> : <>{t('Sign in')} <I.ChevronRight /></>}
+                </button>
+              </form>
+
+              <PasskeySignIn
+                onError={setError}
+                onSignedIn={(u) => { toast(t('Signed in as {name}', { name: u.full_name })); land(u); }}
+              />
+
+              <p className="signin-help">
+                <button type="button" className="signin-link" onClick={() => { setError(null); setRecovering(true); }}>
+                  {t('Forgot your password?')}
+                </button>
+              </p>
+            </>
+          )}
+
+          <Link to="/" className="signin-back"><I.ArrowLeft /> {t('Back to the public register')}</Link>
+        </div>
+      </main>
     </div>
   );
 }

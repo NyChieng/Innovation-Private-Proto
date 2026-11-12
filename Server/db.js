@@ -14,9 +14,26 @@
  * through Server/sql.js.
  */
 
+import { AsyncLocalStorage } from 'node:async_hooks';
 import * as sql from './sql.js';
 
 export const nowIso = () => new Date().toISOString();
+
+/**
+ * The request an audit or activity row is written during, so each row records
+ * the real address and browser rather than placeholders. Set once per request
+ * by the API (Server/api.js); null outside a request, e.g. while seeding.
+ */
+export const requestContext = new AsyncLocalStorage();
+
+function origin() {
+  const ctx = requestContext.getStore();
+  return {
+    // "::ffff:192.168.0.20" is how Node reports an IPv4 caller on a dual-stack socket.
+    ip_address: ctx?.ip ? String(ctx.ip).replace(/^::ffff:/, '').slice(0, 45) : null,
+    user_agent: ctx?.userAgent ? String(ctx.userAgent).slice(0, 255) : null,
+  };
+}
 
 /* ------------------------------------------------------------------ */
 /* Reference cache                                                     */
@@ -126,8 +143,7 @@ export function audit({ user_id, action, entity_type, entity_id, old_values = nu
     entity_id: entity_id ?? null,
     old_values: old_values === null ? null : JSON.stringify(old_values),
     new_values: new_values === null ? null : JSON.stringify(new_values),
-    ip_address: '127.0.0.1',
-    user_agent: 'Prototype X demo',
+    ...origin(),
   }), 'an audit row');
 }
 
@@ -136,8 +152,7 @@ export function activity({ user_id, action, detail = null }) {
     user_id: user_id ?? null,
     action,
     detail,
-    ip_address: '127.0.0.1',
-    user_agent: 'Prototype X demo',
+    ...origin(),
   }), 'an activity row');
 }
 

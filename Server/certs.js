@@ -96,7 +96,7 @@ function createCa() {
  * (iOS 13+): SHA-256, RSA 2048, serverAuth usage, names in the SAN, and a
  * lifetime well under 825 days.
  */
-function createLeaf(ca, ips) {
+function createLeaf(ca, ips, names) {
   const caCert = pki.certificateFromPem(ca.cert);
   const caKey = pki.privateKeyFromPem(ca.key);
   const keys = pki.rsa.generateKeyPair(2048);
@@ -110,7 +110,13 @@ function createLeaf(ca, ips) {
     { name: 'basicConstraints', cA: false, critical: true },
     { name: 'keyUsage', digitalSignature: true, keyEncipherment: true, critical: true },
     { name: 'extKeyUsage', serverAuth: true },
-    { name: 'subjectAltName', altNames: [{ type: 2, value: 'localhost' }, ...ips.map((ip) => ({ type: 7, ip }))] },
+    {
+      name: 'subjectAltName',
+      altNames: [
+        ...['localhost', ...names].map((value) => ({ type: 2, value })),
+        ...ips.map((ip) => ({ type: 7, ip })),
+      ],
+    },
     { name: 'subjectKeyIdentifier' },
     { name: 'authorityKeyIdentifier', keyIdentifier: caCert.generateSubjectKeyIdentifier().getBytes() },
   ]);
@@ -119,7 +125,7 @@ function createLeaf(ca, ips) {
 }
 
 /** Why an existing server certificate has to be reissued, or null if it is fine. */
-function staleReason(leafPem, caPem, ips) {
+function staleReason(leafPem, caPem, ips, names) {
   let leaf;
   let ca;
   try {
@@ -133,6 +139,8 @@ function staleReason(leafPem, caPem, ips) {
   const san = leaf.subjectAltName || '';
   const missing = ips.filter((ip) => !san.includes('IP Address:' + ip));
   if (missing.length) return 'new network address ' + missing.join(', ');
+  const missingNames = names.filter((n) => !san.includes('DNS:' + n));
+  if (missingNames.length) return 'new network name ' + missingNames.join(', ');
   return null;
 }
 
@@ -141,9 +149,12 @@ const read = (f) => (fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : null);
 /**
  * Key and certificate for the HTTPS server, creating or reissuing them as
  * needed. `addresses` are this machine's IPv4 addresses; only private ones go
- * into the certificate, since the CA may not vouch for anything else.
+ * into the certificate, since the CA may not vouch for anything else. `names`
+ * are extra DNS names - the machine's .local name, which the CA's name
+ * constraints already allow, so a phone that trusts the CA need not re-trust it.
  */
-export function tlsOptions(dir, addresses) {
+export function tlsOptions(dir, addresses, names = []) {
+  names = names.filter((n) => n && n.endsWith('.local'));
   fs.mkdirSync(dir, { recursive: true });
   const f = {
     caKey: `${dir}/ca-key.pem`, caCert: `${dir}/ca.pem`,
@@ -159,9 +170,9 @@ export function tlsOptions(dir, addresses) {
   }
 
   let leaf = { key: read(f.key), cert: read(f.cert) };
-  const reason = !leaf.key || !leaf.cert ? 'missing' : staleReason(leaf.cert, ca.cert, ips);
+  const reason = !leaf.key || !leaf.cert ? 'missing' : staleReason(leaf.cert, ca.cert, ips, names);
   if (reason) {
-    leaf = createLeaf(ca, ips);
+    leaf = createLeaf(ca, ips, names);
     fs.writeFileSync(f.key, leaf.key, { mode: 0o600 });
     fs.writeFileSync(f.cert, leaf.cert);
   }
