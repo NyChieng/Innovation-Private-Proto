@@ -5,11 +5,12 @@
 --   mysql -u root < plant_registry_schema.sql
 --   mysql -u root plant_registry < server/schema-extensions.sql
 --
--- plant_registry_schema.sql is the submitted design and is left untouched.
--- Everything here is additive, and exists because the prototype does two
--- things the schema was written before: it imports real species data from
--- GBIF, iNaturalist and Wikipedia, and it withholds the locations of
--- threatened plants from the public.
+-- plant_registry_schema.sql is the submitted design. Its only change since
+-- is in the IoT tables, to match the real sensor kit (see section 8).
+-- Everything here is additive, apart from section 8, and exists because the
+-- prototype does two things the schema was written before: it imports real
+-- species data from GBIF, iNaturalist and Wikipedia, and it withholds the
+-- locations of threatened plants from the public.
 --
 -- If any of these earn their place, fold them into the schema proper at the
 -- next revision rather than letting this file grow into a second schema.
@@ -183,3 +184,65 @@ SELECT r.id, p.id
 UPDATE settings
    SET description = 'true = botanist entries wait for a reviewer; false = they publish immediately. A "species not listed" entry always waits'
  WHERE setting_key = 'require_approval';
+
+
+-- ---------------------------------------------------------------------
+-- 7. Extra fields from the sensor node
+-- ---------------------------------------------------------------------
+-- The ESP32 node (iot-kit/FloraScan_Node) sends more than the three readings
+-- the schema stores: the kit also has a raindrop plate, a PIR motion sensor
+-- and a sound sensor, and the node reports its Wi-Fi signal and uptime.
+-- These columns keep them, so a dry spell, a visitor near a protected plant
+-- or a weak-signal node can be seen later rather than lost on arrival.
+-- Server/mqtt.js saves every field listed in its FIELDS and FLAGS.
+--
+-- All are NULL-able: older messages and the real board's first readings may
+-- leave some out. wifi_rssi_dbm and uptime_s describe the node rather than
+-- the plant; they sit here because they arrive with each reading.
+
+ALTER TABLE sensor_readings
+  ADD COLUMN rain_pct       DECIMAL(5,2)      NULL AFTER humidity_pct,  -- % of the plate wet
+  ADD COLUMN is_raining     TINYINT(1)        NULL AFTER rain_pct,   -- 1 = raining
+  ADD COLUMN motion_events  SMALLINT UNSIGNED NULL AFTER is_raining, -- PIR triggers since the last reading
+  ADD COLUMN sound_peak_pct DECIMAL(5,2)      NULL AFTER motion_events,
+  ADD COLUMN wifi_rssi_dbm  SMALLINT          NULL AFTER sound_peak_pct, -- e.g. -70; closer to 0 is stronger
+  ADD COLUMN uptime_s       INT UNSIGNED      NULL AFTER wifi_rssi_dbm,  -- seconds since the node started
+  ADD CONSTRAINT chk_sr_rain  CHECK (rain_pct BETWEEN 0 AND 100),
+  ADD CONSTRAINT chk_sr_sound CHECK (sound_peak_pct BETWEEN 0 AND 100);
+
+
+-- ---------------------------------------------------------------------
+-- 8. Real kit: light sensor out, distance sensor in
+-- ---------------------------------------------------------------------
+-- The real kit has no light sensor, so the light columns and the 'light'
+-- alert type are gone from plant_registry_schema.sql. It does have an
+-- HC-SR04 ultrasonic sensor: distance_cm is how far the nearest object is
+-- from it, NULL when no echo came back (nothing within about 4 m).
+--
+-- A new database never had the light columns, so the DROP statements below
+-- find nothing and db-setup skips them. On a database set up before this
+-- change they remove the light columns, so "npm run db:setup" brings it up
+-- to date without --reset, and the readings already saved are kept.
+
+ALTER TABLE sensor_readings
+  ADD COLUMN distance_cm DECIMAL(5,1) NULL AFTER sound_peak_pct,  -- HC-SR04, cm
+  ADD CONSTRAINT chk_sr_distance CHECK (distance_cm BETWEEN 0 AND 500);
+
+ALTER TABLE sensor_readings
+  DROP CONSTRAINT chk_sr_has_value,
+  DROP COLUMN light_lux,
+  ADD CONSTRAINT chk_sr_has_value
+    CHECK (soil_moisture_pct IS NOT NULL OR temperature_c IS NOT NULL
+           OR humidity_pct IS NOT NULL);
+
+ALTER TABLE sensor_devices
+  DROP CONSTRAINT chk_sd_light_range,
+  DROP COLUMN light_min,
+  DROP COLUMN light_max;
+
+-- mqtt.js never raised a light alert, so this normally deletes nothing. It
+-- is here so the ENUM change below cannot fail on an old row.
+DELETE FROM sensor_alerts WHERE alert_type = 'light';
+
+ALTER TABLE sensor_alerts
+  MODIFY COLUMN alert_type ENUM('soil_moisture','temperature','humidity','offline') NOT NULL;
