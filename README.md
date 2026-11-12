@@ -580,10 +580,8 @@ This happens **on the server**, so the hidden data is never sent to the browser 
 
 ## Not built yet
 
-**IoT plant monitoring.** The page (`/staff/iot`) exists but just says *Coming soon* and
-lists what is planned, because the sensor hardware hasn't arrived. The database tables
-(`sensor_devices`, `sensor_readings`, `sensor_alerts`) and the device-key check are already
-in place.
+**IoT plant monitoring** is built: `/staff/iot` shows live readings and alerts from the
+ESP32 sensor kit over MQTT. The firmware and setup steps are in `iot-kit/README.md`.
 
 **Also not built yet** (as planned in the proposal): saved drafts, a separate "changes
 requested" status, password reset by email, a superuser role, a map of plants, and

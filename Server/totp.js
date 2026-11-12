@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /*
- * Two-step verification with an authenticator app - section 12 of
+ * Two-step verification with an authenticator app - section 14 of
  * Server/schema-extensions.sql.
  *
  * TOTP (RFC 6238), the scheme Google Authenticator, Microsoft Authenticator,

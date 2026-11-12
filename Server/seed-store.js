@@ -31,7 +31,7 @@ export const store = {
   notifications: [],
   audit_logs: [],
   settings: [],
-  sensor_devices: [],  // IoT: hardware not received yet
+  sensor_devices: [],  // IoT: the real-kit node, added in seed.js
   sensor_readings: [],
   sensor_alerts: [],
 };

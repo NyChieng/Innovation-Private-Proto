@@ -7,7 +7,7 @@ import { getSetting } from './db.js';
 
 /*
  * Passkeys: sign in with Face ID, a fingerprint, or the phone's own screen
- * lock (pattern, PIN, passcode). See section 9 of Server/schema-extensions.sql.
+ * lock (pattern, PIN, passcode). See section 11 of Server/schema-extensions.sql.
  *
  * The browser's WebAuthn API does the hard part. The phone makes a key pair,
  * keeps the private key behind its screen lock, and hands FloraScan the public

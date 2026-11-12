@@ -97,7 +97,7 @@ async function currentUser(req) {
   return user;
 }
 
-/* Wrong-password lockout. See section 7 of Server/schema-extensions.sql. */
+/* Wrong-password lockout. See section 9 of Server/schema-extensions.sql. */
 const MAX_FAILED_LOGINS = 5;
 const LOCK_MINUTES = 15;
 
@@ -142,7 +142,7 @@ function newPasswordProblem(pw, current) {
 }
 
 /*
- * Recovery codes - see section 8 of Server/schema-extensions.sql.
+ * Recovery codes - see section 10 of Server/schema-extensions.sql.
  *
  * Twelve characters from an alphabet with no 0/O, 1/I/L or 5/S to confuse
  * when copied off paper: about 58 bits, so a plain SHA-256 is enough to store
@@ -187,7 +187,7 @@ function auditRow(row) {
 }
 
 /*
- * Two-step verification - section 12 of Server/schema-extensions.sql. A right
+ * Two-step verification - section 14 of Server/schema-extensions.sql. A right
  * password on an account with it on earns a short-lived ticket, not a session;
  * the ticket plus the authenticator's current code earns the session.
  */
@@ -212,7 +212,7 @@ async function finishReset(after, freshCode) {
   return { token: await issueToken(after.id), user: shapeUser(after), recovery_code: freshCode };
 }
 
-/* Administrators' recovery email - section 11 of Server/schema-extensions.sql. */
+/* Administrators' recovery email - section 13 of Server/schema-extensions.sql. */
 const EMAIL_CODE_MINUTES = 15;
 const MAX_EMAIL_CODE_TRIES = 5;
 const emailSentAt = new Map(); // "user:purpose" -> when a code last went out
@@ -262,7 +262,7 @@ async function checkEmailCode(userId, purpose, typed) {
   return { ok: true, row };
 }
 
-/* Asking an administrator to approve a reset - section 10 of Server/schema-extensions.sql. */
+/* Asking an administrator to approve a reset - section 12 of Server/schema-extensions.sql. */
 const RESET_REQUEST_MINUTES = 30;
 // Once approved, the new password has to be chosen promptly: an approval left
 // open is an open door for whoever reaches that screen next.
@@ -2279,18 +2279,157 @@ export function createApi() {
   }));
 
   /* ================================================================ */
-  /* IoT - hardware not received yet                                  */
+  /* IoT sensors                                                      */
   /* ================================================================ */
 
-  api.get('/sensors', (req, res) => {
-    if (!req.user) return res.status(401).json({ error: 'Sign in required' });
-    res.json({
-      status: 'coming_soon',
-      message: 'Sensor hardware has not been received yet. The IoT dashboard is scheduled for a later sprint.',
-      devices: [], readings: [], alerts: [],
-      offline_minutes: getSetting('sensor_offline_minutes'),
-    });
+  /**
+   * Readings arrive over MQTT and are saved by mqtt.js; these routes only
+   * read them back for the dashboard.
+   *
+   * mysql2 returns DECIMAL columns as strings ("46.40"), so every measurement
+   * and limit goes through num() before it reaches the client.
+   */
+  const num = (v) => (v === null || v === undefined ? null : Number(v));
+
+  const shapeReading = (r) => r && ({
+    id: r.id,
+    device_id: r.device_id,
+    plant_id: r.plant_id,
+    recorded_at: r.recorded_at,
+    soil_moisture_pct: num(r.soil_moisture_pct),
+    temperature_c: num(r.temperature_c),
+    humidity_pct: num(r.humidity_pct),
+    // From the rest of the kit (sections 7 and 8 of schema-extensions.sql). A
+    // database set up before those columns existed has none of them, so they
+    // come back undefined and are sent as null.
+    rain_pct: num(r.rain_pct),
+    is_raining: r.is_raining === null || r.is_raining === undefined ? null : !!r.is_raining,
+    motion_events: num(r.motion_events),
+    sound_peak_pct: num(r.sound_peak_pct),
+    distance_cm: num(r.distance_cm),
+    wifi_rssi_dbm: num(r.wifi_rssi_dbm),
   });
+
+  /**
+   * Everything the IoT dashboard needs in one request: each device with its
+   * latest reading and whether it is online, recent readings for charts, and
+   * the alerts list (open ones first).
+   *
+   * Query options:
+   *   ?hours=2       how far back `readings` goes (1-48)
+   *   ?device_id=1   limit `readings` to one device
+   */
+  api.get('/sensors', route(async (req, res) => {
+    if (!req.user) return res.status(401).json({ error: 'Sign in required' });
+
+    // Both are whole numbers by construction, so they are safe to put in the
+    // SQL text; MySQL does not accept a placeholder inside every INTERVAL.
+    const offlineMinutes = Math.max(1, Math.floor(Number(getSetting('sensor_offline_minutes')) || 15));
+    const hours = Math.min(48, Math.max(1, Math.floor(Number(req.query.hours) || 2)));
+    const deviceId = req.query.device_id ? Number(req.query.device_id) : null;
+
+    const [devices, latest, readings, alerts] = await Promise.all([
+      // Every DATETIME in the schema is UTC, hence UTC_TIMESTAMP() not NOW().
+      q(`SELECT d.id, d.device_code, d.label, d.plant_id, d.is_simulated, d.is_active,
+                d.soil_moisture_min, d.soil_moisture_max,
+                d.temperature_min, d.temperature_max,
+                d.humidity_min, d.humidity_max,
+                d.last_seen_at,
+                (d.last_seen_at IS NOT NULL
+                  AND d.last_seen_at >= UTC_TIMESTAMP() - INTERVAL ${offlineMinutes} MINUTE) AS online,
+                p.plant_code, p.site_name, s.scientific_name, s.common_name
+           FROM sensor_devices d
+           LEFT JOIN plants p  ON p.id = d.plant_id
+           LEFT JOIN species s ON s.id = p.species_id
+          WHERE d.deleted_at IS NULL
+          ORDER BY d.device_code`),
+
+      // The newest reading per device.
+      q(`SELECT r.*
+           FROM sensor_readings r
+           JOIN (SELECT device_id, MAX(id) AS id FROM sensor_readings GROUP BY device_id) m
+             ON m.id = r.id`),
+
+      // Recent history for the charts. At one reading every 10 s that is 720
+      // rows an hour per device, so it is capped. SELECT * rather than a
+      // column list, so a database without the newer columns still works.
+      q(`SELECT *
+           FROM sensor_readings
+          WHERE recorded_at >= UTC_TIMESTAMP() - INTERVAL ${hours} HOUR
+            ${deviceId ? 'AND device_id = ?' : ''}
+          ORDER BY id DESC
+          LIMIT 2000`, deviceId ? [deviceId] : []),
+
+      q(`SELECT a.*, d.device_code, d.label AS device_label, p.plant_code,
+                u.full_name AS resolved_by_name
+           FROM sensor_alerts a
+           JOIN sensor_devices d ON d.id = a.device_id
+           LEFT JOIN plants p    ON p.id = a.plant_id
+           LEFT JOIN users u     ON u.id = a.resolved_by
+          ORDER BY (a.status = 'open') DESC, a.triggered_at DESC
+          LIMIT 50`),
+    ]);
+
+    const latestByDevice = new Map(latest.map((r) => [r.device_id, shapeReading(r)]));
+    const shapedAlerts = alerts.map((a) => ({
+      ...a,
+      reading_value: num(a.reading_value),
+      limit_value: num(a.limit_value),
+    }));
+
+    res.json({
+      status: 'live',
+      offline_minutes: offlineMinutes,
+      hours,
+      devices: devices.map((d) => ({
+        id: d.id,
+        device_code: d.device_code,
+        label: d.label,
+        is_simulated: !!d.is_simulated,
+        is_active: !!d.is_active,
+        online: !!d.online,
+        last_seen_at: d.last_seen_at,
+        plant: d.plant_id ? {
+          id: d.plant_id, plant_code: d.plant_code, site_name: d.site_name,
+          scientific_name: d.scientific_name, common_name: d.common_name,
+        } : null,
+        limits: {
+          soil_moisture: { min: num(d.soil_moisture_min), max: num(d.soil_moisture_max) },
+          temperature: { min: num(d.temperature_min), max: num(d.temperature_max) },
+          humidity: { min: num(d.humidity_min), max: num(d.humidity_max) },
+        },
+        latest: latestByDevice.get(d.id) || null,
+        open_alerts: shapedAlerts.filter((a) => a.device_id === d.id && a.status === 'open').length,
+      })),
+      // Oldest first, which is the order a chart draws in.
+      readings: readings.reverse().map(shapeReading),
+      alerts: shapedAlerts,
+      open_alerts: shapedAlerts.filter((a) => a.status === 'open').length,
+    });
+  }));
+
+  /** Mark an alert as dealt with, with an optional note. */
+  api.post('/sensors/alerts/:id/resolve', route(async (req, res) => {
+    if (!req.user) return res.status(401).json({ error: 'Sign in required' });
+    const alert = await byId('sensor_alerts', req.params.id);
+    if (!alert) return res.status(404).json({ error: 'No such alert' });
+    if (alert.status !== 'open') return res.status(409).json({ error: 'This alert is already resolved.' });
+
+    const note = String(req.body?.note || '').trim().slice(0, 500) || null;
+    const after = await update('sensor_alerts', alert.id, {
+      status: 'resolved',
+      resolved_by: req.user.id,
+      resolved_at: nowIso(),
+      resolution_note: note,
+    });
+    audit({
+      user_id: req.user.id, action: 'update', entity_type: 'sensor_alerts', entity_id: alert.id,
+      old_values: { status: 'open' }, new_values: { status: 'resolved', note },
+    });
+    res.json({
+      alert: { ...after, reading_value: num(after.reading_value), limit_value: num(after.limit_value) },
+    });
+  }));
 
   /* ================================================================ */
   /* Photos + connect                                                 */

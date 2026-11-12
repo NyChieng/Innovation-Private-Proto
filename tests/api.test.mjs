@@ -981,12 +981,16 @@ section('19. Generated imagery and connect endpoint');
 }
 
 /* ------------------------------------------------------------------ */
-section('20. IoT is reported as not built');
+section('20. IoT monitoring');
 {
   const r = await get('/sensors', botT);
   eq('the sensors endpoint answers', r.status, 200);
-  eq('...saying the feature is coming', r.body.status, 'coming_soon');
-  check('...with no fabricated readings', r.body.devices.length === 0 && r.body.readings.length === 0);
+  eq('...and reports the feature as live', r.body.status, 'live');
+  check('...listing the seeded real-kit node', r.body.devices.some((d) => d.device_code === 'SN-001'));
+  // The kit may be switched on and publishing during the run, so readings can
+  // exist; each one must come from a registered device.
+  const ids = new Set(r.body.devices.map((d) => d.id));
+  check('...with no readings from unknown devices', r.body.readings.every((x) => ids.has(x.device_id)));
 }
 
 /* ------------------------------------------------------------------ */
