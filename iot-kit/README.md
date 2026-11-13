@@ -3,8 +3,9 @@
 `FloraScan_Node/FloraScan_Node.ino` is the firmware for the real ESP32 kit: soil
 moisture, DHT11, raindrop plate, KY-037 sound sensor, HC-SR501 PIR and HC-SR04
 distance sensor. Every 20 seconds it publishes one JSON reading over MQTT, and
-`Server/mqtt.js` saves it to `sensor_readings`. The wiring table is at the top of
-the sketch.
+`Server/mqtt.js` saves it to `sensor_readings`. Each reading includes a random
+`boot_id` and an increasing `sequence` so MQTT retries cannot create duplicate
+database rows. The wiring table is at the top of the sketch.
 
 ## Upload it
 

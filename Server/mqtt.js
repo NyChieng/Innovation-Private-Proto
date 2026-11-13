@@ -92,9 +92,14 @@ async function handleMessage(topic, message) {
     !data ||
     typeof data !== 'object' ||
     typeof data.device_code !== 'string' ||
-    typeof data.device_key !== 'string'
+    typeof data.device_key !== 'string' ||
+    typeof data.boot_id !== 'string' ||
+    !/^[0-9A-Fa-f]{16}$/.test(data.boot_id) ||
+    !Number.isInteger(data.sequence) ||
+    data.sequence < 1 ||
+    data.sequence > 0xFFFFFFFF
   ) {
-    console.warn('[MQTT] Ignored message: missing device credentials');
+    console.warn('[MQTT] Ignored message: missing or invalid reading sequence');
     return;
   }
 
@@ -165,12 +170,23 @@ async function handleMessage(topic, message) {
   // Server time, not the ESP32's: the board has no real clock.
   const recordedAt = nowIso();
 
-  const saved = await insert('sensor_readings', {
-    device_id: device.id,
-    plant_id: device.plant_id,
-    recorded_at: recordedAt,
-    ...reading,
-  });
+  let saved;
+  try {
+    saved = await insert('sensor_readings', {
+      device_id: device.id,
+      plant_id: device.plant_id,
+      recorded_at: recordedAt,
+      boot_id: data.boot_id.toUpperCase(),
+      sequence_no: data.sequence,
+      ...reading,
+    });
+  } catch (err) {
+    if (err?.code === 'ER_DUP_ENTRY') {
+      console.warn(`[MQTT] Ignored duplicate reading from ${device.device_code}`);
+      return;
+    }
+    throw err;
+  }
 
   await update('sensor_devices', device.id, {
     last_seen_at: recordedAt,

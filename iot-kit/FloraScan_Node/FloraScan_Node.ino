@@ -24,7 +24,7 @@
   Each reading includes the HC-SR04 distance as distance_cm (null when no
   echo comes back). There is no light sensor on the kit, so no light value.
 
-  MQTT, on the public HiveMQ broker (port 1883):
+  MQTT, on the public EMQX broker (TLS port 8883):
     publishes   florascan-swinburne-demo/SN-001/readings   -> backend
 
   Arduino IDE setup:
@@ -37,6 +37,7 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <WiFiClientSecure.h>
+#include <esp_system.h>
 
 // Where a failed DHT read stopped, so the Serial Monitor can say why.
 // Keep this above every function: the Arduino IDE inserts function declarations just
@@ -141,12 +142,20 @@ volatile uint32_t motionTotal = 0;  // PIR rising edges since it was armed (coun
 bool pirArmed = false;
 uint32_t motionAtLastReport = 0;
 uint32_t motionAtLastEvent = 0;
+String bootId;
+uint32_t readingSequence = 0;
 
 bool raining = false;
 int loudestP2P = 0;                 // biggest sound swing since the last reading
 unsigned long lastLoudEventMs = 0;
 unsigned long lastReportMs = 0;
 uint32_t readingNumber = 0;
+
+String hex32(uint32_t value) {
+  char text[9];
+  snprintf(text, sizeof(text), "%08lX", (unsigned long)value);
+  return String(text);
+}
 
 // static keeps the Arduino IDE from re-declaring it, which clashes with IRAM_ATTR.
 static void IRAM_ATTR onMotion() {
@@ -483,9 +492,12 @@ void sendReading() {
   // ---- JSON: field names match the sensor_readings columns ----
   // recorded_at is left out on purpose: the backend stamps server time.
   // distance_cm is null when none of the pings got an echo.
+  readingSequence++;
   String json = "{";
   json += "\"device_code\":\"" + String(DEVICE_CODE) + "\",";
   json += "\"" + String(KEY_FIELD) + "\":\"" + String(DEVICE_KEY) + "\",";
+  json += "\"boot_id\":\"" + bootId + "\",";
+  json += "\"sequence\":" + String(readingSequence) + ",";
   json += "\"soil_moisture_pct\":" + jsonNumber(soilPct, 1) + ",";
   json += "\"temperature_c\":" + jsonNumber(tempC, 1) + ",";
   json += "\"humidity_pct\":" + jsonNumber(humPct, 1) + ",";
@@ -514,7 +526,7 @@ void sendReading() {
 // ===== Arduino entry points =============================================
 void setup() {
   Serial.begin(115200);
-  delay(500);
+  delay(1000);
   pinMode(PIN_LED, OUTPUT);
   pinMode(PIN_PIR, INPUT);            // the HC-SR501 drives OUT itself: HIGH = motion
   pinMode(PIN_TRIG, OUTPUT);
@@ -523,6 +535,7 @@ void setup() {
   analogReadResolution(12);           // 0-4095
 
   topicReadings = String(TOPIC_PREFIX) + "/" + DEVICE_CODE + "/readings";
+  bootId = hex32(esp_random()) + hex32(esp_random());
 
   // The public broker drops a client when another one connects with the same
   // ID, so add part of this chip's MAC address to make the ID unique.

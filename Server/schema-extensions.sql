@@ -249,7 +249,20 @@ ALTER TABLE sensor_alerts
 
 
 -- ---------------------------------------------------------------------
--- 9. Locking an account after repeated wrong passwords
+-- 9. Reading sequence identity
+-- ---------------------------------------------------------------------
+-- Each ESP32 generates a random boot_id at startup and increments sequence_no
+-- for every reading in that boot. The unique key makes MQTT retries harmless
+-- without writing the counter to flash on every 20-second reading.
+
+ALTER TABLE sensor_readings
+  ADD COLUMN boot_id CHAR(16) NULL AFTER recorded_at,
+  ADD COLUMN sequence_no INT UNSIGNED NULL AFTER boot_id,
+  ADD UNIQUE KEY uq_sr_device_sequence (device_id, boot_id, sequence_no);
+
+
+-- ---------------------------------------------------------------------
+-- 10. Locking an account after repeated wrong passwords
 -- ---------------------------------------------------------------------
 -- Without this, sign in could be tried as fast as the server answers. After
 -- five wrong passwords in a row the account is locked for fifteen minutes;

@@ -608,10 +608,13 @@ CREATE TABLE sensor_readings (
   plant_id           INT UNSIGNED    NULL,     -- copied from the sensor, so history stays with
                                                -- the right plant if the sensor is moved
   recorded_at        DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,  -- server time
+  boot_id            CHAR(16)        NULL,     -- changes when the ESP32 restarts
+  sequence_no        INT UNSIGNED    NULL,     -- increments within one boot
   soil_moisture_pct  DECIMAL(5,2)    NULL,
   temperature_c      DECIMAL(5,2)    NULL,
   humidity_pct       DECIMAL(5,2)    NULL,
   PRIMARY KEY (id),
+  UNIQUE KEY uq_sr_device_sequence (device_id, boot_id, sequence_no),
   KEY idx_sr_device_time (device_id, recorded_at),
   KEY idx_sr_plant_time (plant_id, recorded_at),
   CONSTRAINT chk_sr_has_value
