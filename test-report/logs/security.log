@@ -1,0 +1,20 @@
+✔ login and demo switch share 10 attempts, before JSON parsing; path variants cannot evade it (50.8745ms)
+✔ password resets share 5 attempts across target users; authorization remains required (7.4002ms)
+✔ upload blocks attempt 11 before decoding an invalid body; plant reads are separate (10.6781ms)
+✔ all API methods and unknown endpoints share the general 300 request allowance (125.5554ms)
+✔ production HTTP has strict CSP and clickjacking protection, without HSTS or forced upgrade (4.3177ms)
+✔ real production HTTPS sends one-year HSTS; development HTTPS does not pin the host (159.0576ms)
+✔ forwarded client IP and HTTPS are ignored unless the connection is from a configured proxy (8.397ms)
+✔ independent clients get separate allowances; IPv6 addresses within one /56 share a quota (18.2166ms)
+✔ unsafe proxy configurations fail at startup (0.679ms)
+✔ a concurrent login burst cannot overshoot the allowance (13.536ms)
+✔ the login allowance recovers when its window expires (10.2371ms)
+✔ the service worker does not persist a 429 as a photograph (4.098ms)
+ℹ tests 12
+ℹ suites 0
+ℹ pass 12
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1272.5204

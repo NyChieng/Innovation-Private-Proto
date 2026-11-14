@@ -1,0 +1,10 @@
+images: 1417/1417 available
+{"source": "COCO val2017 (not used in training)", "images": 1417, "selection": {"plant": 167, "animal": 500, "person_only": 600, "empty": 150}, "boxes": {"plant": 320, "person": 2506, "animal": 1132}}
+det_B (ours) .pt 640                          mAP50 0.715 (folds 0.717±0.026)  mAP50-95 0.501  person 0.802  animal 0.825  plant 0.518  10.7 ms
+det_B (ours) .pt 480                          mAP50 0.698 (folds 0.700±0.024)  mAP50-95 0.481  person 0.778  animal 0.812  plant 0.503  11.2 ms
+det_B (ours) .pt 320                          mAP50 0.633 (folds 0.634±0.030)  mAP50-95 0.424  person 0.704  animal 0.764  plant 0.429  11.1 ms
+yolo26n stock COCO-80 -> 3                    mAP50 0.706 (folds 0.705±0.020)  mAP50-95 0.501  person 0.791  animal 0.830  plant 0.497  11.2 ms
+yolo26s stock COCO-80 -> 3                    mAP50 0.777 (folds 0.776±0.024)  mAP50-95 0.573  person 0.850  animal 0.878  plant 0.601  11.1 ms
+det_B (ours) deployed ONNX 640x384, openvino  mAP50 0.699 (folds 0.703±0.032)  mAP50-95 0.488  person 0.779  animal 0.815  plant 0.502  38.4 ms
+det_B (ours) deployed ONNX 640x384, onnxruntime mAP50 0.699 (folds 0.703±0.032)  mAP50-95 0.488  person 0.779  animal 0.815  plant 0.502  38.7 ms
+saved ..\test-report\ai\det\det_coco.json

@@ -991,6 +991,15 @@ section('20. IoT monitoring');
   // exist; each one must come from a registered device.
   const ids = new Set(r.body.devices.map((d) => d.id));
   check('...with no readings from unknown devices', r.body.readings.every((x) => ids.has(x.device_id)));
+
+  // The same permissions as the IoT page: sensor.view to read, alert.resolve to resolve.
+  eq('a ranger can read the sensors', (await get('/sensors', rangerT)).status, 200);
+  eq('a reviewer, who has no sensor.view, cannot', (await get('/sensors', revT)).status, 403);
+  eq('signed out, nobody can', (await get('/sensors')).status, 401);
+  eq('a botanist cannot resolve an alert (no alert.resolve)',
+    (await post('/sensors/alerts/999999/resolve', { note: 'x' }, botT)).status, 403);
+  eq('a ranger can, and gets a 404 for an alert that does not exist',
+    (await post('/sensors/alerts/999999/resolve', { note: 'x' }, rangerT)).status, 404);
 }
 
 /* ------------------------------------------------------------------ */
@@ -1388,7 +1397,11 @@ section('32. Uploading a photograph');
     check('the photograph is served from a path, not stored as a data URL',
       /^\/api\/photos\/upload\/\d+$/.test(made.body.plant.photo || ''), made.body.plant.photo);
 
-    const served = await fetch(ORIGIN + made.body.plant.photo);
+    // A botanist's record waits for review, so its photograph is only visible
+    // to the uploader (and staff) until it is approved - fetch it as them.
+    const served = await fetch(ORIGIN + made.body.plant.photo, {
+      headers: { Authorization: 'Bearer ' + botT },
+    });
     eq('...and it can be fetched back', served.status, 200);
     check('...as an image', (served.headers.get('content-type') || '').startsWith('image/'));
 

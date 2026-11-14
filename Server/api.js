@@ -268,7 +268,6 @@ const RESET_REQUEST_MINUTES = 30;
 // open is an open door for whoever reaches that screen next.
 const APPROVAL_MINUTES = 5;
 const MAX_WRONG_CHECK_CODES = 5;
-const resetNotifiedAt = new Map(); // user id -> when the admins were last told
 const requestExpired = (row) => new Date(row.expires_at).getTime() < Date.now()
   || (row.status === 'approved' && row.decided_at
     && Date.now() - new Date(row.decided_at).getTime() > APPROVAL_MINUTES * 60000);
@@ -1008,9 +1007,12 @@ export function createApi() {
     await update('users', user.id, { reset_requested_at: nowIso() });
 
     // Once per quarter hour, so the button cannot bury the administrators.
-    const last = resetNotifiedAt.get(user.id) || 0;
+    // `user` was read before the update above, so this is the previous
+    // request. Kept in the database rather than in memory: a remembered user
+    // id outlived a reseed, and a new account given the same id was never
+    // announced.
+    const last = user.reset_requested_at ? new Date(user.reset_requested_at).getTime() : 0;
     if (Date.now() - last > 15 * 60000) {
-      resetNotifiedAt.set(user.id, Date.now());
       await notifyPermission('user.manage', {
         type: 'password.reset_request',
         title: `${user.full_name} forgot their password`,
@@ -2319,8 +2321,7 @@ export function createApi() {
    *   ?hours=2       how far back `readings` goes (1-48)
    *   ?device_id=1   limit `readings` to one device
    */
-  api.get('/sensors', route(async (req, res) => {
-    if (!req.user) return res.status(401).json({ error: 'Sign in required' });
+  api.get('/sensors', need('sensor.view'), route(async (req, res) => {
 
     // Both are whole numbers by construction, so they are safe to put in the
     // SQL text; MySQL does not accept a placeholder inside every INTERVAL.
@@ -2409,8 +2410,7 @@ export function createApi() {
   }));
 
   /** Mark an alert as dealt with, with an optional note. */
-  api.post('/sensors/alerts/:id/resolve', route(async (req, res) => {
-    if (!req.user) return res.status(401).json({ error: 'Sign in required' });
+  api.post('/sensors/alerts/:id/resolve', need('alert.resolve'), route(async (req, res) => {
     const alert = await byId('sensor_alerts', req.params.id);
     if (!alert) return res.status(404).json({ error: 'No such alert' });
     if (alert.status !== 'open') return res.status(409).json({ error: 'This alert is already resolved.' });

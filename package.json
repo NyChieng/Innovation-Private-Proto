@@ -9,6 +9,7 @@
   "description": "Prototype X / FloraScan - Smart Ground-Truthing & Digital Biodiversity System (COS30049)",
   "scripts": {
     "dev": "node Server/index.js",
+    "dev:test": "node Server/index.js --test-limits",
     "start": "node Server/index.js",
     "http": "node Server/index.js --http",
     "https": "node Server/index.js",
@@ -24,6 +25,7 @@
     "test:ui": "node tests/ui.test.mjs",
     "test:i18n": "node tests/i18n.test.mjs",
     "test:passkey": "node tests/passkey.test.mjs",
+    "test:iot": "node tests/iot-mqtt.test.mjs",
     "db:setup": "node scripts/db-setup.mjs",
     "db:seed": "node scripts/seed-mysql.mjs",
     "db:reset": "node scripts/db-setup.mjs --reset && node scripts/seed-mysql.mjs --reset",

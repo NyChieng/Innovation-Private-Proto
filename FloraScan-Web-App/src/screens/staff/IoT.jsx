@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Empty, LoadingBlock, Modal, Notice, PageHead, Stat } from '../../components/ui.jsx';
 import { api } from '../../lib/api.js';
+import { useApp } from '../../lib/store.jsx';
 import { relativeTime, titleCase } from '../../lib/format.js';
 import * as I from '../../lib/icons.jsx';
 import { msg, t } from '../../lib/i18n.js';
@@ -100,6 +101,7 @@ function niceStep(span, count) {
 /* ------------------------------------------------------------------ */
 
 export default function IoT() {
+  const { can } = useApp();
   const [hours, setHours] = useState('2');
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
@@ -271,7 +273,9 @@ export default function IoT() {
               {t("No alerts yet. One opens when a reading leaves its sensor's safe range.")}
             </div>
           ) : (
-            alerts.map((a) => <AlertItem key={a.id} alert={a} onResolve={() => setResolving(a)} />)
+            alerts.map((a) => (
+              <AlertItem key={a.id} alert={a} onResolve={can('alert.resolve') ? () => setResolving(a) : null} />
+            ))
           )}
         </div>
       </div>

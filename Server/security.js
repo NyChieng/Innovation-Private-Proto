@@ -11,10 +11,19 @@ export const RATE_LIMITS = Object.freeze({
   upload: Object.freeze({ limit: 10, windowMs: 60_000 }),
 });
 
+// The test suites send hundreds of sign-ins and registrations a minute, far
+// past the real limits. "npm run dev:test" (--test-limits) sets
+// RATE_LIMITS=test, which raises every limit 1000-fold for that server only.
+// It is refused in production, and tests/security.test.mjs still checks the
+// real limits because it builds its own app without this variable.
+export const relaxedLimits = () => process.env.RATE_LIMITS === 'test';
+
 export function createApiRateLimits() {
   const router = express.Router();
+  const scale = relaxedLimits() ? 1000 : 1;
   const limiter = (name) => rateLimit({
     ...RATE_LIMITS[name],
+    limit: RATE_LIMITS[name].limit * scale,
     identifier: name,
     // Keep the library's IP key generator, including IPv6 /56 grouping.
     standardHeaders: 'draft-8',

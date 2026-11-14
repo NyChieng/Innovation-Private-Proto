@@ -29,6 +29,12 @@ const argv = process.argv.slice(2);
 // prototype is for. Pass --http if you specifically want plain HTTP.
 const useHttps = !argv.includes('--http');
 const prod = argv.includes('--prod') || process.env.NODE_ENV === 'production';
+// For running the test suites only: see relaxedLimits() in security.js.
+if (argv.includes('--test-limits')) process.env.RATE_LIMITS = 'test';
+if (prod && process.env.RATE_LIMITS === 'test') {
+  console.error('\n  RATE_LIMITS=test is for the test suites and is refused in production.\n');
+  process.exit(1);
+}
 
 /* ------------------------------------------------------------------ */
 
@@ -181,6 +187,9 @@ function footer(line) {
     ? `\x1b[2mPort ${port} comes from the PORT variable and is not saved.\x1b[0m`
     : `\x1b[2mPort ${port} is saved in proto.config.json - "npm run port" picks a new one.\x1b[0m`);
   line(`\x1b[2mDatabase: ${dbSummary}\x1b[0m`);
+  if (process.env.RATE_LIMITS === 'test') {
+    line('\x1b[33mRate limits raised 1000x for the test suites (--test-limits). Do not demo or host like this.\x1b[0m');
+  }
   console.log('');
 }
 

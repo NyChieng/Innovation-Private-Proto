@@ -31,7 +31,7 @@ export function staffNav(can, counts) {
   if (plants.length) groups.push({ title: t('Plant management'), items: plants });
 
   const monitoring = [
-    { to: '/staff/iot', label: t('IoT monitoring'), icon: I.Sensor, need: 'sensor.view', soon: true },
+    { to: '/staff/iot', label: t('IoT monitoring'), icon: I.Sensor, need: 'sensor.view' },
   ].filter((i) => !i.need || can(i.need));
   if (monitoring.length) groups.push({ title: t('Monitoring'), items: monitoring });
 

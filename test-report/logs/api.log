@@ -1,0 +1,553 @@
+(node:21996) Warning: Setting the NODE_TLS_REJECT_UNAUTHORIZED environment variable to '0' makes TLS connections and HTTPS requests insecure by disabling certificate verification.
+(Use `node --trace-warnings ...` to show where the warning was created)
+FloraScan API tests against https://localhost:42791/api
+
+
+[1m1. Authentication[0m
+  [32mok[0m   correct credentials return 200
+  [32mok[0m   a session token is issued
+  [32mok[0m   the response carries the permission list
+  [32mok[0m   wrong password is refused
+  [32mok[0m   the error does not reveal whether the account exists
+  [32mok[0m   unknown email is refused
+  [32mok[0m   another account's password is refused
+  [32mok[0m   there is no password-free way into an account
+  [32mok[0m   empty credentials are refused
+  [32mok[0m   a forged token resolves to no user
+  [32mok[0m   no token resolves to no user
+
+[1m2. Access control - anonymous visitors (negative tests)[0m
+  [32mok[0m   anonymous GET /plants is refused
+  [32mok[0m   anonymous GET /plants/counts is refused
+  [32mok[0m   anonymous GET /users is refused
+  [32mok[0m   anonymous GET /activity is refused
+  [32mok[0m   anonymous GET /audit is refused
+  [32mok[0m   anonymous GET /settings is refused
+  [32mok[0m   anonymous GET /submissions is refused
+  [32mok[0m   anonymous GET /notifications is refused
+  [32mok[0m   anonymous GET /reports is refused
+  [32mok[0m   anonymous GET /sensors is refused
+  [32mok[0m   anonymous cannot register a plant
+  [32mok[0m   anonymous cannot approve a record
+
+[1m3. Access control - a ranger handles sensor alerts, not plant records (#8)[0m
+  [32mok[0m   ranger POST /plants
+  [32mok[0m   ranger GET /plants
+  [32mok[0m   ranger POST /plants/126/resubmit
+  [32mok[0m   ranger POST /plants/126/approve
+  [32mok[0m   ranger POST /plants/126/reject
+  [32mok[0m   ranger PATCH /plants/126
+  [32mok[0m   ranger POST /plants/126/archive
+  [32mok[0m   ranger POST /species
+  [32mok[0m   ranger GET /users
+  [32mok[0m   ranger POST /users
+  [32mok[0m   ranger GET /activity
+  [32mok[0m   ranger GET /audit
+  [32mok[0m   ranger GET /settings
+  [32mok[0m   ranger PATCH /settings/require_approval
+  [32mok[0m   ranger GET /reports
+  [32mok[0m   a ranger holds the sensor permissions
+  [32mok[0m   ...and no plant permission at all
+  [32mok[0m   a ranger can open the IoT dashboard data
+
+[1m4. Access control - a botanist registers but cannot publish, or do an admin job[0m
+  [32mok[0m   a botanist holds plant.create
+  [32mok[0m   ...but not plant.approve, so nothing they register publishes itself
+  [32mok[0m   a botanist cannot approve a record
+  [32mok[0m   ...or return one
+  [32mok[0m   botanist GET /users
+  [32mok[0m   botanist GET /activity
+  [32mok[0m   botanist GET /audit
+  [32mok[0m   botanist GET /settings
+  [32mok[0m   botanist cannot change a system setting
+
+[1m5. Access control - admin may not do botanical work[0m
+  [32mok[0m   admin POST /plants
+  [32mok[0m   admin POST /plants/126/approve
+  [32mok[0m   admin POST /plants/126/reject
+  [32mok[0m   admin PATCH /plants/126
+  [32mok[0m   admin POST /species
+
+[1m5b. Access control - the reviewer checks records, and nothing else (#8)[0m
+  [32mok[0m   the reviewer role exists
+  [32mok[0m   a reviewer holds plant.approve
+  [32mok[0m   ...but cannot register a plant
+  [32mok[0m   a reviewer POST /plants is refused
+  [32mok[0m   reviewer POST /species
+  [32mok[0m   reviewer GET /users
+  [32mok[0m   reviewer GET /settings
+  [32mok[0m   reviewer GET /audit
+  [32mok[0m   the reviewer reads the whole queue
+  [32mok[0m   ...which holds the seeded botanist submissions
+  [32mok[0m   ...all from botanists
+  [32mok[0m   the reviewer was notified of the waiting submissions
+
+[1m6. Data scoping[0m
+  [32mok[0m   a botanist sees the whole register
+  [32mok[0m   ...and mine=1 narrows it to their own
+  [32mok[0m   a reviewer sees the same register
+
+[1m7. Publication control - nothing unapproved is public[0m
+  [32mok[0m   every public record is approved
+  [32mok[0m   every public record has a confirmed species
+  [32mok[0m   no public record is still awaiting identification
+  [32mok[0m   a pending record is not readable anonymously
+  [32mok[0m   a rejected record is not readable anonymously
+  [32mok[0m   a archived record is not readable anonymously
+  [32mok[0m   scanning an archived tag returns 404
+  [32mok[0m   ...with a reason the app can act on
+  [32mok[0m   an unknown token is rejected
+  [32mok[0m   QR tokens are not sequential ids
+
+[1m8. Input validation - plant registration[0m
+  [32mok[0m   rejected: no species and no proposed name
+  [32mok[0m   rejected: no site name
+  [32mok[0m   rejected: whitespace-only site name
+  [32mok[0m   rejected: latitude above 90
+  [32mok[0m   rejected: latitude below -90
+  [32mok[0m   rejected: longitude above 180
+  [32mok[0m   rejected: latitude without longitude
+  [32mok[0m   rejected: negative height
+  [32mok[0m   rejected: implausible height
+  [32mok[0m   rejected: negative trunk diameter
+  [32mok[0m   rejected: non-numeric height
+  [32mok[0m   rejected: unknown health status
+  [32mok[0m   rejected: unknown life stage
+  [32mok[0m   rejected: over-long site name
+  [32mok[0m   rejected: species id that does not exist
+  [32mok[0m   a valid registration is accepted
+  [32mok[0m   it is given a Plant ID
+
+[1m9. Input validation - review, species and users[0m
+  [32mok[0m   rejecting without a note is refused
+  [32mok[0m   a whitespace-only note is refused
+  [32mok[0m   a record with no species cannot be approved
+  [32mok[0m   a duplicate scientific name is refused
+  [32mok[0m   an empty scientific name is refused
+  [32mok[0m   a duplicate email is refused
+  [32mok[0m   a user with no name is refused
+  [32mok[0m   a malformed email is refused
+  [32mok[0m   an unknown role is refused
+  [32mok[0m   an unknown setting key is refused
+  [32mok[0m   an empty visitor report is refused
+  [32mok[0m   a missing record returns 404, not 500
+  [32mok[0m   an unknown endpoint returns JSON 404
+  [32mok[0m   ...as JSON, not an HTML error page
+
+[1m10. Hostile and awkward input is stored safely[0m
+  [32mok[0m   an awkward payload is accepted as data
+  [32mok[0m   the script tag is stored verbatim, not executed or stripped
+  [32mok[0m   the SQL-looking string is stored verbatim
+  [32mok[0m   unicode and emoji survive intact
+  [32mok[0m   the register still works after that payload
+  [32mok[0m   an over-long note is refused
+  [32mok[0m   a SQL-looking search term is handled
+  [32mok[0m   ...and matches nothing
+
+[1m11. The verification workflow end to end[0m
+  [32mok[0m   the botanist entry is created
+  [32mok[0m   ...with the status pending
+  [32mok[0m   ...and no QR tag yet
+  [32mok[0m   the review queue grew by one
+  [32mok[0m   the reviewer was notified
+  [32mok[0m   the pending record is not public
+  [32mok[0m   approval succeeds
+  [32mok[0m   ...the status becomes approved
+  [32mok[0m   ...a QR tag is issued automatically
+  [32mok[0m   ...the verifier is recorded
+  [32mok[0m   approving a record that is already published is refused
+  [32mok[0m   ...and so is returning it
+  [32mok[0m   scanning the new tag resolves to the record
+  [32mok[0m   ...and returns the right plant
+  [32mok[0m   the botanist was told it was published
+  [32mok[0m   the tag still works after an edit
+  [32mok[0m   ...and shows the edited value
+  [32mok[0m   approving an archived record does not republish it
+  [32mok[0m   an archived record is withdrawn from the public site
+  [32mok[0m   ...with the archived reason
+  [32mok[0m   restoring makes the same printed tag valid again
+
+[1m12. Rejection path[0m
+  [32mok[0m   rejection succeeds with a note
+  [32mok[0m   ...the status becomes rejected
+  [32mok[0m   a rejected record is not public
+  [32mok[0m   the botanist can see it under their submissions
+  [32mok[0m   ...with the reviewer note attached
+  [32mok[0m   the botanist was notified of the return
+  [32mok[0m   the botanist can correct a returned record
+  [32mok[0m   a ranger cannot resubmit it
+  [32mok[0m   a reviewer cannot resubmit it either
+  [32mok[0m   the botanist resubmits it
+  [32mok[0m   ...and it is pending again
+  [32mok[0m   resubmitting twice is refused
+  [32mok[0m   it is back in the reviewer queue
+  [32mok[0m   ...showing what was asked last time
+  [32mok[0m   ...and the botanist's reply
+  [32mok[0m   the reviewer approves the resubmission
+  [32mok[0m   both decisions are kept, not overwritten
+
+[1m13. A botanist cannot publish their own record (#8)[0m
+  [32mok[0m   the botanist entry is created
+  [32mok[0m   ...and waits for a reviewer rather than publishing
+  [32mok[0m   ...with no QR tag yet
+  [32mok[0m   the botanist cannot approve it
+  [32mok[0m   ...nor can a second botanist
+
+[1m14. The require_approval setting changes botanist behaviour[0m
+  [32mok[0m   with approval off, a botanist entry publishes immediately
+  [32mok[0m   ...but an unidentified record still needs a reviewer
+  [32mok[0m   with approval on, a botanist entry waits for review
+
+[1m15. Search covers the five fields in the proposal[0m
+  [32mok[0m   search by Plant ID finds the record
+  [32mok[0m   search by scientific name finds the record
+  [32mok[0m   search by common name finds the record
+  [32mok[0m   search by family finds the record
+  [32mok[0m   search by genus finds the record
+  [32mok[0m   search by location finds the record
+  [32mok[0m   search ignores case
+  [32mok[0m   a nonsense search returns nothing rather than everything
+  [32mok[0m   an empty search returns the whole register
+
+[1m16. Audit completeness[0m
+  [32mok[0m   the history is readable
+  [32mok[0m   the field change was recorded
+  [32mok[0m   ...with the old value
+  [32mok[0m   ...with the new value
+  [32mok[0m   ...with the actor
+  [32mok[0m   ...with a timestamp
+  [32mok[0m   the change reached the audit trail
+  [32mok[0m   every audit entry names an actor
+  [32mok[0m   every audit entry has a timestamp
+
+[1m17. Admin account management[0m
+  [32mok[0m   an account is created
+  [32mok[0m   ...and must change its password
+  [32mok[0m   the new account can sign in
+  [32mok[0m   deactivating revokes the live session immediately
+  [32mok[0m   ...and blocks a fresh sign in
+  [32mok[0m   reactivating restores access
+  [32mok[0m   a role change takes effect
+  [32mok[0m   ...and brings the new permissions
+  [32mok[0m   a password reset succeeds
+  [32mok[0m   ...and revokes the session
+
+[1m17b. Changing your own password[0m
+  [32mok[0m   anonymous visitors are refused
+  [32mok[0m   a wrong current password is refused
+  [32mok[0m   ...without signing the user out
+  [32mok[0m   a short password is refused
+  [32mok[0m   a password without a number is refused
+  [32mok[0m   reusing the temporary password is refused
+  [32mok[0m   a valid change succeeds
+  [32mok[0m   ...and clears must_change_password
+  [32mok[0m   ...keeps the session that made the change
+  [32mok[0m   ...signs out the other device
+  [32mok[0m   the old password no longer works
+  [32mok[0m   the new password works
+  [32mok[0m   ...and the change issues a recovery code
+  [32mok[0m   ...which the account now reports holding
+
+[1m17c. Forgotten password - recovery codes[0m
+  [32mok[0m   a wrong code is refused
+  [32mok[0m   ...with the same message as an unknown email
+  [32mok[0m   a weak new password is refused even with the right code
+  [32mok[0m   the right code resets the password
+  [32mok[0m   ...signs the user in
+  [32mok[0m   ...and hands over a different code
+  [32mok[0m   ...which signs out every older session
+  [32mok[0m   the old password no longer works
+  [32mok[0m   a used code cannot be used again
+  [32mok[0m   a signed-in user can make a new code
+  [32mok[0m   ...but only with their current password
+  [32mok[0m   ...which replaces the previous one
+  [32mok[0m   five wrong codes lock the account
+  [32mok[0m   ...and while locked even the right code is refused
+  [32mok[0m   an administrator reset clears the recovery code
+
+[1m17d. Forgotten password, no recovery code - an administrator approves[0m
+  [32mok[0m   an empty email is refused
+  [32mok[0m   a request is accepted
+  [32mok[0m   ...and gives the screen a six-digit code and a secret
+  [32mok[0m   ...shaped exactly like the answer for an unknown email
+  [32mok[0m   the administrators are notified
+  [32mok[0m   ...and the account shows the request
+  [32mok[0m   the screen is waiting
+  [32mok[0m   ...and cannot set a password before approval
+  [32mok[0m   pressing it again does not notify again
+  [32mok[0m   ...and the older screen stops waiting
+  [32mok[0m   only an administrator can approve
+  [32mok[0m   the wrong code is refused
+  [32mok[0m   ...saying how many tries are left
+  [32mok[0m   the code from their screen approves it
+  [32mok[0m   ...the waiting screen sees the approval
+  [32mok[0m   ...and the badge clears
+  [32mok[0m   another browser cannot use the approval
+  [32mok[0m   a weak new password is still refused
+  [32mok[0m   the approved screen sets the new password
+  [32mok[0m   ...signs the user in
+  [32mok[0m   ...and hands over a recovery code
+  [32mok[0m   the new password works
+  [32mok[0m   the approval cannot be used twice
+  [32mok[0m   an administrator can refuse a request
+  [32mok[0m   ...and the screen is told
+  [32mok[0m   five wrong codes refuse the request
+  [32mok[0m   an approved screen that is refreshed or closed is cancelled
+  [32mok[0m   ...the request is closed
+  [32mok[0m   ...and the approval can no longer set a password
+  [32mok[0m   an administrator reset closes a waiting request
+  [32mok[0m   ...and the temporary password then works
+
+[1m17e. An administrator's recovery email[0m
+  [32mok[0m   a non-administrator cannot add one
+  [32mok[0m   the current password is required
+  [32mok[0m   the sign-in address cannot be its own backup
+  [32mok[0m   a code is sent to the new address
+  [32mok[0m   asking again at once is refused
+  [32mok[0m   ...and nothing is saved until the code comes back
+  [32mok[0m   a wrong code does not confirm it
+  [32mok[0m   the emailed code confirms it
+  [32mok[0m   ...and it is shown masked
+  [32mok[0m   a forgotten password sends a reset code
+  [32mok[0m   ...with the same answer as an unknown email
+  [32mok[0m   ...to the recovery address
+  [32mok[0m   a weak password is refused without spending the code
+  [32mok[0m   a wrong code is refused
+  [32mok[0m   the right code sets the new password
+  [32mok[0m   ...signs the administrator in
+  [32mok[0m   ...and signs out the old sessions
+  [32mok[0m   the new password works
+  [32mok[0m   the code cannot be used twice
+  [32mok[0m   a non-administrator gets the same answer, and no email
+
+[1m17f. Two-step verification with an authenticator app[0m
+  [32mok[0m   setting up needs the current password
+  [32mok[0m   setup gives a QR code
+  [32mok[0m   ...as an image, with the key to type by hand
+  [32mok[0m   ...encoding an authenticator link for FloraScan
+  [32mok[0m   a wrong code does not turn it on
+  [32mok[0m   ...so it is still off
+  [32mok[0m   the code from the app turns it on
+  [32mok[0m   ...and the account says so
+  [32mok[0m   now the right password alone does not sign in
+  [32mok[0m   a wrong code is refused
+  [32mok[0m   ...saying how many tries are left
+  [32mok[0m   password and the current code sign in
+  [32mok[0m   ...as the right person
+  [32mok[0m   the same code cannot be used twice
+  [32mok[0m   a made-up ticket is refused
+  [32mok[0m   a password reset does not get round it - no session, sign in again
+  [32mok[0m   turning it off needs a current code too
+  [32mok[0m   an administrator reset turns it off, for a lost phone
+  [32mok[0m   ...and the temporary password then signs in directly
+  [32mok[0m   the audit trail records turning it on
+  [32mok[0m   ...with its values as data, not text
+  [32mok[0m   ...and the real caller, not a placeholder
+
+[1m18. QR codes[0m
+  [32mok[0m   a QR payload is returned
+  [32mok[0m   ...as a PNG data URL
+  [32mok[0m   ...and as SVG
+  [32mok[0m   the target URL contains the opaque token
+  [32mok[0m   the token is a UUID, not a database id
+  [32mok[0m   the token is stable across requests
+
+[1m19. Generated imagery and connect endpoint[0m
+  [32mok[0m   a placeholder photo renders
+  [32mok[0m   ...as SVG
+  [32mok[0m   the connect endpoint answers
+  [32mok[0m   ...with a LAN URL
+  [32mok[0m   ...and a scannable QR
+
+[1m20. IoT monitoring[0m
+  [32mok[0m   the sensors endpoint answers
+  [32mok[0m   ...and reports the feature as live
+  [32mok[0m   ...listing the seeded real-kit node
+  [32mok[0m   ...with no readings from unknown devices
+  [32mok[0m   a ranger can read the sensors
+  [32mok[0m   a reviewer, who has no sensor.view, cannot
+  [32mok[0m   signed out, nobody can
+  [32mok[0m   a botanist cannot resolve an alert (no alert.resolve)
+  [32mok[0m   a ranger can, and gets a 404 for an alert that does not exist
+
+[1m21. Threatened species locations are withheld from the public[0m
+  [32mok[0m   the protect_locations setting exists
+  [32mok[0m   ...and defaults to CR
+  [32mok[0m   there are critically endangered records to check
+  [32mok[0m   PLT-2026-0008 is flagged as protected
+  [32mok[0m   PLT-2026-0008 latitude withheld
+  [32mok[0m   PLT-2026-0008 longitude withheld
+  [32mok[0m   PLT-2026-0008 gps accuracy withheld
+  [32mok[0m   PLT-2026-0008 finding notes withheld
+  [32mok[0m   PLT-2026-0008 site name replaced
+  [32mok[0m   PLT-2026-0088 is flagged as protected
+  [32mok[0m   PLT-2026-0088 latitude withheld
+  [32mok[0m   PLT-2026-0088 longitude withheld
+  [32mok[0m   PLT-2026-0088 gps accuracy withheld
+  [32mok[0m   PLT-2026-0088 finding notes withheld
+  [32mok[0m   PLT-2026-0088 site name replaced
+  [32mok[0m   PLT-2026-0018 is flagged as protected
+  [32mok[0m   PLT-2026-0018 latitude withheld
+  [32mok[0m   PLT-2026-0018 longitude withheld
+  [32mok[0m   PLT-2026-0018 gps accuracy withheld
+  [32mok[0m   PLT-2026-0018 finding notes withheld
+  [32mok[0m   PLT-2026-0018 site name replaced
+  [32mok[0m   PLT-2026-0098 is flagged as protected
+  [32mok[0m   PLT-2026-0098 latitude withheld
+  [32mok[0m   PLT-2026-0098 longitude withheld
+  [32mok[0m   PLT-2026-0098 gps accuracy withheld
+  [32mok[0m   PLT-2026-0098 finding notes withheld
+  [32mok[0m   PLT-2026-0098 site name replaced
+  [32mok[0m   the detail endpoint withholds the coordinates too
+  [32mok[0m   ...and explains why
+  [32mok[0m   scanning the tag also withholds the location
+  [32mok[0m   a botanist still sees real coordinates
+  [32mok[0m   ...and the real site name
+  [32mok[0m   least-concern records keep their location
+  [32mok[0m   ...and are not flagged as protected
+
+[1m22. The protection does not leak through search or filters[0m
+  [32mok[0m   a protected plant with a known site was found
+  [32mok[0m   searching its trail name does not return it
+  [32mok[0m   filtering by that site does not return it
+  [32mok[0m   it is still findable by Plant ID
+  [32mok[0m   ...but still without a location
+  [32mok[0m   a botanist searching that site does find it
+
+[1m23. The protection threshold is configurable[0m
+  [32mok[0m   with protection off the location is published
+  [32mok[0m   ...and the flag is gone
+  [32mok[0m   raising it to VU protects vulnerable species too
+  [32mok[0m   ...and critically endangered stays protected
+  [32mok[0m   ...while least concern is still published
+  [32mok[0m   the setting is restored to CR
+
+[1m24. Imported species data and photographs[0m
+  [32mok[0m   the register reports where its data came from
+  [32mok[0m   ...naming GBIF, iNaturalist and Wikipedia
+  [32mok[0m   the species list is substantial
+  [32mok[0m   every species has a family
+  [32mok[0m   every species has a conservation code
+  [32mok[0m   conservation categories cite their source
+  [32mok[0m   published records carry photographs
+  [32mok[0m   ...and they are real photographs, not only illustrations
+  [32mok[0m   real photographs are credited
+  [32mok[0m   each credited photograph names a licence
+  [32mok[0m   ...and links back to its source
+
+[1m25. Photo serving[0m
+  [32mok[0m   a cached photograph is served
+  [32mok[0m   ...as a JPEG
+  [32mok[0m   ...and is cacheable
+  [32mok[0m   a missing photograph returns 404
+  [32mok[0m   traversal attempt "../../package.json" is refused
+  [32mok[0m   traversal attempt "..\..\package.json" is refused
+  [32mok[0m   traversal attempt "/etc/passwd" is refused
+  [32mok[0m   the generated illustration still works as a fallback
+
+[1m26. Installable web app[0m
+  [32mok[0m   the manifest is served
+  [32mok[0m   it has a name
+  [32mok[0m   it has a short name for the home screen
+  [32mok[0m   it opens standalone
+  [32mok[0m   it declares a start URL
+  [32mok[0m   it has a 192px icon
+  [32mok[0m   it has a 512px icon
+  [32mok[0m   it has a maskable icon for Android
+  [32mok[0m   icon /icons/icon-192.png exists
+  [32mok[0m   icon /icons/icon-512.png exists
+  [32mok[0m   icon /icons/maskable-512.png exists
+  [32mok[0m   the iOS touch icon exists
+  [32mok[0m   the service worker is served
+  [32mok[0m   ...and never caches write requests
+  [32mok[0m   the page links the manifest
+  [32mok[0m   ...declares an apple touch icon
+  [32mok[0m   ...and sets apple-mobile-web-app-capable
+
+[1m27. A phone can trust the local certificate[0m
+  [32mok[0m   the connect screen is told where the certificate is
+  [32mok[0m   the CA certificate downloads
+  [32mok[0m   ...with the type iOS installs as a profile
+  [32mok[0m   ...and never the private key
+  [32mok[0m   it is a certificate authority
+  [32mok[0m   the server certificate is signed by it
+  [32mok[0m   ...is for TLS servers
+  [32mok[0m   ...and lives under the 825 days iOS allows
+  [32mok[0m   a client trusting only the CA reaches 192.168.0.133
+  [32mok[0m   ...and localhost
+
+[1m28. A printed tag points somewhere a phone can reach[0m
+  [32mok[0m   a QR code is produced
+  [32mok[0m   the caller cannot dictate the address
+  [32mok[0m   the tag never encodes a loopback address
+  [32mok[0m   ...and it carries the opaque token
+  [32mok[0m   the address is the same with no origin given
+  [32mok[0m   following the tag resolves the record
+  [32mok[0m   ...and it is the right plant
+  [32mok[0m   a configured public address wins
+  [32mok[0m   a trailing slash does not double up
+  [32mok[0m   clearing it falls back to the network address
+
+[1m29. Apple touch icons[0m
+  [32mok[0m   apple-touch-icon links are present
+  [32mok[0m   ...and at least one declares a size
+  [32mok[0m   ...including 180x180, what a modern iPhone asks for
+  [32mok[0m   /icons/apple-touch-icon-180.png is served
+  [32mok[0m   /icons/apple-touch-icon-180.png is opaque
+  [32mok[0m   /icons/apple-touch-icon-167.png is served
+  [32mok[0m   /icons/apple-touch-icon-167.png is opaque
+  [32mok[0m   /icons/apple-touch-icon-152.png is served
+  [32mok[0m   /icons/apple-touch-icon-152.png is opaque
+  [32mok[0m   /icons/apple-touch-icon.png is served
+  [32mok[0m   /icons/apple-touch-icon.png is opaque
+  [32mok[0m   root fallback /apple-touch-icon.png exists
+  [32mok[0m   root fallback /apple-touch-icon-precomposed.png exists
+  [32mok[0m   the web app title is set for iOS
+
+[1m30. Photo tints for smoother loading[0m
+  [32mok[0m   cards carry a placeholder colour
+  [32mok[0m   ...and it is a hex colour
+  [32mok[0m   each cached photograph on the record carries one too
+
+[1m31. Archiving a record that was still awaiting review[0m
+  [32mok[0m   a botanist submits a record
+  [32mok[0m   it shows in the review queue
+  [32mok[0m   a botanist archives it before reviewing
+  [32mok[0m   it no longer sits in the queue
+  [32mok[0m   the submission is closed, not just hidden
+  [32mok[0m   ...and says why
+
+[1m32. Uploading a photograph[0m
+  [32mok[0m   a plant with a photograph is accepted
+  [32mok[0m   the photograph is served from a path, not stored as a data URL
+  [32mok[0m   ...and it can be fetched back
+  [32mok[0m   ...as an image
+  [32mok[0m   ...byte for byte identical to what was uploaded
+  [32mok[0m   an oversized photograph is refused, not truncated
+  [32mok[0m   ...and the message says what the limit is
+  [32mok[0m   a file that is not an image is refused
+  [32mok[0m   something that is not a data URL is refused
+  [32mok[0m   a botanist entry with a photograph is accepted
+  [32mok[0m   its photograph is not public while the record is pending
+  [32mok[0m   ...but the reviewer checking it can see it
+
+[1m33. Locking an account after five wrong passwords[0m
+  [32mok[0m   a throwaway account is created
+  [32mok[0m   each wrong password says how many attempts are left
+  [32mok[0m   the fifth wrong password locks the account
+  [32mok[0m   ...and says for how long
+  [32mok[0m   while locked, even the right password is refused
+  [32mok[0m   an administrator can see the lock
+  [32mok[0m   a ranger cannot unlock an account
+  [32mok[0m   an administrator can unlock it
+  [32mok[0m   ...which clears the lock
+  [32mok[0m   ...and sign in works again
+  [32mok[0m   a correct sign in resets the count
+  [32mok[0m   the lock reached the audit trail
+
+[1m34. Tidying up after the run[0m
+  [32mok[0m   archived 11 of 11 test records
+  [32mok[0m   no test records remain in the public register
+
+============================================================
+[32mAll 466 checks passed.[0m

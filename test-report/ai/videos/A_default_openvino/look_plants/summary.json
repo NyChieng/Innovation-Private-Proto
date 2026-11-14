@@ -1,0 +1,73 @@
+{
+  "video": "look plants.mp4",
+  "slug": "look_plants",
+  "resolution": "2560x1440",
+  "fps": 30.0,
+  "frames": 299,
+  "duration_s": 9.97,
+  "expected": "NO_ALERT",
+  "alert_raised": false,
+  "passed": true,
+  "first_seen": {
+    "SAFE": 0.0,
+    "WARNING": 2.47
+  },
+  "stage_frames": {
+    "SAFE": 284,
+    "WARNING": 15,
+    "ALERT": 0
+  },
+  "stage_seconds": {
+    "SAFE": 9.47,
+    "WARNING": 0.5,
+    "ALERT": 0.0
+  },
+  "max_people": 1,
+  "max_animals": 0,
+  "max_plants": 1,
+  "frames_with_plant": 147,
+  "frames_with_hand": 0,
+  "peak_touch_p": 0.0,
+  "peak_touch_t": 0,
+  "frames_touch_ge_06": 0,
+  "zone": [],
+  "events": [
+    {
+      "t": 2.47,
+      "tier": "WARNING",
+      "track_id": 1,
+      "detail": "standing close to the plant",
+      "snapshot": ""
+    }
+  ],
+  "keyframes": [
+    {
+      "t": 0.0,
+      "stage": "SAFE",
+      "file": "keyframes/0000_SAFE.jpg",
+      "why": "first frame"
+    },
+    {
+      "t": 2.47,
+      "stage": "WARNING",
+      "file": "keyframes/0074_WARNING.jpg",
+      "why": "SAFE -> WARNING"
+    },
+    {
+      "t": 2.97,
+      "stage": "SAFE",
+      "file": "keyframes/0089_SAFE.jpg",
+      "why": "WARNING -> SAFE"
+    }
+  ],
+  "backend": "openvino",
+  "codec": "avc1",
+  "processing": {
+    "wall_s": 11.8,
+    "avg_ms": 30.2,
+    "p95_ms": 65.3,
+    "avg_model_ms": 51.4,
+    "model_frames": 161,
+    "effective_fps": 25.4
+  }
+}

@@ -1,0 +1,405 @@
+(node:33352) Warning: Setting the NODE_TLS_REJECT_UNAUTHORIZED environment variable to '0' makes TLS connections and HTTPS requests insecure by disabling certificate verification.
+(Use `node --trace-warnings ...` to show where the warning was created)
+FloraScan UI tests against https://localhost:42791
+Browser: C:/Program Files/Google/Chrome/Application/chrome.exe
+
+
+[1m1. Public pages render[0m
+  [32mok[0m   / renders content
+  [32mok[0m   /browse renders content
+  [32mok[0m   /species renders content
+  [32mok[0m   /connect renders content
+  [32mok[0m   /login renders content
+  [32mok[0m   /scan renders content
+  [32mok[0m   no console errors across the public site
+
+[1m2. The QR journey: scan a tag, land on the plant page[0m
+  [32mok[0m   the tag resolves to the plant page
+  [32mok[0m   the visitor is told the tag was scanned
+  [32mok[0m   the Plant ID is shown
+  [32mok[0m   conservation status is shown
+  [32mok[0m   a photograph is present
+  [32mok[0m   an unknown tag explains itself
+  [32mok[0m   no console errors on the plant page
+
+[1m3. Search and filters[0m
+  [32mok[0m   searching for a local name finds the record
+  [32mok[0m   a search with no matches explains itself
+  [32mok[0m   filtering by Critically endangered returns only CR
+  [32mok[0m   filtering by family returns records
+  [32mok[0m   browse loads a page, not the whole register
+  [32mok[0m   ...and offers to load more
+  [32mok[0m   ...which appends the next page
+  [32mok[0m   no console errors while searching
+
+[1m4. Staff sign in[0m
+  [32mok[0m   the prototype controls are on screen
+  [32mok[0m   it starts as the public visitor
+  [32mok[0m   it no longer lists accounts to jump into
+  [32mok[0m   the controls lead to the sign-in page
+  [32mok[0m   sign in is full screen, outside the site header
+  [32mok[0m   a wrong password shows an error
+  [32mok[0m   ...and stays on the sign-in page
+  [32mok[0m   the eye button reveals the password
+  [32mok[0m   the right password lands on a staff screen
+  [32mok[0m   the controls show the new role
+  [32mok[0m   Ctrl+K opens the controls
+  [32mok[0m   signing out returns to the public visitor
+  [32mok[0m   no console errors from sign in
+
+[1m5. Staff routes under every role[0m
+  [32mok[0m   [admin] /staff/plants
+  [32mok[0m   [admin] /staff/register
+  [32mok[0m   [admin] /staff/review
+  [32mok[0m   [admin] /staff/submissions
+  [32mok[0m   [admin] /staff/species
+  [32mok[0m   [admin] /staff/reports
+  [32mok[0m   [admin] /staff/iot
+  [32mok[0m   [admin] /staff/users
+  [32mok[0m   [admin] /staff/activity
+  [32mok[0m   [admin] /staff/audit
+  [32mok[0m   [admin] /staff/settings
+  [32mok[0m   [admin] /staff/notifications
+  [32mok[0m   [admin] /staff/me
+  [32mok[0m   [admin] pages outside the role are refused with an explanation
+  [32mok[0m   [admin] no console errors on any staff screen
+  [32mok[0m   [botanist] /staff/plants
+  [32mok[0m   [botanist] /staff/register
+  [32mok[0m   [botanist] /staff/review
+  [32mok[0m   [botanist] /staff/submissions
+  [32mok[0m   [botanist] /staff/species
+  [32mok[0m   [botanist] /staff/reports
+  [32mok[0m   [botanist] /staff/iot
+  [32mok[0m   [botanist] /staff/users
+  [32mok[0m   [botanist] /staff/activity
+  [32mok[0m   [botanist] /staff/audit
+  [32mok[0m   [botanist] /staff/settings
+  [32mok[0m   [botanist] /staff/notifications
+  [32mok[0m   [botanist] /staff/me
+  [32mok[0m   [botanist] pages outside the role are refused with an explanation
+  [32mok[0m   [botanist] no console errors on any staff screen
+  [32mok[0m   [reviewer] /staff/plants
+  [32mok[0m   [reviewer] /staff/register
+  [32mok[0m   [reviewer] /staff/review
+  [32mok[0m   [reviewer] /staff/submissions
+  [32mok[0m   [reviewer] /staff/species
+  [32mok[0m   [reviewer] /staff/reports
+  [32mok[0m   [reviewer] /staff/iot
+  [32mok[0m   [reviewer] /staff/users
+  [32mok[0m   [reviewer] /staff/activity
+  [32mok[0m   [reviewer] /staff/audit
+  [32mok[0m   [reviewer] /staff/settings
+  [32mok[0m   [reviewer] /staff/notifications
+  [32mok[0m   [reviewer] /staff/me
+  [32mok[0m   [reviewer] pages outside the role are refused with an explanation
+  [32mok[0m   [reviewer] no console errors on any staff screen
+  [32mok[0m   [ranger] /staff/plants
+  [32mok[0m   [ranger] /staff/register
+  [32mok[0m   [ranger] /staff/review
+  [32mok[0m   [ranger] /staff/submissions
+  [32mok[0m   [ranger] /staff/species
+  [32mok[0m   [ranger] /staff/reports
+  [32mok[0m   [ranger] /staff/iot
+  [32mok[0m   [ranger] /staff/users
+  [32mok[0m   [ranger] /staff/activity
+  [32mok[0m   [ranger] /staff/audit
+  [32mok[0m   [ranger] /staff/settings
+  [32mok[0m   [ranger] /staff/notifications
+  [32mok[0m   [ranger] /staff/me
+  [32mok[0m   [ranger] pages outside the role are refused with an explanation
+  [32mok[0m   [ranger] no console errors on any staff screen
+
+[1m6. Registration form - input validation[0m
+  [32mok[0m   an empty form reports the missing species
+  [32mok[0m   ...and the missing location
+  [32mok[0m   ...and nothing was created
+  [32mok[0m   the "species not listed" field appears
+  [32mok[0m   an unidentified record is flagged as needing a reviewer
+  [32mok[0m   a valid submission navigates to the new record
+  [32mok[0m   ...and the record shows as pending review
+  [32mok[0m   ...carrying the name the botanist typed
+  [32mok[0m   no console errors while registering
+
+[1m7. Registration form - awkward and out-of-range input[0m
+  [32mok[0m   the browser marks a negative height invalid
+  [32mok[0m   ...and nothing was submitted
+  [32mok[0m   the API refuses it too when the client guard is bypassed
+  [32mok[0m   ...with a message naming the allowed range
+  [32mok[0m   correcting the value lets it through
+  [32mok[0m   the script tag is shown as text, never executed
+  [32mok[0m   unicode and emoji survived
+  [32mok[0m   no alert dialog was triggered
+  [32mok[0m   no console errors from hostile input
+
+[1m8. Review queue - approve and return[0m
+  [32mok[0m   the queue lists submissions awaiting review
+  [32mok[0m   Approve is disabled while the species is unconfirmed
+  [32mok[0m   the return dialog opens
+  [32mok[0m   the dialog is portalled out to <body>
+  [32mok[0m   the backdrop covers the viewport width
+  [32mok[0m   the backdrop covers the viewport height
+  [32mok[0m   returning without a note is refused
+  [32mok[0m   a preset reason fills the note
+  [32mok[0m   cancel closes the dialog
+  [32mok[0m   approving reports the published record and its tag
+  [32mok[0m   the queue shrinks after approval
+  [32mok[0m   no console errors in the review queue
+
+[1m9. Plant record - tabs, QR tag and history[0m
+  [32mok[0m   the record opens
+  [32mok[0m   the QR tab shows a generated code
+  [32mok[0m   ...and a printable tag preview
+  [32mok[0m   ...naming the plant on the tag
+  [32mok[0m   the history tab lists changes
+  [32mok[0m   the edit dialog opens
+  [32mok[0m   the edit is confirmed to the user
+  [32mok[0m   the edit appears in the history with the new value
+  [32mok[0m   no console errors on the record screen
+
+[1m10. Admin - accounts and the approval switch[0m
+  [32mok[0m   the account list renders
+  [32mok[0m   a malformed email is refused
+  [32mok[0m   a valid account is created and the temporary password shown
+  [32mok[0m   the require_approval switch toggles
+  [32mok[0m   ...and the explanation follows the setting
+  [32mok[0m   the setting change reached the audit trail
+  [32mok[0m   no console errors on the admin screens
+
+[1m11. Visitor report from a plant page[0m
+  [32mok[0m   the report dialog opens
+  [32mok[0m   an empty report is refused
+  [32mok[0m   a filled report is accepted and acknowledged
+  [32mok[0m   no console errors while reporting
+
+[1m12. Phone layout[0m
+  [32mok[0m   the bottom tab bar is present
+  [32mok[0m   ...with Scan in the middle
+  [32mok[0m   ...and a Register tab for a botanist
+  [32mok[0m   the desktop sidebar is hidden
+  [32mok[0m   the account tab carries the rest of the navigation
+  [32mok[0m   no horizontal overflow at 390px
+  [32mok[0m   the scanner explains why the camera is unavailable over plain HTTP
+  [32mok[0m   ...and still offers tags to open directly
+  [32mok[0m   no console errors in the phone layout
+
+[1m13. Theme and layout switching[0m
+  [32mok[0m   dark mode applies
+  [32mok[0m   the page background actually darkens
+  [32mok[0m   light mode applies
+  [32mok[0m   forcing the phone layout on a desktop window works
+  [32mok[0m   no console errors while switching theme and layout
+  [32mok[0m   the phone header has auto, light and dark theme buttons
+  [32mok[0m   ...with automatic selected by default
+  [32mok[0m   the dark button switches to dark
+  [32mok[0m   ...and remembers it
+  [32mok[0m   ...and the browser bar colour follows
+  [32mok[0m   the choice survives a reload
+  [32mok[0m   the light button switches to light
+  [32mok[0m   automatic hands control back to the device
+  [32mok[0m   ...stored as "system"
+  [32mok[0m   ...and restores the per-scheme browser bar colours
+  [32mok[0m   the switch fits in the header at 320px
+  [32mok[0m   no console errors from the header theme switch
+  [32mok[0m   there is a captioned plant with several description sections
+  [32mok[0m   the photo caption keeps a readable width instead of a sliver beside the credit
+  [32mok[0m   the first description heading sits flush with the card
+  [32mok[0m   ...and each later heading is spaced from the paragraph above
+  [32mok[0m   no console errors on the plant page at 320px
+
+[1m14. Session handling[0m
+  [32mok[0m   a forged token is rejected and the user sent to sign in
+  [32mok[0m   ...and the dead token is cleared from storage
+
+[1m15. Accessibility basics[0m
+  [32mok[0m   every form control on Browse has a label
+  [32mok[0m   every image carries an alt attribute
+  [32mok[0m   the page has exactly one h1
+  [32mok[0m   the search field takes keyboard focus
+
+[1m16. No horizontal overflow on small screens[0m
+  [32mok[0m   360px /
+  [32mok[0m   360px /browse
+  [32mok[0m   360px /species
+  [32mok[0m   360px /connect
+  [32mok[0m   360px /login
+  [32mok[0m   360px /scan
+  [32mok[0m   390px /
+  [32mok[0m   390px /browse
+  [32mok[0m   390px /species
+  [32mok[0m   390px /connect
+  [32mok[0m   390px /login
+  [32mok[0m   390px /scan
+  [32mok[0m   414px /
+  [32mok[0m   414px /browse
+  [32mok[0m   414px /species
+  [32mok[0m   414px /connect
+  [32mok[0m   414px /login
+  [32mok[0m   414px /scan
+
+[1m17. Reading a QR code from a photograph in the gallery[0m
+  [32mok[0m   the scan screen offers to read a photo from the gallery
+  [32mok[0m   there is a file input to receive it
+  [32mok[0m   ...and it does not force the camera
+  [32mok[0m   uploading a photo of the tag opens that plant
+  [32mok[0m   ...and the right record is shown
+  [32mok[0m   a photo with no QR code reports that clearly
+  [32mok[0m   ...and stays on the scan screen
+  [32mok[0m   no console errors while reading a photo
+
+[1m18. Threatened locations are hidden in the interface[0m
+  [32mok[0m   there is a critically endangered record to check
+  [32mok[0m   the page says the location is withheld
+  [32mok[0m   ...and explains why
+  [32mok[0m   no map link is offered
+  [32mok[0m   no coordinates are shown
+  [32mok[0m   a signed-in botanist sees the real location
+  [32mok[0m   no console errors on the staff view
+  [32mok[0m   no console errors on the protected plant page
+
+[1m19. Photographs and their credits[0m
+  [32mok[0m   the home page leads with a photograph
+  [32mok[0m   plant cards use the fading image component
+  [32mok[0m   the plant page credits the photographer
+  [32mok[0m   ...and names the licence
+  [32mok[0m   ...and links back to the source
+  [32mok[0m   no console errors with photographs
+
+[1m20. Printable QR tag sheet[0m
+  [32mok[0m   the tag sheet lists published records
+  [32mok[0m   selecting all renders a sheet of tags
+  [32mok[0m   every tag carries a QR image
+  [32mok[0m   every tag carries its Plant ID
+  [32mok[0m   the sheet is inside a printable region
+  [32mok[0m   no console errors on the tag sheet
+
+[1m21. Installable web app[0m
+  [32mok[0m   the manifest is linked
+  [32mok[0m   an apple touch icon is declared
+  [32mok[0m   a theme colour is set
+  [32mok[0m   the connect page explains how to install it
+  [32mok[0m   no console errors on the connect page
+
+[1m22. Motion respects prefers-reduced-motion[0m
+  [32mok[0m   nothing stays invisible when motion is reduced
+  [32mok[0m   the hero photograph does not drift
+
+[1m23. Installability: the Android one-tap prerequisites[0m
+  [32mok[0m   the browser supports service workers
+  [32mok[0m   the page is a secure context
+  [32mok[0m   over HTTPS the service worker registers
+  [32mok[0m   ...and becomes active
+  [32mok[0m   the manifest declares a display mode Chrome accepts
+  [32mok[0m   ...a 192px icon
+  [32mok[0m   ...a 512px icon
+  [32mok[0m   ...a name and a short name
+  [32mok[0m   no console errors from the service worker
+
+[1m24. The install guide differs by platform[0m
+  [32mok[0m   both platforms are covered
+  [32mok[0m   iOS is described as manual via Share
+  [32mok[0m   Android is described as a menu or one-tap install
+  [32mok[0m   an iPhone is told to use Safari’s Share menu
+  [32mok[0m   ...and is flagged as the current device
+  [32mok[0m   the iPhone is offered the certificate to trust
+  [32mok[0m   ...linking to the CA download
+  [32mok[0m   ...with the Certificate Trust Settings step spelled out
+  [32mok[0m   no console errors on the install guide
+
+[1m25. App icons[0m
+  [32mok[0m   icon-192.png is served
+  [32mok[0m   icon-192.png is a real PNG
+  [32mok[0m   icon-192.png is not a blank placeholder
+  [32mok[0m   icon-512.png is served
+  [32mok[0m   icon-512.png is a real PNG
+  [32mok[0m   icon-512.png is not a blank placeholder
+  [32mok[0m   apple-touch-icon.png is served
+  [32mok[0m   apple-touch-icon.png is a real PNG
+  [32mok[0m   apple-touch-icon.png is not a blank placeholder
+  [32mok[0m   maskable-512.png is served
+  [32mok[0m   maskable-512.png is a real PNG
+  [32mok[0m   maskable-512.png is not a blank placeholder
+  [32mok[0m   the header shows the brand mark
+
+[1m26. The welcome screen on a first visit[0m
+  [32mok[0m   a first-time visitor gets the welcome screen
+  [32mok[0m   ...explaining what the thing is
+  [32mok[0m   ...with a start button on desktop
+  [32mok[0m   ...and a photograph beside it
+  [32mok[0m   the photograph is actually visible, not stuck transparent
+  [32mok[0m   ...and it is credited
+  [32mok[0m   Start exploring enters the app
+  [32mok[0m   ...landing on the register
+  [32mok[0m   it is not shown again on a return visit
+  [32mok[0m   no console errors on the welcome screen
+  [32mok[0m   a phone visitor is pointed at the home screen
+  [32mok[0m   ...and can still carry on in the browser
+  [32mok[0m   ...without a desktop-style Start button
+  [32mok[0m   the last action is not cut off by the viewport
+  [32mok[0m   scanning a tag goes straight to the plant, not the intro
+  [32mok[0m   ...and shows that plant
+
+[1m27. Images reserve space and become visible[0m
+  [32mok[0m   the grid rendered image slots
+  [32mok[0m   loaded images are all visible
+  [32mok[0m   most images finished loading
+  [32mok[0m   every slot reserves its space, so nothing jumps
+  [32mok[0m   placeholders carry a colour
+  [32mok[0m   ...and they differ between plants
+  [32mok[0m   no console errors while images load
+
+[1m28. The layout survives awkward content and the floating pill[0m
+  [32mok[0m   a record with an unbroken 900-character note is accepted
+  [32mok[0m   the review queue does not scroll sideways at 360px
+  [32mok[0m   the review queue does not scroll sideways at 1280px
+  [32mok[0m   no footer link ends up under the floating switcher
+  [32mok[0m   the inline sign-in control is tall enough to tap
+  [32mok[0m   no console errors on any of it
+
+[1m28b. English, Malay and Chinese (#5)[0m
+  [32mok[0m   [ms] the home page is translated
+  [32mok[0m   [ms] ...and so is the navigation
+  [32mok[0m   [ms] <html lang> follows the language
+  [32mok[0m   [ms] [visitor] no screen scrolls sideways at 360px
+  [32mok[0m   [ms] [visitor] no console errors
+  [32mok[0m   [ms] [botanist] no screen scrolls sideways at 360px
+  [32mok[0m   [ms] [botanist] no console errors
+  [32mok[0m   [ms] the review queue is translated
+  [32mok[0m   [ms] [reviewer] no screen scrolls sideways at 360px
+  [32mok[0m   [ms] [reviewer] no console errors
+  [32mok[0m   [zh] the home page is translated
+  [32mok[0m   [zh] ...and so is the navigation
+  [32mok[0m   [zh] <html lang> follows the language
+  [32mok[0m   [zh] [visitor] no screen scrolls sideways at 360px
+  [32mok[0m   [zh] [visitor] no console errors
+  [32mok[0m   [zh] [botanist] no screen scrolls sideways at 360px
+  [32mok[0m   [zh] [botanist] no console errors
+  [32mok[0m   [zh] the review queue is translated
+  [32mok[0m   [zh] [reviewer] no screen scrolls sideways at 360px
+  [32mok[0m   [zh] [reviewer] no console errors
+  [32mok[0m   choosing 中文 in the header switches at once
+  [32mok[0m   ...and English comes back
+  [32mok[0m   no console errors while switching language
+
+[1m28c. A reviewer corrects a record without returning it (#6)[0m
+  [32mok[0m   a botanist submission is waiting
+  [32mok[0m   the card offers "Correct details"
+  [32mok[0m   Save is disabled until something changes
+  [32mok[0m   the dialog shows what will change
+  [32mok[0m   the correction is saved and the dialog closes
+  [32mok[0m   ...and the card shows the new site
+  [32mok[0m   the history records it against the reviewer
+  [32mok[0m   ...with the review reason
+  [32mok[0m   ...and the record is still waiting for a decision
+  [32mok[0m   no console errors while correcting at review
+
+[1m28d. A ranger lands on the IoT dashboard (#8)[0m
+  [32mok[0m   a ranger lands on IoT monitoring
+  [32mok[0m   ...with no plant management in the sidebar
+  [32mok[0m   on a phone a ranger gets an Alerts tab, not Register
+
+[1m29. Tidying up after the run[0m
+  [32mok[0m   archived 4 of 4 records created by these tests
+  [32mok[0m   nothing from the tests is left on the public site
+
+============================================================
+[32mAll 333 checks passed.[0m

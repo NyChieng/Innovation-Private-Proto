@@ -1,0 +1,37 @@
+
+Failed to load OpenH264 library: openh264-2.5.0-win64.dll
+	Please check environment and/or download library: https://github.com/cisco/openh264/releases
+
+[libopenh264 @ 000001ad3b4ec980] Unable to create encoder
+[ERROR:0@0.356] global cap_ffmpeg_impl.hpp:3568 open Could not open codec libopenh264, error: Unspecified error (-1313558101)
+[ERROR:0@0.356] global cap_ffmpeg_impl.hpp:3585 open VIDEOIO/FFMPEG: Failed to initialize VideoWriter
+PASS  look plants 2        expect=ALERT    alert=True  first={'SAFE': 0.0, 'WARNING': 2.88, 'ALERT': 3.12}  peak_p=0.95  events=[(2.88, 'WARNING'), (3.12, 'ALERT')]  14.0 fps
+[libopenh264 @ 000001ad3b59ba80] Unable to create encoder
+[ERROR:0@21.159] global cap_ffmpeg_impl.hpp:3568 open Could not open codec libopenh264, error: Unspecified error (-1313558101)
+[ERROR:0@21.159] global cap_ffmpeg_impl.hpp:3585 open VIDEOIO/FFMPEG: Failed to initialize VideoWriter
+PASS  look plants          expect=NO_ALERT alert=False  first={'SAFE': 0.0, 'WARNING': 2.47}  peak_p=0.00  events=[(2.47, 'WARNING')]  25.4 fps
+[libopenh264 @ 000001ad5964c940] Unable to create encoder
+[ERROR:0@34.255] global cap_ffmpeg_impl.hpp:3568 open Could not open codec libopenh264, error: Unspecified error (-1313558101)
+[ERROR:0@34.255] global cap_ffmpeg_impl.hpp:3585 open VIDEOIO/FFMPEG: Failed to initialize VideoWriter
+FAIL  touch plants 2       expect=ALERT    alert=False  first={'SAFE': 0.0}  peak_p=0.00  events=[]  25.0 fps
+[libopenh264 @ 000001ada49fe580] Unable to create encoder
+[ERROR:0@41.313] global cap_ffmpeg_impl.hpp:3568 open Could not open codec libopenh264, error: Unspecified error (-1313558101)
+[ERROR:0@41.313] global cap_ffmpeg_impl.hpp:3585 open VIDEOIO/FFMPEG: Failed to initialize VideoWriter
+FAIL  touch plants 3       expect=ALERT    alert=False  first={'SAFE': 0.0}  peak_p=0.00  events=[]  25.8 fps
+[libopenh264 @ 000001ad5953f300] Unable to create encoder
+[ERROR:0@51.207] global cap_ffmpeg_impl.hpp:3568 open Could not open codec libopenh264, error: Unspecified error (-1313558101)
+[ERROR:0@51.207] global cap_ffmpeg_impl.hpp:3585 open VIDEOIO/FFMPEG: Failed to initialize VideoWriter
+FAIL  touch plants 4       expect=ALERT    alert=False  first={'SAFE': 0.0}  peak_p=0.00  events=[]  28.6 fps
+[libopenh264 @ 000001ad585abec0] Unable to create encoder
+[ERROR:0@66.618] global cap_ffmpeg_impl.hpp:3568 open Could not open codec libopenh264, error: Unspecified error (-1313558101)
+[ERROR:0@66.618] global cap_ffmpeg_impl.hpp:3585 open VIDEOIO/FFMPEG: Failed to initialize VideoWriter
+PASS  touch plants         expect=ALERT    alert=True  first={'WARNING': 0.0, 'ALERT': 0.12}  peak_p=0.99  events=[(0.0, 'WARNING'), (0.12, 'ALERT'), (0.92, 'WARNING'), (1.32, 'ALERT'), (4.92, 'WARNING'), (5.16, 'ALERT'), (6.4, 'WARNING'), (6.6, 'ALERT')]  11.1 fps
+[libopenh264 @ 000001ade8528f00] Unable to create encoder
+[ERROR:0@83.382] global cap_ffmpeg_impl.hpp:3568 open Could not open codec libopenh264, error: Unspecified error (-1313558101)
+[ERROR:0@83.382] global cap_ffmpeg_impl.hpp:3585 open VIDEOIO/FFMPEG: Failed to initialize VideoWriter
+FAIL  ivy_touch            expect=ALERT    alert=False  first={'SAFE': 0.0, 'WARNING': 0.46}  peak_p=0.92  events=[(0.46, 'WARNING')]  28.0 fps
+[libopenh264 @ 000001ad56b2b680] Unable to create encoder
+[ERROR:0@90.684] global cap_ffmpeg_impl.hpp:3568 open Could not open codec libopenh264, error: Unspecified error (-1313558101)
+[ERROR:0@90.684] global cap_ffmpeg_impl.hpp:3585 open VIDEOIO/FFMPEG: Failed to initialize VideoWriter
+PASS  video2_4k            expect=ALERT    alert=True  first={'WARNING': 0.0, 'ALERT': 0.16}  peak_p=0.98  events=[(0.0, 'WARNING'), (0.16, 'ALERT'), (5.68, 'WARNING'), (10.0, 'WARNING'), (10.16, 'ALERT'), (10.44, 'ALERT')]  8.2 fps
+4/8 clips gave the expected result

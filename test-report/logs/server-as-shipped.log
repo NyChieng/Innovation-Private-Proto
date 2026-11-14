@@ -1,0 +1,36 @@
+
+  [1m[32mFloraScan[0m  Prototype X - Smart Ground-Truthing & Digital Biodiversity System
+  [2mCOS30049 Computing Technology Innovation Project - NeuonAI / Niah National Park[0m
+
+  [1mThis computer[0m   https://localhost:42791
+  [1mPhone / tablet[0m  [36mhttps://192.168.0.133:42791[0m   (same Wi-Fi or hotspot)
+  [1mFace ID / fingerprint[0m  https://ny-deskstop.local:42791   (phone must trust the certificate, see /connect)
+  [2mOpen https://localhost:42791/connect for a scannable QR code and mobile hand-off.[0m
+
+  [2mScan to open on your phone:[0m
+   ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+   █ ▄▄▄▄▄ █▄▀▀▄▄█▄█▄█ ▄▄▄▄▄ █
+   █ █   █ ███▄█  ▀▄▄█ █   █ █
+   █ █▄▄▄█ ██▄▀▄▀███▀█ █▄▄▄█ █
+   █▄▄▄▄▄▄▄█ █ ▀▄▀▄▀ █▄▄▄▄▄▄▄█
+   █▄ ▀ ▄█▄▀▀ ▄▄ ██▀ ▀▄█▀▀▀▀▄█
+   █▄ ▄▄▀ ▄▄▄▀  ▀▄ ▄▀▄▀▄▄ ▀▀ █
+   █▀▀▄▀ ▀▄▄█▄█ ▀▀▄▀█ ▄▀▀██▀▄█
+   █ ▄▄█▄▄▄█▄▀▄█▀██ ▄█▄▀▄  ▄ █
+   █▄█▄█▄█▄█▀ ██▀    ▄▄▄ █  ██
+   █ ▄▄▄▄▄ ██▄  █▀ █ █▄█ ██▀▄█
+   █ █   █ █ ▀▄▀▀██  ▄ ▄▄██▀▀█
+   █ █▄▄▄█ █▀  ▄ ██ █▄█▀ ▄   █
+   █▄▄▄▄▄▄▄█▄█▄▄██▄▄▄▄███▄██▄█
+   
+  [2mServer certificate issued (new network name ny-deskstop.local).[0m
+  [2mLocal certificate - every browser warns once, then remembers:[0m
+  [2m  Chrome / Android   Advanced  >  Proceed to ...[0m
+  [2m  Safari / iOS       Show Details  >  visit this website[0m
+  [2mAccept it once and the camera, GPS and home-screen install all work.[0m
+  [2mFor the iPhone home-screen icon, trust the certificate: see /connect.[0m
+  [2mPort 42791 is saved in proto.config.json - "npm run port" picks a new one.[0m
+  [2mDatabase: 130 plants and 80 species on 127.0.0.1[0m
+
+[MQTT] Connected to mqtts://l11c8d1d.ala.asia-southeast1.emqxsl.com
+[MQTT] Listening on florascan-swinburne-demo/+/readings

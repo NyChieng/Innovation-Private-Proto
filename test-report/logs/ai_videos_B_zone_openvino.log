@@ -1,0 +1,37 @@
+
+Failed to load OpenH264 library: openh264-2.5.0-win64.dll
+	Please check environment and/or download library: https://github.com/cisco/openh264/releases
+
+[libopenh264 @ 00000249c4857ec0] Unable to create encoder
+[ERROR:0@0.178] global cap_ffmpeg_impl.hpp:3568 open Could not open codec libopenh264, error: Unspecified error (-1313558101)
+[ERROR:0@0.178] global cap_ffmpeg_impl.hpp:3585 open VIDEOIO/FFMPEG: Failed to initialize VideoWriter
+PASS  look plants 2        expect=ALERT    alert=True  first={'WARNING': 0.0, 'SAFE': 0.04, 'ALERT': 0.32}  peak_p=0.96  events=[(0.0, 'WARNING'), (0.32, 'ALERT'), (10.0, 'WARNING'), (10.4, 'ALERT')]  13.1 fps
+[libopenh264 @ 00000249cf088800] Unable to create encoder
+[ERROR:0@22.292] global cap_ffmpeg_impl.hpp:3568 open Could not open codec libopenh264, error: Unspecified error (-1313558101)
+[ERROR:0@22.292] global cap_ffmpeg_impl.hpp:3585 open VIDEOIO/FFMPEG: Failed to initialize VideoWriter
+PASS  look plants          expect=NO_ALERT alert=False  first={'SAFE': 0.0, 'WARNING': 1.0}  peak_p=0.00  events=[(1.0, 'WARNING')]  12.5 fps
+[libopenh264 @ 00000249cc934bc0] Unable to create encoder
+[ERROR:0@47.349] global cap_ffmpeg_impl.hpp:3568 open Could not open codec libopenh264, error: Unspecified error (-1313558101)
+[ERROR:0@47.349] global cap_ffmpeg_impl.hpp:3585 open VIDEOIO/FFMPEG: Failed to initialize VideoWriter
+PASS  touch plants 2       expect=ALERT    alert=True  first={'WARNING': 0.0, 'ALERT': 0.16, 'SAFE': 0.24}  peak_p=0.95  events=[(0.0, 'WARNING'), (0.16, 'ALERT'), (3.12, 'WARNING'), (3.24, 'ALERT')]  9.3 fps
+[libopenh264 @ 00000249c7514b40] Unable to create encoder
+[ERROR:0@64.573] global cap_ffmpeg_impl.hpp:3568 open Could not open codec libopenh264, error: Unspecified error (-1313558101)
+[ERROR:0@64.573] global cap_ffmpeg_impl.hpp:3585 open VIDEOIO/FFMPEG: Failed to initialize VideoWriter
+PASS  touch plants 3       expect=ALERT    alert=True  first={'WARNING': 0.0, 'ALERT': 0.16, 'SAFE': 3.84}  peak_p=0.92  events=[(0.0, 'WARNING'), (0.16, 'ALERT')]  8.7 fps
+[libopenh264 @ 00000249ca329dc0] Unable to create encoder
+[ERROR:0@91.609] global cap_ffmpeg_impl.hpp:3568 open Could not open codec libopenh264, error: Unspecified error (-1313558101)
+[ERROR:0@91.609] global cap_ffmpeg_impl.hpp:3585 open VIDEOIO/FFMPEG: Failed to initialize VideoWriter
+PASS  touch plants 4       expect=ALERT    alert=True  first={'WARNING': 0.0, 'ALERT': 0.06, 'SAFE': 2.2}  peak_p=1.00  events=[(0.0, 'WARNING'), (0.06, 'ALERT'), (6.04, 'WARNING')]  8.5 fps
+[libopenh264 @ 00000249ca81d300] Unable to create encoder
+[ERROR:0@140.630] global cap_ffmpeg_impl.hpp:3568 open Could not open codec libopenh264, error: Unspecified error (-1313558101)
+[ERROR:0@140.630] global cap_ffmpeg_impl.hpp:3585 open VIDEOIO/FFMPEG: Failed to initialize VideoWriter
+PASS  touch plants         expect=ALERT    alert=True  first={'WARNING': 0.0, 'ALERT': 0.12}  peak_p=0.99  events=[(0.0, 'WARNING'), (0.12, 'ALERT'), (0.92, 'WARNING'), (1.2, 'ALERT'), (4.92, 'WARNING'), (5.16, 'ALERT'), (6.4, 'WARNING'), (6.6, 'ALERT')]  11.3 fps
+[libopenh264 @ 00000249ca1f1e40] Unable to create encoder
+[ERROR:0@157.253] global cap_ffmpeg_impl.hpp:3568 open Could not open codec libopenh264, error: Unspecified error (-1313558101)
+[ERROR:0@157.253] global cap_ffmpeg_impl.hpp:3585 open VIDEOIO/FFMPEG: Failed to initialize VideoWriter
+PASS  ivy_touch            expect=ALERT    alert=True  first={'SAFE': 0.0, 'WARNING': 0.46, 'ALERT': 2.17}  peak_p=0.97  events=[(0.46, 'WARNING'), (2.17, 'ALERT')]  12.4 fps
+[libopenh264 @ 00000249ca8c5dc0] Unable to create encoder
+[ERROR:0@172.131] global cap_ffmpeg_impl.hpp:3568 open Could not open codec libopenh264, error: Unspecified error (-1313558101)
+[ERROR:0@172.131] global cap_ffmpeg_impl.hpp:3585 open VIDEOIO/FFMPEG: Failed to initialize VideoWriter
+PASS  video2_4k            expect=ALERT    alert=True  first={'WARNING': 0.0, 'ALERT': 0.16}  peak_p=0.98  events=[(0.0, 'WARNING'), (0.16, 'ALERT'), (5.68, 'WARNING'), (9.6, 'ALERT'), (10.16, 'ALERT'), (10.64, 'WARNING')]  8.2 fps
+8/8 clips gave the expected result
