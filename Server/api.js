@@ -268,7 +268,9 @@ const RESET_REQUEST_MINUTES = 30;
 // open is an open door for whoever reaches that screen next.
 const APPROVAL_MINUTES = 5;
 const MAX_WRONG_CHECK_CODES = 5;
-const resetNotifiedAt = new Map(); // user id -> when the admins were last told
+// Include the account address because a database reseed can reuse a numeric id
+// while the running process still has the previous account's cooldown.
+const resetNotifiedAt = new Map(); // account identity -> when the admins were last told
 const requestExpired = (row) => new Date(row.expires_at).getTime() < Date.now()
   || (row.status === 'approved' && row.decided_at
     && Date.now() - new Date(row.decided_at).getTime() > APPROVAL_MINUTES * 60000);
@@ -1008,9 +1010,10 @@ export function createApi() {
     await update('users', user.id, { reset_requested_at: nowIso() });
 
     // Once per quarter hour, so the button cannot bury the administrators.
-    const last = resetNotifiedAt.get(user.id) || 0;
+    const noticeKey = `${user.id}:${String(user.email).toLowerCase()}`;
+    const last = resetNotifiedAt.get(noticeKey) || 0;
     if (Date.now() - last > 15 * 60000) {
-      resetNotifiedAt.set(user.id, Date.now());
+      resetNotifiedAt.set(noticeKey, Date.now());
       await notifyPermission('user.manage', {
         type: 'password.reset_request',
         title: `${user.full_name} forgot their password`,
