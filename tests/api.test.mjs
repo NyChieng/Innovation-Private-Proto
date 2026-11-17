@@ -1011,7 +1011,7 @@ section('20b. AI camera alerts reach the rangers, with the snapshot');
 {
   // A real (1 x 1) JPEG; the server checks the JPEG signature.
   const JPEG = '/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=';
-  const camera = (headers, body) => fetch(BASE + '/api/camera/alerts', {
+  const camera = (headers, body) => fetch(ORIGIN + '/api/camera/alerts', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...headers },
     body: JSON.stringify(body),
@@ -1044,7 +1044,7 @@ section('20b. AI camera alerts reach the rangers, with the snapshot');
   check('the administrator is not notified', !told(await get('/notifications', adminT)));
   check('the reviewer is not notified', !told(await get('/notifications', revT)));
 
-  const photo = (t) => fetch(`${BASE}/api/sensors/camera-alerts/${id}/photo`, { headers: t ? { Authorization: 'Bearer ' + t } : {} });
+  const photo = (t) => fetch(`${ORIGIN}/api/sensors/camera-alerts/${id}/photo`, { headers: t ? { Authorization: 'Bearer ' + t } : {} });
   const asRanger = await photo(rangerT);
   eq('the ranger can open the snapshot', asRanger.status, 200);
   eq('...served as a JPEG', asRanger.headers.get('content-type'), 'image/jpeg');
@@ -1068,6 +1068,9 @@ section('20b. AI camera alerts reach the rangers, with the snapshot');
   eq('resolving it twice is refused', (await post(`/sensors/camera-alerts/${id}/resolve`, {}, rangerT)).status, 409);
 
   // With no mail account configured the server writes each email to the outbox.
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
   const outbox = path.join(path.dirname(path.dirname(fileURLToPath(import.meta.url))), '.outbox.log');
   if (fs.existsSync(outbox)) {
     let mails = [];
