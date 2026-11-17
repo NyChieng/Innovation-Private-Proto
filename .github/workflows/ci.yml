@@ -102,11 +102,15 @@ jobs:
             mariadb:10.4 --max-allowed-packet=1048576 \
             --character-set-server=utf8mb4 --collation-server=utf8mb4_general_ci
           docker run -d --name broker -p 1883:1883 eclipse-mosquitto:2 mosquitto -c /mosquitto-no-auth.conf
-          for i in $(seq 1 60); do
-            docker exec db mysqladmin ping -uroot -pci-root --silent && break
+          # Wait for a real query over TCP. "mysqladmin ping" also answers while
+          # the image's first-boot server runs (no root password yet, no TCP),
+          # and the next query then fails with "Access denied".
+          for i in $(seq 1 90); do
+            docker exec db mysql -h127.0.0.1 -uroot -pci-root -e 'SELECT 1' >/dev/null 2>&1 && break
+            [ "$i" = 90 ] && { docker logs db | tail -40; exit 1; }
             sleep 2
           done
-          docker exec db mysql -uroot -pci-root -e "SHOW VARIABLES LIKE 'max_allowed_packet'"
+          docker exec db mysql -h127.0.0.1 -uroot -pci-root -e "SHOW VARIABLES LIKE 'max_allowed_packet'"
 
       - name: Create the schema and seed the demo data
         run: |
@@ -209,7 +213,7 @@ jobs:
               version: 3.3.12
           libraries: |
             - name: PubSubClient
-              version: 2.8
+              version: '2.8'
           sketch-paths: |
             - iot-kit/FloraScan_Node
           enable-warnings-report: true
