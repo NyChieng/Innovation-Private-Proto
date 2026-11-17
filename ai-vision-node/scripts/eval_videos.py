@@ -4,6 +4,8 @@
         env ZONES=zones.json   a plant zone per clip name (normalised polygon), as drawn in the app
         env BACKEND=openvino   openvino (default, the laptop-CPU deployment) | onnxruntime | cuda
         env THREADS=4
+        env PERTURB=dusk       replay every frame as a worse camera would record it: dusk, night_ir,
+                               fog, noise, low_res, jpeg15, shake (see PERTURB below)
 
 Expected result per clip comes from its name (EXPECT below): a clip whose name starts with
 "look" should never ALERT, every touch clip should.
@@ -27,6 +29,33 @@ import pipeline  # noqa: E402
 EXPECT = {"look plants 2": "ALERT", "look": "NO_ALERT", "pinch": "ALERT", "touch": "ALERT",
           "ivy_touch": "ALERT", "video2_4k": "ALERT"}  # video2_4k: hands picking strawberries among the leaves  # look plants 2: he strokes the leaves (verified visually)
 STAGE_COL = {"SAFE": (80, 200, 80), "WARNING": (0, 170, 255), "ALERT": (0, 0, 255)}
+
+
+def _noise(im, sigma):
+    n = np.empty(im.shape, np.int16)
+    cv2.randn(n, 0, sigma)
+    return np.clip(im.astype(np.int16) + n, 0, 255).astype(np.uint8)
+
+
+def _gamma(g):
+    return np.clip(((np.arange(256) / 255.0) ** g) * 255, 0, 255).astype(np.uint8)
+
+
+_MOTION = np.zeros((9, 9), np.float32)
+_MOTION[4, :] = 1 / 9
+# env PERTURB=<name>: replay the clip as a worse camera would have recorded it
+PERTURB = {
+    "": lambda f: f,
+    "dusk": lambda f: _noise(cv2.LUT(f, _gamma(2.0)), 8),
+    "night_ir": lambda f: _noise(cv2.cvtColor(cv2.cvtColor(cv2.LUT(f, _gamma(1.3)), cv2.COLOR_BGR2GRAY), cv2.COLOR_GRAY2BGR), 6),
+    "fog": lambda f: cv2.addWeighted(f, 0.6, np.full_like(f, 225), 0.4, 0),
+    "noise": lambda f: _noise(f, 15),
+    "low_res": lambda f: cv2.resize(f, (640, int(f.shape[0] * 640 / f.shape[1])), interpolation=cv2.INTER_AREA),
+    "jpeg15": lambda f: cv2.imdecode(cv2.imencode(".jpg", f, [cv2.IMWRITE_JPEG_QUALITY, 15])[1], cv2.IMREAD_COLOR),
+    "shake": lambda f: cv2.filter2D(f, -1, _MOTION),
+}
+CONDITION = os.environ.get("PERTURB", "")
+DAMAGE = PERTURB[CONDITION]
 
 
 def small(img, w=960):
@@ -112,6 +141,7 @@ def run(video):
         ok, frame = cap.read()
         if not ok:
             break
+        frame = DAMAGE(frame)
         t = i / fps
         tic = time.perf_counter()
         out, info, new = g.step(frame, now=t_base + t)
@@ -177,7 +207,7 @@ def run(video):
         frames_with_hand=sum(r["hands"] > 0 for r in rows),
         peak_touch_p=round(peak[0], 3), peak_touch_t=round(peak[2] or 0, 2),
         frames_touch_ge_06=sum(r["touch_p"] >= 0.6 for r in rows),
-        zone=cfg["zone"], events=events, keyframes=keyframes, backend=g.models.backend, codec=codec,
+        condition=CONDITION or "original", zone=cfg["zone"], events=events, keyframes=keyframes, backend=g.models.backend, codec=codec,
         processing=dict(wall_s=round(wall, 1), avg_ms=round(float(np.mean(ms_all)), 1),
                         p95_ms=round(float(np.percentile(ms_all, 95)), 1),
                         avg_model_ms=round(float(np.mean(ms_model)), 1) if ms_model else 0,

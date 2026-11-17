@@ -1,0 +1,85 @@
+{
+  "video": "look plants.mp4",
+  "slug": "look_plants",
+  "resolution": "2560x1440",
+  "fps": 30.0,
+  "frames": 299,
+  "duration_s": 9.97,
+  "expected": "NO_ALERT",
+  "alert_raised": false,
+  "passed": true,
+  "first_seen": {
+    "SAFE": 0.0,
+    "WARNING": 1.0
+  },
+  "stage_frames": {
+    "SAFE": 30,
+    "WARNING": 269,
+    "ALERT": 0
+  },
+  "stage_seconds": {
+    "SAFE": 1.0,
+    "WARNING": 8.97,
+    "ALERT": 0.0
+  },
+  "max_people": 1,
+  "max_animals": 0,
+  "max_plants": 1,
+  "frames_with_plant": 299,
+  "frames_with_hand": 0,
+  "peak_touch_p": 0.0,
+  "peak_touch_t": 0,
+  "frames_touch_ge_06": 0,
+  "condition": "fog",
+  "zone": [
+    [
+      0.0,
+      0.0
+    ],
+    [
+      0.45,
+      0.0
+    ],
+    [
+      0.45,
+      1.0
+    ],
+    [
+      0.0,
+      1.0
+    ]
+  ],
+  "events": [
+    {
+      "t": 1.0,
+      "tier": "WARNING",
+      "track_id": 1,
+      "detail": "standing close to the plant",
+      "snapshot": ""
+    }
+  ],
+  "keyframes": [
+    {
+      "t": 0.0,
+      "stage": "SAFE",
+      "file": "keyframes/0000_SAFE.jpg",
+      "why": "first frame"
+    },
+    {
+      "t": 1.0,
+      "stage": "WARNING",
+      "file": "keyframes/0030_WARNING.jpg",
+      "why": "SAFE -> WARNING"
+    }
+  ],
+  "backend": "cuda",
+  "codec": "avc1",
+  "processing": {
+    "wall_s": 22.5,
+    "avg_ms": 33.2,
+    "p95_ms": 39.4,
+    "avg_model_ms": 33.2,
+    "model_frames": 299,
+    "effective_fps": 13.3
+  }
+}

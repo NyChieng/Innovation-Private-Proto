@@ -99,6 +99,190 @@ def vid_score(k):
     return sum(r["passed"] for r in v), len(v)
 
 
+det_big = j("ai/det_big/det_big.json")
+touch_big = j("ai/touch_big/touch_big.json")
+touch_oi = j("ai/touch_oi_plants/oi_plants.json")
+COND = {"dusk": "Dusk (dark + noise)", "night_ir": "Night IR (grey)", "fog": "Fog", "noise": "Sensor noise",
+        "low_res": "Low res (640 px)", "jpeg15": "Heavy JPEG", "shake": "Camera shake"}
+cond = {c: j(f"ai/videos_conditions/{c}/all_results.json") for c in COND}
+BIG_NOTES = j("ai/big_notes.json") or {}  # hand-written observations from looking at the galleries
+
+
+def gallery_figs(folder, gals, keep=None):
+    out = []
+    for g in gals:
+        if keep and not any(g["file"].startswith(k) for k in keep):
+            continue
+        note = BIG_NOTES.get(g["file"], "")
+        out.append(fig(f"ai/{folder}/{g['file']}", E(g["title"]) + (f" — {E(note)}" if note else ""), wide=True))
+    return "".join(out)
+
+
+def oi_block():
+    if not touch_oi:
+        return ""
+    o = touch_oi
+    rows = []
+    for thr, key in ((0.6, "metrics"), (0.5, "metrics_at_0.5"), (0.3, "metrics_at_0.3")):
+        m = o[key]
+        rows.append([f"{thr}{' (app)' if thr == 0.6 else ''}", f"{m['tp']} of {m['tp'] + m['fn']}", f"{m['fp']} of {m['fp'] + m['tn']}",
+                     f3(m["precision"]), f3(m["recall"]), f3(m["accuracy"])])
+    return f"""
+  <h4>Hands on real plants: an extra test set from Open Images</h4>
+  <p class="prose">The test and validation splits hold only 10 crops of a hand on a plant, too few to judge. So every hand in the {o.get('photos', 285)} Open Images validation and test photos that also box a plant, tree or flower was cut the way the live app cuts it (pose wrist and elbow, then <code>app/touchcrop.py</code>), {o['crops'] + o['skipped']} crops in all. Each crop was then labelled by eye from numbered sheets: {o['touch']} hands clearly on a plant (grass, stems, flowers, bark, leaves), {o['crops'] - o['touch']} hands clearly free near plants, and {o['skipped']} left out (holding something else, or too blurry to say). The touch model never saw Open Images. Labels are one reviewer's judgement, not the dataset's.</p>
+  {table(["Threshold", "Touches caught", "False touches", "Precision", "Recall", "Accuracy"], rows)}
+  <p class="prose">{E(BIG_NOTES.get('touch_oi', ''))} ROC-AUC {f3(o['metrics']['roc_auc'])}.</p>
+  <div class="figs">{fig("ai/touch_oi_plants/oi_touch_sample.jpg", "Hands on plants, random sample. Green border = caught at 0.6, red = missed.", wide=True)}{fig("ai/touch_oi_plants/oi_no_touch_sample.jpg", "Free hands near plants, random sample.", wide=True)}</div>"""
+
+
+def big_section():
+    if not det_big and not touch_big:
+        return ""
+    parts = []
+    if det_big:
+        d = det_big
+        sets = [["<b>" + E(v["label"]) + "</b>", f"{v['images']:,}", f"{v['empty_images']:,}",
+                 ", ".join(f"{k} {n:,}" for k, n in v["boxes"].items()), f"{v['night_ir_images']:,}"] for v in d["sets"].values()]
+        tot = [sum(v["images"] for v in d["sets"].values()), sum(sum(v["boxes"].values()) for v in d["sets"].values())]
+        mrows = []
+        for n, m in d["models"].items():
+            row = [E(n)]
+            for s in ("coco", "openimages", "swg", "all"):
+                b = m["by_set"][s]
+                row.append(f"{f3(b['mAP50'])}<div class='muted'>± {b['fold_mAP50_std']:.3f}</div>")
+            a = m["by_set"]["all"]
+            e = m["by_set"]["swg"]["empty_images_with_false_alarm"]
+            row += [f"{a['at_app_thresholds']['precision']:.2f} / {a['at_app_thresholds']['recall']:.2f}",
+                    f"{e['with_any_box']} / {e['images']}", f"{m['ms_per_image']:.1f} ms<div class='muted'>{E(m['device'])}</div>"]
+            mrows.append(row)
+        srows = []
+        for key in ("set", "class", "object size", "crowding", "frame edge", "lighting", "colour", "camera trap: day vs night"):
+            for k, v in d["slices"][key].items():
+                r = v["recall"]
+                srows.append([E(key), E(k), f"{v['objects']:,}", pill("pass" if r >= 0.75 else "warn" if r >= 0.5 else "fail", pct(r, 0)),
+                              f"{v['missed']:,}", f"{v['found as wrong class']:,}", f"{v['poor box']:,}"])
+        fb = d["false_box_types"]["all"]
+        nfalse = sum(v for k, v in fb.items() if k != "correct")
+        frows = [[E(k), f"{v:,}", pct(v / max(1, nfalse), 0)] for k, v in sorted(fb.items(), key=lambda kv: -kv[1]) if k != "correct"]
+        cm = d["confusion_iou50"]
+        heads = cm["rows_truth_cols_predicted"]
+        crow = [[f"<b>{E(heads[i])}</b>"] + [f"{x:,}" for x in r] for i, r in enumerate(cm["matrix"])]
+        species = d["slices"]["animal species (all sets, >=15 objects)"]
+        sp = sorted(species.items(), key=lambda kv: kv[1]["recall"])
+        sprow = [[E(k), f"{v['objects']}", pct(v["recall"], 0)] for k, v in sp[:12]]
+        sptop = [[E(k), f"{v['objects']}", pct(v["recall"], 0)] for k, v in sp[-12:][::-1]]
+        parts.append(f"""
+  <h3>Detector on {tot[0]:,} unseen images from three sources</h3>
+  <p>Every image was downloaded from its public source for this run, and none was used in training. COCO: all of val2017 that has our classes in it, plus empty photos. Open Images: validation and test photos that are not in the detector's train or validation split, balanced across species. Camera traps: SWG frames (Vietnam and Laos forest) from camera <em>sites</em> held out of training, one frame per burst, day and night. {tot[1]:,} labelled objects in all, {len(species)} animal species with 15 or more.</p>
+  {table(["Image set", "Images", "Empty", "Labelled objects", "Night IR frames"], sets)}
+  <p class="prose">{E(BIG_NOTES.get('det_overview', ''))}</p>
+  {table(["Model", "COCO mAP50", "Open Images mAP50", "Camera traps mAP50", "All mAP50", "All: precision / recall at app thresholds", "Empty camera-trap frames with a box", "Speed"], mrows)}
+  <div class="figs">{fig("ai/det_big/big_map_by_set.png", "mAP50 per image set and model; error bars are the spread over 5 random folds.", wide=True)}</div>
+  <h4>Which kinds of example it finds (deployed model, app thresholds)</h4>
+  <p class="prose">{E(BIG_NOTES.get('det_slices', ''))}</p>
+  {table(["Split by", "Kind", "Objects", "Found", "Missed", "Found as wrong class", "Box too loose or tight"], srows)}
+  <div class="figs">{fig("ai/det_big/big_recall_slices.png", "Share of labelled objects found, by kind of example.", wide=True)}</div>
+  <div class="two">
+    <div>{table(["Hardest species", "Objects", "Found"], sprow)}</div>
+    <div>{table(["Easiest species", "Objects", "Found"], sptop)}</div>
+  </div>
+  <div class="figs">{fig("ai/det_big/big_species.png", "The 30 animal species found least often.")}</div>
+  <h4>What the false boxes are</h4>
+  <div class="two">
+    <div style="display:grid;gap:10px">{table(["Kind of false box", "Boxes", "Share"], frows)}
+    {table(["Truth / predicted", *[E(x) for x in heads]], crow)}
+    <p class="muted">Confusion at IoU 0.5. The “nothing” row is false boxes; the “nothing” column is missed objects.</p></div>
+    {fig("ai/det_big/big_error_types.png", "False boxes by kind, per image set.")}
+  </div>
+  <p class="prose">{E(BIG_NOTES.get('det_errors', ''))}</p>
+  <h4>Picture galleries</h4>
+  <p class="prose">Slice galleries are random samples (seeded), not chosen to look good. Error galleries show the most confident mistakes of each kind, and the yellow box is the one in question. Green = labelled truth; orange = animal, blue = person, magenta = plant as detected.</p>
+  <div class="figs">{gallery_figs("det_big", d["galleries"])}</div>""")
+    if touch_big:
+        t = touch_big
+        sp_rows = []
+        for k, v in t["splits"].items():
+            m, b = v["metrics"], v["bootstrap"]
+            sp_rows.append([E(k), f"{m['crops']:,}", f"{f3(m['accuracy'])}<div class='muted'>{b['accuracy']['ci95'][0]:.3f} – {b['accuracy']['ci95'][1]:.3f}</div>",
+                            f3(m["precision"]), f3(m["recall"]), f3(m["f1"]), f3(m["roc_auc"])])
+        v_rows = [[E(k), f3(v["metrics"]["accuracy"]), f3(v["metrics"]["f1"]), f3(v["at_0.5"]["f1"]), f3(v["metrics"]["roc_auc"]),
+                   pct(v["same_decision_as_deployed_pct"] / 100, 2)] for k, v in t["variants"].items()]
+        k_rows = []
+        for k, m in t["kinds"].items():
+            ci = m.get("accuracy_ci95")
+            r = m["share_correct"]
+            k_rows.append([E(k), f"{m['crops']:,}", f"{m['touch']:,}", pill("pass" if r >= 0.8 else "warn" if r >= 0.65 else "fail", pct(r, 1))
+                           + (f"<div class='muted'>{ci[0]:.3f} – {ci[1]:.3f}</div>" if ci else ""), f"{m['fp']}", f"{m['fn']}"])
+        p_rows = []
+        for p, groups in t["properties"].items():
+            for k, m in groups.items():
+                p_rows.append([E(p), E(k), f"{m['crops']:,}", pct(m["share_correct"], 1), f3(m["f1"]), f3(m["roc_auc"])])
+        base = t["damage_summary"]["clean_accuracy"]
+        d_rows = []
+        for k, lv in t["damage"].items():
+            cells = []
+            for m in lv:
+                drop = m["accuracy"] - base
+                cells.append(pill("pass" if drop > -0.02 else "warn" if drop > -0.08 else "fail", f"{m['accuracy']:.3f}"))
+            cells += ["–"] * (3 - len(cells))
+            d_rows.append([E(k), *cells, pct(lv[-1]["decisions_changed_pct"] / 100, 1)])
+        ml = t["damage_summary"]["mean_accuracy_by_level"]
+        parts.append(f"""
+  <h3>Touch classifier on {t['crops']:,} crops, by kind of example and kind of damage</h3>
+  <p>The held-out test split and the validation split together ({t['touch']:,} touching), on the deployed ONNX model. Neither split was trained on; validation only picked the training epoch.</p>
+  {table(["Crops", "n", "Accuracy (95% CI)", "Precision", "Recall", "F1", "ROC-AUC"], sp_rows)}
+  {table(["Variant", "Accuracy at 0.6", "F1 at 0.6", "F1 at 0.5", "ROC-AUC", "Same decision as deployed"], v_rows)}
+  <h4>By kind of example</h4>
+  <p class="prose">{E(BIG_NOTES.get('touch_kinds', ''))}</p>
+  {table(["Kind", "Crops", "Touching", "Decided right (95% CI)", "False touches", "Missed touches"], k_rows)}
+  <div class="figs">{fig("ai/touch_big/touch_kinds.png", "Share decided right per kind, with bootstrap 95% intervals.", wide=True)}</div>
+  {table(["Picture property", "Value", "Crops", "Decided right", "F1", "ROC-AUC"], p_rows)}
+  {oi_block()}
+  <h4>By kind of camera damage, at three strengths</h4>
+  <p class="prose">Mean accuracy over the 15 graded kinds of damage: {ml['1']:.3f} at strength 1, {ml['2']:.3f} at 2 and {ml['3']:.3f} at 3, against {base:.3f} clean. {E(BIG_NOTES.get('touch_damage', ''))}</p>
+  {table(["Damage", "Strength 1", "Strength 2", "Strength 3", "Decisions changed at the strongest"], d_rows)}
+  <div class="figs">{fig("ai/touch_big/touch_damage_heatmap.png", "Accuracy for every kind and strength of damage.")}</div>
+  <h4>Picture galleries</h4>
+  <p class="prose">Random crops per kind; a green border means the model decided right, red means wrong. The damage strips show one crop under every kind of damage with the model's score.</p>
+  <div class="figs">{gallery_figs("touch_big", t["galleries"])}</div>""")
+    if any(cond.values()):
+        clips = sorted({r["video"] for v in cond.values() if v for r in v})
+        base = {r["video"]: r for r in videos.get("C_zone_cuda") or []}
+        rows, score = [], {}
+        for c in clips:
+            b = base.get(c)
+            cells = [E(c.replace(".mp4", "")), "No alert" if b and b["expected"] == "NO_ALERT" else "Alert",
+                     pill("pass" if b["passed"] else "fail", "right" if b["passed"] else "wrong") if b else "–"]
+            for k in COND:
+                r = next((x for x in cond.get(k) or [] if x["video"] == c), None)
+                if not r:
+                    cells.append("–")
+                    continue
+                first = r["first_seen"].get("ALERT")
+                txt = f"ALERT {first:.1f} s" if r["alert_raised"] else "no alert"
+                cells.append(pill("pass" if r["passed"] else "fail", txt) + f"<div class='muted'>peak {r['peak_touch_p']:.2f}</div>")
+            rows.append(cells)
+        for k in COND:
+            v = cond.get(k) or []
+            score[k] = f"{sum(r['passed'] for r in v)} / {len(v)}" if v else "–"
+        b0 = vid_score("C_zone_cuda")
+        rows.append(["<b>Clips right</b>", "", f"<b>{b0[0]} / {b0[1]}</b>"] + [f"<b>{score[k]}</b>" for k in COND])
+        sheets = "".join(fig(f"ai/videos_conditions/{k}/{s}/contact_sheet.jpg", f"{E(COND[k])}: {E(s.replace('_', ' '))}")
+                         for k, s in BIG_NOTES.get("cond_sheets", []))
+        parts.append(f"""
+  <h3>The clips again, as a worse camera would record them</h3>
+  <p>Every frame of every clip damaged before the pipeline sees it, with the plant zone drawn and the models on CUDA. The original column is the plant-zone CUDA run above.</p>
+  {table(["Clip", "Expected", "Original", *COND.values()], rows)}
+  <p class="prose">{E(BIG_NOTES.get('cond', ''))}</p>
+  <div class="figs">{sheets}</div>""")
+    return f"""
+<section id="bigrun">
+  <h2>AI qualitative analysis: the big run</h2>
+  <p class="prose">{E(BIG_NOTES.get('intro', 'A second, much larger round: more unseen data from more sources, every result split by the kind of example, and picture galleries for each kind.'))}</p>
+  {''.join(parts)}
+</section>"""
+
+
 # ------------------------------------------------------------------ sections
 
 def summary():
@@ -286,6 +470,14 @@ def page():
         ("warn", "Medium", "AI", "The touch model degrades on noisy, compressed and greyscale pictures",
          f"Accuracy falls from {f3(rob['original']['accuracy'])} to {f3(rob['sensor noise (sigma 15)']['accuracy'])} with sensor noise (recall collapses, F1 {f3(rob['sensor noise (sigma 15)']['f1'])}), {f3(rob['JPEG quality 20']['accuracy'])} at JPEG quality 20 and {f3(rob['greyscale (night IR)']['accuracy'])} in greyscale. A forest camera at dusk or on night IR produces all three.",
          "Open: add noise, JPEG and greyscale augmentation when the touch model is next trained, and record a test clip at dusk."),
+        ("warn", "High", "AI", "The touch model rarely fires for a flat hand on a plant",
+         (f"On {touch_oi['crops']} Open Images hands at real plants, labelled by eye, it caught {touch_oi['metrics']['tp']} of {touch_oi['touch']} touches at the app's 0.6 threshold "
+          f"({touch_oi['metrics_at_0.3']['tp']} at 0.3), with {touch_oi['metrics']['fp']} false touch. Gripping a stem or bouquet is caught; a palm on grass or bark, or fingers brushing leaves, is not. "
+          f"The same shows in the test split: hands flat on a fixed object are right {pct(touch_big['kinds']['100DOH: hand on a fixed object (wall, tree, table)']['share_correct'], 0)} of the time.") if touch_oi and touch_big else "",
+         "Open: retrain with hands-on-plant crops (record them with the app's recorder into <code>data/touch_user</code>, and add the Open Images crops from this test). Until then the leaf-movement rule and a plant zone carry the plant case."),
+        ("warn", "Medium", "AI", "Night infrared breaks close-up alerts",
+         "Replaying the clips in greyscale with noise cost 3 of 8: the person detector found no one in the bare-forearm clip, pose found far fewer hands, and the touch score rarely held above 0.6. Fog, noise, dusk, a 640-pixel camera and camera shake changed nothing.",
+         "Open: if the node will run at night, collect infrared frames for the detector, pose and touch models."),
         ("warn", "Medium", "AI", "Close-up clips need a plant zone to alert",
          f"On app defaults {va} of {na} clips gave the right result; with a plant zone drawn, {vb} of {nb}" + (f" (still wrong: {', '.join(failed_zone)})" if failed_zone else "") + ". In close-ups the detector sees a hand but no whole person or single plant, so nothing triggers.",
          "For the demo: always draw the plant zone before pressing Start."),
@@ -403,7 +595,7 @@ a:focus-visible {{ outline: 2px solid var(--accent); outline-offset: 2px; }}
 
 <nav class="bar" aria-label="Sections"><div class="wrap">
   <a href="#summary">Summary</a><a href="#branch">What is on demo</a><a href="#web">Web app</a><a href="#iot">IoT over MQTT</a>
-  <a href="#accuracy">AI accuracy</a><a href="#qualitative">AI qualitative</a><a href="#variance">AI model variance</a>
+  <a href="#accuracy">AI accuracy</a><a href="#qualitative">AI qualitative</a><a href="#bigrun">AI big run</a><a href="#variance">AI model variance</a>
   <a href="#findings">Findings</a><a href="#rerun">Run it again</a>
 </div></nav>
 
@@ -519,6 +711,8 @@ a:focus-visible {{ outline: 2px solid var(--accent); outline-offset: 2px; }}
   <div class="figs">{clip_figs}</div>
 </section>
 
+{big_section()}
+
 <section id="variance">
   <h2>AI model variance</h2>
   <h3>Detector variants on the same {det['dataset']['images']:,} images</h3>
@@ -567,6 +761,9 @@ python scripts/eval_touch_full.py --out reports/touch_full
 python scripts/eval_det_coco.py  --out reports/det_coco
 python scripts/eval_videos.py    out/videos data/test_videos
 python scripts/eval_pose_variants.py out/pose data/test_videos
+python scripts/eval_det_big.py    --out reports/det_big      # ~7,600 unseen images, downloads ~2 GB
+python scripts/eval_touch_big.py  --out reports/touch_big
+PERTURB=dusk ZONES=zones.json python scripts/eval_videos.py out/dusk data/test_videos
 
 python test-report/make_report.py   # rebuild this page from the results</pre>
   <p class="muted">Logs for every run, including the failing ones before each fix, are in <code>test-report/logs/</code>.</p>
