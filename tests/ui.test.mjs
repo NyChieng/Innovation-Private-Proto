@@ -1594,6 +1594,9 @@ section('28c. A reviewer corrects a record without returning it (#6)');
     .find((b) => /Save changes/i.test(b.textContent))?.click());
   await waitFor(() => page.evaluate(() => !document.querySelector('.modal')));
   check('the correction is saved and the dialog closes', await page.evaluate(() => !document.querySelector('.modal')));
+  // The queue reloads after the dialog closes; on a slow machine that is a
+  // moment later, so wait for it rather than read the page straight away.
+  await waitFor(async () => /review edit \(corrected\)/.test(await bodyText(page)));
   check('...and the card shows the new site', /review edit \(corrected\)/.test(await bodyText(page)));
 
   const hist = await (await fetch(`${BASE}/api/plants/${plant.id}/history`, {
