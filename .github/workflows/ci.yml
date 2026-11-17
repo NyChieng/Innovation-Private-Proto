@@ -114,6 +114,11 @@ jobs:
 
       - name: Create the schema and seed the demo data
         run: |
+          # Server/data/photos is filled by "npm run import:species" and not in
+          # git; the upload test needs one real JPEG from it (280 KB, under
+          # XAMPP's 1 MB packet limit).
+          mkdir -p Server/data/photos
+          cp test-report/ai/det/det_best.jpg Server/data/photos/ci-upload-fixture.jpg
           npm run db:setup
           node scripts/test-db.mjs
 
