@@ -338,6 +338,13 @@ const rangerT = await login('edmundguoqianyu@gmail.com');
     eq('...with the reading', Number(a.reading_value), 10);
     eq('...and the limit', Number(a.limit_value), Number(lim.soil_moisture_min));
     check('...linked to the reading that caused it', !!a.reading_id);
+    // Only roles that can resolve an alert (rangers) are told about it.
+    const told = await rows(
+      `SELECT r.name AS role FROM notifications n JOIN users u ON u.id = n.user_id JOIN roles r ON r.id = u.role_id
+        WHERE n.type = 'sensor.alert' AND n.related_type = 'sensor_alert' AND n.related_id = ?`, [a.id]);
+    check('...every ranger gets a notification', told.length > 0 && told.every((x) => x.role === 'ranger'), JSON.stringify(told));
+    const [rc] = await rows("SELECT COUNT(*) n FROM users u JOIN roles r ON r.id = u.role_id WHERE r.name = 'ranger' AND u.is_active = 1 AND u.deleted_at IS NULL");
+    eq('...one per active ranger, and nobody else', told.length, Number(rc.n));
   }
   await send({ soil_moisture_pct: 12 });
   await sleep(300);

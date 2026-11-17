@@ -92,6 +92,20 @@ async function request(method, path, body) {
   return data;
 }
 
+/**
+ * A protected image (an AI camera snapshot) as an object URL. An <img src>
+ * cannot send the Authorization header, so it is fetched here instead. The
+ * caller revokes the URL when it is done with it.
+ */
+export async function protectedImageUrl(path) {
+  const token = getToken();
+  const res = await fetch(path.startsWith('/api/') ? path : '/api' + path, {
+    headers: token ? { Authorization: 'Bearer ' + token } : {},
+  });
+  if (!res.ok) throw new ApiError(t('Request failed ({status})', { status: res.status }), res.status, null);
+  return URL.createObjectURL(await res.blob());
+}
+
 const qs = (params) => {
   const sp = new URLSearchParams();
   Object.entries(params || {}).forEach(([k, v]) => {

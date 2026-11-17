@@ -38,22 +38,26 @@ function getTransport() {
 }
 
 /** Sends, or prints in the terminal when no mail account is configured. */
-export async function sendMail({ to, subject, text }) {
+export async function sendMail({ to, subject, text, attachments = [] }) {
   if (!configured()) {
     const bar = '-'.repeat(64);
     console.log(`\n  \x1b[33m${bar}\x1b[0m`);
     console.log('  \x1b[1mEmail (not sent - no SMTP_USER / SMTP_PASS in .env)\x1b[0m');
     console.log(`  To:      ${to}\n  Subject: ${subject}\n`);
     console.log(text.split('\n').map((l) => '  ' + l).join('\n'));
+    for (const a of attachments) console.log(`  [attachment: ${a.filename}, ${a.content?.length ?? 0} bytes]`);
     console.log(`  \x1b[33m${bar}\x1b[0m\n`);
     try {
-      fs.appendFileSync(OUTBOX, JSON.stringify({ at: new Date().toISOString(), to, subject, text }) + '\n');
+      fs.appendFileSync(OUTBOX, JSON.stringify({
+        at: new Date().toISOString(), to, subject, text,
+        attachments: attachments.map((a) => ({ filename: a.filename, bytes: a.content?.length ?? 0 })),
+      }) + '\n');
     } catch { /* the terminal copy is the one that matters */ }
     return { printed: true };
   }
   await getTransport().sendMail({
     from: process.env.SMTP_FROM || `FloraScan <${process.env.SMTP_USER}>`,
-    to, subject, text,
+    to, subject, text, attachments,
   });
   return { sent: true };
 }

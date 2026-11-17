@@ -978,7 +978,8 @@ section('17. Reading a QR code from a photograph in the gallery');
   // a visitor picking a photo from their phone would.
   const plantsRes = await (await fetch(BASE + '/api/public/plants')).json();
   const plant = plantsRes.results.find((p) => p.qr_token);
-  const qr = await (await fetch(`${BASE}/api/qr/${plant.id}?origin=${encodeURIComponent(BASE)}`)).json();
+  const qrAuth = { headers: { Authorization: 'Bearer ' + (await tokenFor(ACCOUNTS.botanist)) } };
+  const qr = await (await fetch(`${BASE}/api/qr/${plant.id}?origin=${encodeURIComponent(BASE)}`, qrAuth)).json();
 
   const tmpDir = path.join(os.tmpdir(), 'florascan-tests');
   fs.mkdirSync(tmpDir, { recursive: true });
@@ -1353,7 +1354,8 @@ section('26. The welcome screen on a first visit');
   // A scanned tag must never be interrupted by an introduction.
   const list = await (await fetch(BASE + '/api/public/plants?limit=1')).json();
   const tagged = list.results[0];
-  const qr = await (await fetch(`${BASE}/api/qr/${tagged.id}`)).json();
+  const qrAuth = { headers: { Authorization: 'Bearer ' + (await tokenFor(ACCOUNTS.botanist)) } };
+  const qr = await (await fetch(`${BASE}/api/qr/${tagged.id}`, qrAuth)).json();
   const token = new URL(qr.target_url).pathname.split('/p/')[1];
 
   const scanner = await browser.newPage();

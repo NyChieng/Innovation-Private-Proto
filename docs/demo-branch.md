@@ -45,6 +45,7 @@ administrator recovery-email check is limited to one code per minute per account
 AI vision node (Python 3.12, from `ai-vision-node/`, with its `.venv` active):
 
 ```bash
+python scripts/test_notifier.py                                # camera -> rangers alert sender, no models needed
 python scripts/test_pipeline.py                                # pipeline rules, no camera needed
 python scripts/eval_touch_full.py --out reports/touch_full     # touch model accuracy, robustness
 python scripts/eval_det_coco.py --out reports/det_coco         # detector vs stock models on COCO val2017
@@ -54,6 +55,39 @@ python scripts/eval_pose_variants.py out/pose data/test_videos # nano vs small p
 
 `eval_det_coco.py` needs `pip install pycocotools` and downloads about 250 MB of COCO images
 the first time (into `data/raw/`, not committed).
+
+## CI (GitHub Actions)
+
+`.github/workflows/ci.yml` runs on every push to `main`, `demo`, `fix/**` and `feature/**`,
+and on every pull request into `main` or `demo`. All four jobs must pass ("All checks passed"
+is the one status to require in branch protection):
+
+| Job | What it checks |
+|---|---|
+| Static | every server/script/test file parses, translations, security headers and rate limits, production build, `npm audit` (fails on critical) |
+| Web app end to end | MariaDB **10.4 with a 1 MB `max_allowed_packet`** (same as XAMPP) + an MQTT broker + the server, then the API, browser UI (every role), passkey and MQTT suites |
+| AI vision node | the camera alert sender and the pipeline rules on CPU (OpenVINO); the exported models come from Git LFS and are cached |
+| ESP32 firmware | `iot-kit/FloraScan_Node` compiles for the DOIT DevKit V1 (esp32 core 3.3.12, PubSubClient 2.8) |
+
+Merging `demo` into `main` goes through a pull request, so CI runs on exactly what will land.
+
+## AI camera alerts to the rangers
+
+When the camera sees someone touching the plant (ALERT) or near it after hours (AFTER-HOURS),
+it sends the snapshot to the web app. Every Ranger (anyone with `alert.resolve`) gets a
+notification with the picture, and an email with it attached when SMTP is set up; the picture
+is shown only to roles with `sensor.view` and the alert is resolved on the IoT page. Warnings
+carry no picture and stay on the camera.
+
+The seed has one camera, `CAM-001`, with the key `demo-camera-key-change-me`. Point the node
+at your server in `ai-vision-node/app/config.json` (or with `FLORAGUARD_*` environment
+variables, see `app/notifier.py`):
+
+```json
+{ "server_url": "https://localhost:42791", "camera_code": "CAM-001", "camera_key": "demo-camera-key-change-me" }
+```
+
+The node trusts the server's own certificate (`.certs/ca.pem`) automatically.
 
 ## Run the demo
 

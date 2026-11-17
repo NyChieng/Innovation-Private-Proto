@@ -404,3 +404,60 @@ ALTER TABLE users
   ADD COLUMN totp_pending    VARCHAR(255)    NULL AFTER totp_secret,
   ADD COLUMN totp_enabled_at DATETIME        NULL AFTER totp_pending,
   ADD COLUMN totp_last_step  BIGINT UNSIGNED NULL AFTER totp_enabled_at;
+
+
+-- ---------------------------------------------------------------------
+-- 15. AI camera alerts with a snapshot
+-- ---------------------------------------------------------------------
+-- The AI vision node (ai-vision-node/, "FloraGuard") watches a plant zone.
+-- When someone touches the plant (ALERT) or is near it outside opening hours
+-- (AFTER-HOURS) it posts the event and the snapshot that shows why to
+-- POST /api/camera/alerts, signed with its own device key - the same scheme as
+-- the sensor nodes (SHA-256 of the key, shown once at set-up). Warnings carry
+-- no picture and stay on the camera.
+--
+-- Every account that can resolve alerts (the Ranger role) is notified, and the
+-- photograph is served only to roles with sensor.view. It is kept in the row
+-- itself, like plant_photo_data, so a backup of the database is complete.
+
+CREATE TABLE camera_devices (
+  id               INT UNSIGNED  NOT NULL AUTO_INCREMENT,
+  device_code      VARCHAR(30)   NOT NULL,   -- sent with every alert, e.g. 'CAM-001'
+  device_key_hash  CHAR(64)      NOT NULL,   -- SHA-256 of the secret key
+  plant_id         INT UNSIGNED  NULL,       -- the plant in view; NULL = not installed
+  label            VARCHAR(120)  NULL,
+  is_active        TINYINT(1)    NOT NULL DEFAULT 1,  -- 0 = alerts are refused
+  last_seen_at     DATETIME      NULL,
+  created_at       DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at       DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  deleted_at       DATETIME      NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_cam_code (device_code),
+  UNIQUE KEY uq_cam_key (device_key_hash),
+  CONSTRAINT fk_cam_plant
+    FOREIGN KEY (plant_id) REFERENCES plants(id) ON DELETE SET NULL
+);
+
+CREATE TABLE camera_alerts (
+  id               INT UNSIGNED  NOT NULL AUTO_INCREMENT,
+  camera_id        INT UNSIGNED  NOT NULL,
+  plant_id         INT UNSIGNED  NULL,
+  tier             ENUM('ALERT','AFTER-HOURS') NOT NULL,
+  track_id         INT UNSIGNED  NULL,       -- the camera's id for the person
+  detail           VARCHAR(255)  NULL,       -- e.g. 'touch 0.82 (pose+model)'
+  photo            MEDIUMBLOB    NOT NULL,   -- JPEG, at most 900 KB
+  photo_mime       VARCHAR(40)   NOT NULL DEFAULT 'image/jpeg',
+  photo_bytes      INT UNSIGNED  NOT NULL,
+  status           ENUM('open','resolved') NOT NULL DEFAULT 'open',
+  triggered_at     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,  -- server time
+  resolved_by      INT UNSIGNED  NULL,
+  resolved_at      DATETIME      NULL,
+  resolution_note  VARCHAR(500)  NULL,
+  PRIMARY KEY (id),
+  KEY idx_ca_status (status, triggered_at),
+  KEY idx_ca_camera (camera_id, triggered_at),
+  CONSTRAINT chk_ca_resolved CHECK (status = 'open' OR resolved_at IS NOT NULL),
+  CONSTRAINT fk_ca_camera FOREIGN KEY (camera_id) REFERENCES camera_devices(id) ON DELETE CASCADE,
+  CONSTRAINT fk_ca_plant  FOREIGN KEY (plant_id)  REFERENCES plants(id) ON DELETE SET NULL,
+  CONSTRAINT fk_ca_user   FOREIGN KEY (resolved_by) REFERENCES users(id) ON DELETE SET NULL
+);

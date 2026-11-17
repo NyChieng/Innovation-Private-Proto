@@ -1,6 +1,6 @@
 import mqtt from 'mqtt';
 import { createHash, timingSafeEqual } from 'node:crypto';
-import { q, insert, update, nowIso } from './db.js';
+import { q, insert, update, nowIso, notifyPermission } from './db.js';
 
 const MQTT_URL = process.env.MQTT_URL || 'mqtts://l11c8d1d.ala.asia-southeast1.emqxsl.com';
 
@@ -244,7 +244,7 @@ async function raiseAlerts(device, reading, readingId) {
     );
     if (open.length) continue;
 
-    await insert('sensor_alerts', {
+    const alert = await insert('sensor_alerts', {
       device_id: device.id,
       plant_id: device.plant_id,
       reading_id: readingId,
@@ -257,6 +257,17 @@ async function raiseAlerts(device, reading, readingId) {
       resolved_by: null,
       resolved_at: null,
       resolution_note: null,
+    });
+
+    // Rangers respond to alerts, so only roles that can resolve one are told.
+    // Botanists still see every alert on the IoT dashboard. (First added in
+    // e58c3f4b on feature/iot-monitoring; lost when #15 merged another copy.)
+    const side = crossed === 'min' ? 'below' : 'above';
+    await notifyPermission('alert.resolve', {
+      type: 'sensor.alert',
+      title: `Sensor alert: ${device.device_code}`,
+      body: `${check.label} ${value}${check.unit} is ${side} the ${limit}${check.unit} limit.`,
+      related_type: 'sensor_alert', related_id: alert.id,
     });
 
     console.log(
