@@ -13,12 +13,22 @@ export default function Home() {
   const [stats, setStats] = useState(null);
   const [recent, setRecent] = useState(null);
   const [threatened, setThreatened] = useState(null);
+  const [heroIndex, setHeroIndex] = useState(0);
   const [q, setQ] = useState('');
   const navigate = useNavigate();
 
   useEffect(() => {
     api.publicStats().then(setStats).catch(() => {});
-    api.publicPlants({ sort: 'recent' }).then((r) => setRecent(r.results)).catch(() => setRecent([]));
+    const loadPlants = async () => {
+      const first = await api.publicPlants({ sort: 'recent', limit: 100 });
+      const plants = [...first.results];
+      for (let offset = first.results.length; offset < first.total; offset += first.limit) {
+        const page = await api.publicPlants({ sort: 'recent', limit: first.limit, offset });
+        plants.push(...page.results);
+      }
+      setRecent(plants);
+    };
+    loadPlants().catch(() => setRecent([]));
     Promise.all(['CR', 'EN', 'VU'].map((c) => api.publicPlants({ conservation: c })))
       .then((rs) => setThreatened(rs.flatMap((r) => r.results)))
       .catch(() => setThreatened([]));
@@ -38,14 +48,25 @@ export default function Home() {
     return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
   }, [recent]);
 
-  // A tree or whole-plant shot reads better behind the headline than a
-  // close-up of a single flower, so prefer one.
-  const heroPhoto = useMemo(() => {
-    if (!recent?.length) return null;
-    const withPhoto = recent.filter((p) => p.photo);
-    const scenic = withPhoto.find((p) => ['tree', 'palm'].includes(p.growth_form));
-    return (scenic || withPhoto[0])?.photo || null;
+  // Shuffle every published record with a photo so the hero can show the full register.
+  const heroPhotos = useMemo(() => {
+    if (!recent?.length) return [];
+    const shuffled = recent.filter((p) => p.photo || p.photo_remote);
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled;
   }, [recent]);
+  useEffect(() => {
+    setHeroIndex(0);
+    if (heroPhotos.length < 2 || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return undefined;
+    const interval = window.setInterval(() => {
+      setHeroIndex((index) => (index + 1) % heroPhotos.length);
+    }, 7000);
+    return () => window.clearInterval(interval);
+  }, [heroPhotos]);
+  const heroPhoto = heroPhotos?.[heroIndex] || null;
   const families = (boot?.families || []).slice(0, 12);
   const newest = (recent || []).slice(0, mobile ? 4 : 8);
   const atRisk = (threatened || []).slice(0, 4);
@@ -56,7 +77,14 @@ export default function Home() {
       <section className="hero">
         {heroPhoto && (
           <div className="hero-photo" aria-hidden="true">
-            <SmartImage src={heroPhoto} alt="" />
+            <SmartImage
+              key={heroPhoto.id}
+              src={heroPhoto.photo || heroPhoto.photo_remote}
+              fallback={heroPhoto.photo ? heroPhoto.photo_remote : undefined}
+              tint={heroPhoto.photo_tint}
+              alt=""
+              eager
+            />
           </div>
         )}
         <div className="wrap">
