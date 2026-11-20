@@ -15,23 +15,68 @@
 
 .reveal {
   opacity: 0;
-  transform: translate3d(0, 14px, 0);
+  transform: translate3d(0, 20px, 0) scale(0.986);
   transition:
-    opacity 0.5s var(--ease-out) var(--reveal-delay, 0ms),
-    transform 0.55s var(--ease-out) var(--reveal-delay, 0ms);
+    opacity 0.56s var(--ease-out) var(--reveal-delay, 0ms),
+    transform 0.62s var(--ease-out) var(--reveal-delay, 0ms);
   will-change: opacity, transform;
 }
 .reveal.is-in { opacity: 1; transform: none; }
 
 /* --- route change -------------------------------------------------- */
 
-.page-fade { transition: opacity 0.18s var(--ease-out), transform 0.22s var(--ease-out); }
-.page-fade-in { animation: pageIn 0.3s var(--ease-out) both; }
-.page-fade-out { opacity: 0; transform: translate3d(0, 5px, 0); }
+.page-fade {
+  transition: opacity 0.18s var(--ease-out), transform 0.22s var(--ease-out);
+  transform-origin: center top;
+}
+.page-fade-in { animation: pageIn 0.36s var(--ease-out) both; }
+.page-fade-out { opacity: 0; transform: translate3d(0, -6px, 0) scale(0.994); }
 
 @keyframes pageIn {
-  from { opacity: 0; transform: translate3d(0, 9px, 0); }
+  from { opacity: 0; transform: translate3d(0, 14px, 0) scale(0.992); }
   to { opacity: 1; transform: none; }
+}
+
+/* Top shimmering bar that sweeps across on every page switch */
+.route-progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  z-index: 400;
+  pointer-events: none;
+  transform-origin: left center;
+  background: linear-gradient(90deg, var(--green-400), var(--green-300), var(--accent));
+  box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 65%, transparent);
+}
+.route-progress.is-run {
+  animation: routeSweep 0.24s var(--ease-out) forwards;
+}
+.route-progress.is-done {
+  transform: scaleX(1);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+@keyframes routeSweep {
+  from { transform: scaleX(0.08); opacity: 1; }
+  to { transform: scaleX(0.86); opacity: 1; }
+}
+
+/* Thin reading progress bar pinned under the sticky header while scrolling */
+.scroll-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  background: linear-gradient(90deg, var(--accent), var(--green-300));
+  transform-origin: left center;
+  transform: scaleX(0);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+  will-change: transform;
 }
 
 /* --- images -------------------------------------------------------- */
@@ -74,18 +119,179 @@
 
 /* --- plant card ---------------------------------------------------- */
 
-.plant-card .plant-photo .smart-img img,
-.plant-card .plant-photo > img { transition: transform 0.5s var(--ease-out), opacity 0.55s var(--ease-out); }
-.plant-card:hover .plant-photo .smart-img img,
-.plant-card:hover .plant-photo > img { transform: scale(1.045); }
+.plant-card {
+  position: relative;
+  will-change: transform;
+  transform: perspective(900px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg));
+  transition:
+    transform 0.24s var(--ease-out),
+    box-shadow 0.28s var(--ease-out),
+    border-color 0.22s ease;
+}
+.plant-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  opacity: 0;
+  background: radial-gradient(
+    260px circle at var(--mx, 50%) var(--my, 35%),
+    rgba(255, 255, 255, 0.22),
+    transparent 65%
+  );
+  transition: opacity 0.28s ease;
+}
+.plant-card:hover {
+  transform: perspective(900px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)) translateY(-4px);
+  border-color: var(--accent-border);
+  box-shadow: var(--sh-3);
+}
+.plant-card:hover::after { opacity: 1; }
+.plant-card:active {
+  transform: perspective(900px) translateY(-1px) scale(0.988);
+}
 
-.plant-card { will-change: transform; }
-.plant-card:active { transform: translateY(0) scale(0.995); }
+.plant-card .plant-photo .smart-img img,
+.plant-card .plant-photo > img {
+  transition: transform 0.6s var(--ease-out), opacity 0.55s var(--ease-out);
+}
+.plant-card:hover .plant-photo .smart-img img,
+.plant-card:hover .plant-photo > img {
+  transform: scale(1.065);
+}
+.plant-card .plant-photo .overlay-b {
+  transition: padding-bottom 0.26s var(--ease-out), background 0.26s ease;
+}
+.plant-card:hover .plant-photo .overlay-b {
+  padding-bottom: 12px;
+}
+
+/* --- species card & plant viewing gallery -------------------------- */
+
+.species-card {
+  transition: transform 0.22s var(--ease-out), box-shadow 0.24s var(--ease-out), border-color 0.2s ease;
+}
+.species-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--sh-2);
+  border-color: var(--accent-border);
+}
+.species-card:active { transform: translateY(-1px) scale(0.992); }
+
+.gallery-main .smart-img img {
+  transition: transform 0.55s var(--ease-out), opacity 0.5s var(--ease-out);
+}
+.gallery-main:hover .smart-img img {
+  transform: scale(1.03);
+}
+.gallery-swap {
+  animation: gallerySwap 0.34s var(--ease-out) both;
+}
+@keyframes gallerySwap {
+  from { opacity: 0.45; transform: scale(1.018); }
+  to { opacity: 1; transform: none; }
+}
+
+.gallery-thumb {
+  transition: transform 0.22s var(--ease-spring), border-color 0.18s ease, box-shadow 0.2s ease;
+}
+.gallery-thumb:hover { transform: translateY(-2px); }
+.gallery-thumb[aria-current='true'] {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+.lightbox-img {
+  animation: lightboxIn 0.28s var(--ease-out) both;
+}
+.lightbox-img.smart-img {
+  height: auto;
+  min-height: 220px;
+  border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--surface-3) 70%, transparent);
+}
+.lightbox-img.smart-img.is-ready {
+  min-height: 0;
+  background: transparent;
+}
+.lightbox-img.smart-img img {
+  height: auto;
+  max-height: 70dvh;
+  object-fit: contain;
+}
+@keyframes lightboxIn {
+  from { opacity: 0; transform: scale(0.965); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Radar pulse when arriving from a scanned QR code */
+.scan-pulse {
+  position: relative;
+}
+.scan-pulse::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  border: 2px solid var(--ok-fg);
+  opacity: 0;
+  pointer-events: none;
+  animation: scanRipple 1.6s var(--ease-out) 0.15s 2;
+}
+@keyframes scanRipple {
+  0% { opacity: 0.65; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.24, 1.55); }
+}
+
+/* --- smooth crossfading photo slideshow ---------------------------- */
+
+.slideshow {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.slideshow-layer {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity var(--slide-fade, 1.4s) var(--ease-out);
+  will-change: opacity;
+}
+.slideshow-layer.is-visible {
+  opacity: var(--slide-opacity, 1);
+}
+.slideshow-layer img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 1;
+  transform: scale(1.06) translate3d(0, 0, 0);
+  animation: slideshowDrift 30s ease-in-out infinite alternate;
+  will-change: transform;
+}
+.slideshow-layer:nth-child(even) img {
+  animation-direction: alternate-reverse;
+}
+@keyframes slideshowDrift {
+  from { transform: scale(1.06) translate3d(0, 0, 0); }
+  to { transform: scale(1.13) translate3d(-1.5%, -1.5%, 0); }
+}
+
+.hero-photo .slideshow { --slide-opacity: 0.42; }
+.hero-photo .slideshow-layer img {
+  opacity: 1;
+  animation: heroDrift 34s ease-in-out infinite alternate;
+}
+.signin-art .slideshow { z-index: -2; --slide-opacity: 1; }
+.signin-credit { transition: opacity 0.45s var(--ease-out); }
 
 /* --- hero photograph ------------------------------------------------ */
 
 .hero-photo {
-  position: absolute; inset: 0; overflow: hidden;
+  position: absolute; inset: -64px 0 -24px 0; overflow: hidden;
+  will-change: transform;
 }
 .hero-photo img {
   width: 100%; height: 100%; object-fit: cover;
@@ -213,9 +419,18 @@
   .reveal { opacity: 1; transform: none; transition: none; }
   .smart-img img { opacity: 1; transform: none; }
   .smart-img::before { display: none; }
+  .hero-photo { transform: none !important; }
   .hero-photo img { opacity: 0.42; transform: none; animation: none; }
-  .page-fade-in { animation: none; }
+  .hero-photo .slideshow-layer img, .slideshow-layer img { opacity: 1; transform: none; animation: none; }
+  .slideshow-layer { transition: none; }
+  .hero-photo .slideshow-layer.is-visible { opacity: 0.42; }
+  .page-fade-in, .page-fade-out { animation: none; transform: none; opacity: 1; }
+  .route-progress, .scroll-progress { display: none; }
   .install-bar, .install-bar.is-closing { animation: none; }
   .bn-item.active .ico { transform: none; }
+  .plant-card, .plant-card:hover, .plant-card:active { transform: none; }
+  .plant-card::after { display: none; }
   .plant-card:hover .plant-photo .smart-img img { transform: none; }
+  .species-card:hover, .gallery-main:hover .smart-img img, .gallery-thumb:hover, .gallery-thumb[aria-current='true'] { transform: none; }
+  .gallery-swap, .lightbox-img, .scan-pulse::after { animation: none; }
 }

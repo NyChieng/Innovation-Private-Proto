@@ -105,6 +105,34 @@ function SpeciesPicker({ value, proposed, onPick, onPropose }) {
 
 /* ------------------------------------------------------------------ */
 
+function compressImageFile(file) {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const maxDim = 1600;
+      const scale = Math.min(1, maxDim / Math.max(img.naturalWidth || 1, img.naturalHeight || 1));
+      const w = Math.max(1, Math.round((img.naturalWidth || 1) * scale));
+      const h = Math.max(1, Math.round((img.naturalHeight || 1) * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      const data_url = canvas.toDataURL('image/jpeg', 0.85);
+      resolve({ data_url, file_name: file.name, mime_type: 'image/jpeg', size_bytes: Math.round(data_url.length * 0.75) });
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      const fr = new FileReader();
+      fr.onload = () => resolve({ data_url: fr.result, file_name: file.name, mime_type: file.type, size_bytes: file.size });
+      fr.readAsDataURL(file);
+    };
+    img.src = url;
+  });
+}
+
 function PhotoCapture({ photos, setPhotos }) {
   const fileRef = useRef(null);
   const [busy, setBusy] = useState(false);
@@ -113,15 +141,16 @@ function PhotoCapture({ photos, setPhotos }) {
     setBusy(true);
     const next = [];
     for (const file of Array.from(files).slice(0, 6 - photos.length)) {
-      const data_url = await new Promise((res) => {
-        const fr = new FileReader();
-        fr.onload = () => res(fr.result);
-        fr.readAsDataURL(file);
-      });
-      next.push({ data_url, file_name: file.name, mime_type: file.type, size_bytes: file.size });
+      next.push(await compressImageFile(file));
     }
     setPhotos([...photos, ...next]);
     setBusy(false);
+  };
+
+  const makeMain = (idx) => {
+    if (idx === 0) return;
+    const picked = photos[idx];
+    setPhotos([picked, ...photos.filter((_, k) => k !== idx)]);
   };
 
   return (
@@ -129,13 +158,18 @@ function PhotoCapture({ photos, setPhotos }) {
       <label>{t('Photographs')}</label>
       <div className="row row-wrap" style={{ gap: 9 }}>
         {photos.map((p, i) => (
-          <div key={i} style={{ position: 'relative', width: 92, height: 72, borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border)' }}>
+          <div
+            key={i}
+            style={{ position: 'relative', width: 92, height: 72, borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border)', cursor: i > 0 ? 'pointer' : 'default' }}
+            onClick={() => makeMain(i)}
+            title={i > 0 ? t('Set as main photograph') : undefined}
+          >
             <img src={p.data_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             {i === 0 && <span className="badge badge-ok" style={{ position: 'absolute', bottom: 3, left: 3, fontSize: '0.6rem', padding: '0 5px' }}>{t('Main')}</span>}
             <button
               type="button" className="btn btn-icon"
               style={{ position: 'absolute', top: 2, right: 2, width: 22, height: 22, padding: 0, borderRadius: 99, background: 'rgba(0,0,0,0.6)', color: '#fff', border: 0 }}
-              onClick={() => setPhotos(photos.filter((_, k) => k !== i))}
+              onClick={(e) => { e.stopPropagation(); setPhotos(photos.filter((_, k) => k !== i)); }}
               aria-label={t('Remove photograph')}
             >
               <I.X style={{ width: 12, height: 12 }} />
@@ -170,6 +204,8 @@ function PhotoCapture({ photos, setPhotos }) {
 
 /* ------------------------------------------------------------------ */
 
+const DRAFT_KEY = 'florascan.register.draft';
+
 export default function RegisterPlant() {
   const { boot, user, can, toast, refreshCounts } = useApp();
   const navigate = useNavigate();
@@ -182,13 +218,37 @@ export default function RegisterPlant() {
     health_status: 'healthy', life_stage: 'mature',
     morphology_notes: '', notes: '',
   });
+  const [savedDraft, setSavedDraft] = useState(() => {
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      return (parsed && (parsed.site_name || parsed.proposed_species_name || parsed.species_id || parsed.morphology_notes)) ? parsed : null;
+    } catch { return null; }
+  });
   const [photos, setPhotos] = useState([]);
   const [gps, setGps] = useState('idle'); // idle | locating | ok | error
   const [gpsError, setGpsError] = useState(null);
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState({});
 
-  const up = (patch) => setForm((f) => ({ ...f, ...patch }));
+  const up = (patch) => setForm((f) => {
+    const next = { ...f, ...patch };
+    try { localStorage.setItem(DRAFT_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+    return next;
+  });
+
+  const restoreDraft = () => {
+    if (!savedDraft) return;
+    setForm((f) => ({ ...f, ...savedDraft }));
+    setSavedDraft(null);
+    toast(t('Draft restored.'));
+  };
+
+  const discardDraft = () => {
+    try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
+    setSavedDraft(null);
+  };
 
   const locate = () => {
     if (!navigator.geolocation) { setGps('error'); setGpsError(t('This browser has no location support.')); return; }
@@ -243,6 +303,7 @@ export default function RegisterPlant() {
         photos,
       };
       const { plant } = await api.createPlant(payload);
+      try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
       await refreshCounts();
       toast(
         plant.status === 'approved'
@@ -263,6 +324,21 @@ export default function RegisterPlant() {
           title={t('Register a plant')}
           sub={t('The ground-truthing form. Everything except the species and the location can be filled in later.')}
         />
+
+        {savedDraft && (
+          <div style={{ marginBottom: 18 }}>
+            <Notice kind="info" title={t('Unsaved draft found')}>
+              <div className="row row-wrap" style={{ gap: 8, marginTop: 6 }}>
+                <button type="button" className="btn btn-sm btn-primary" onClick={restoreDraft}>
+                  <I.Refresh /> {t('Restore draft')}
+                </button>
+                <button type="button" className="btn btn-sm" onClick={discardDraft}>
+                  <I.X /> {t('Discard')}
+                </button>
+              </div>
+            </Notice>
+          </div>
+        )}
 
         <div style={{ marginBottom: 18 }}>
           <Notice kind={willPublish ? 'ok' : 'info'} title={willPublish ? t('This will publish immediately') : t('This will go to the review queue')}>

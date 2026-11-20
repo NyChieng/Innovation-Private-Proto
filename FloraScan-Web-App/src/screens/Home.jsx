@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../lib/api.js';
 import { useApp } from '../lib/store.jsx';
 import { PlantCard, SearchInput, Skeleton } from '../components/ui.jsx';
-import { Reveal, CountUp, SmartImage } from '../components/motion.jsx';
+import { Reveal, CountUp, PhotoSlideshow, useParallax } from '../components/motion.jsx';
 import { num } from '../lib/format.js';
 import * as I from '../lib/icons.jsx';
 import { t } from '../lib/i18n.js';
@@ -13,9 +13,10 @@ export default function Home() {
   const [stats, setStats] = useState(null);
   const [recent, setRecent] = useState(null);
   const [threatened, setThreatened] = useState(null);
-  const [heroIndex, setHeroIndex] = useState(0);
   const [q, setQ] = useState('');
+  const heroPhotoRef = useRef(null);
   const navigate = useNavigate();
+  useParallax(heroPhotoRef, 0.16, 60);
 
   useEffect(() => {
     api.publicStats().then(setStats).catch(() => {});
@@ -48,25 +49,23 @@ export default function Home() {
     return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
   }, [recent]);
 
-  // Shuffle every published record with a photo so the hero can show the full register.
-  const heroPhotos = useMemo(() => {
+  // Shuffle every published record with a photo so the hero cycles smoothly through the full register.
+  const heroSlides = useMemo(() => {
     if (!recent?.length) return [];
-    const shuffled = recent.filter((p) => p.photo || p.photo_remote);
+    const shuffled = recent
+      .filter((p) => p.photo || p.photo_remote)
+      .map((p) => ({
+        id: p.id,
+        src: p.photo || p.photo_remote,
+        fallback: p.photo ? p.photo_remote : undefined,
+        tint: p.photo_tint,
+      }));
     for (let i = shuffled.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
     }
     return shuffled;
   }, [recent]);
-  useEffect(() => {
-    setHeroIndex(0);
-    if (heroPhotos.length < 2 || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return undefined;
-    const interval = window.setInterval(() => {
-      setHeroIndex((index) => (index + 1) % heroPhotos.length);
-    }, 7000);
-    return () => window.clearInterval(interval);
-  }, [heroPhotos]);
-  const heroPhoto = heroPhotos?.[heroIndex] || null;
   const families = (boot?.families || []).slice(0, 12);
   const newest = (recent || []).slice(0, mobile ? 4 : 8);
   const atRisk = (threatened || []).slice(0, 4);
@@ -75,16 +74,9 @@ export default function Home() {
     <>
       {/* ---------------- Hero ---------------- */}
       <section className="hero">
-        {heroPhoto && (
-          <div className="hero-photo" aria-hidden="true">
-            <SmartImage
-              key={heroPhoto.id}
-              src={heroPhoto.photo || heroPhoto.photo_remote}
-              fallback={heroPhoto.photo ? heroPhoto.photo_remote : undefined}
-              tint={heroPhoto.photo_tint}
-              alt=""
-              eager
-            />
+        {heroSlides.length > 0 && (
+          <div className="hero-photo" ref={heroPhotoRef} aria-hidden="true">
+            <PhotoSlideshow items={heroSlides} interval={6500} fadeMs={1400} />
           </div>
         )}
         <div className="wrap">

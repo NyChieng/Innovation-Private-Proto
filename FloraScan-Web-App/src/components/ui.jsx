@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { CONSERVATION, STATUS, fromServer, initials, relativeTime, titleCase } from '../lib/format.js';
 import { useApp } from '../lib/store.jsx';
-import { SmartImage } from './motion.jsx';
+import { SmartImage, useCardTilt } from './motion.jsx';
 import { t } from '../lib/i18n.js';
 import * as I from '../lib/icons.jsx';
 
@@ -108,9 +108,32 @@ export function LoadingBlock({ label }) {
 
 export function Modal({ title, onClose, children, footer, wide }) {
   const ref = useRef(null);
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
 
   useEffect(() => {
-    const onKey = (e) => { if (e.key === 'Escape') onClose?.(); };
+    const prevFocus = document.activeElement;
+    const onKey = (e) => {
+      if (e.key === 'Escape') {
+        closeRef.current?.();
+        return;
+      }
+      if (e.key === 'Tab' && ref.current) {
+        const nodes = [...ref.current.querySelectorAll(
+          'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        )];
+        if (!nodes.length) return;
+        const first = nodes[0];
+        const last = nodes[nodes.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    };
     document.addEventListener('keydown', onKey);
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -119,8 +142,9 @@ export function Modal({ title, onClose, children, footer, wide }) {
     return () => {
       document.removeEventListener('keydown', onKey);
       document.body.style.overflow = prev;
+      if (prevFocus && typeof prevFocus.focus === 'function') prevFocus.focus();
     };
-  }, [onClose]);
+  }, []);
 
   // Rendered into document.body rather than in place. The backdrop is
   // position: fixed, and an ancestor carrying a transform or will-change:
@@ -200,8 +224,9 @@ export function Toasts() {
 
 export function PlantCard({ plant, to, showStatus, eager = false }) {
   const name = plant.scientific_name || plant.proposed_species_name || t('Unidentified specimen');
+  const tilt = useCardTilt();
   return (
-    <Link className="plant-card" to={to || `/plant/${plant.id}`}>
+    <Link className="plant-card" to={to || `/plant/${plant.id}`} {...tilt}>
       <div className="plant-photo">
         {plant.photo
           ? <SmartImage src={plant.photo} fallback={plant.photo_remote} tint={plant.photo_tint} alt="" eager={eager} />

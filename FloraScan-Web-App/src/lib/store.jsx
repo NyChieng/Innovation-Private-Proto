@@ -45,12 +45,24 @@ export function AppProvider({ children }) {
    */
   const [viewPref, setViewPref] = useState(() => localStorage.getItem(VIEW_KEY) || 'auto');
   const [narrow, setNarrow] = useState(() => window.matchMedia('(max-width: 860px)').matches);
+  const [online, setOnline] = useState(() => navigator.onLine !== false);
 
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 860px)');
     const on = (e) => setNarrow(e.matches);
     mq.addEventListener('change', on);
     return () => mq.removeEventListener('change', on);
+  }, []);
+
+  useEffect(() => {
+    const onUp = () => setOnline(true);
+    const onDown = () => setOnline(false);
+    window.addEventListener('online', onUp);
+    window.addEventListener('offline', onDown);
+    return () => {
+      window.removeEventListener('online', onUp);
+      window.removeEventListener('offline', onDown);
+    };
   }, []);
 
   useEffect(() => applyTheme(theme), [theme]);
@@ -146,11 +158,11 @@ export function AppProvider({ children }) {
   const value = useMemo(() => ({
     boot, setBoot, user, setUser, counts, refreshCounts, ready,
     toasts, toast, dismissToast,
-    theme, setTheme, viewPref, setView, mobile, narrow,
+    theme, setTheme, viewPref, setView, mobile, narrow, online,
     lang, setLang,
     signIn, signOut, applySession, can, run,
   }), [boot, user, counts, refreshCounts, ready, toasts, toast, dismissToast,
-       theme, setTheme, viewPref, setView, mobile, narrow, lang, setLang,
+       theme, setTheme, viewPref, setView, mobile, narrow, online, lang, setLang,
        signIn, signOut, applySession, can, run]);
 
   return <AppCtx.Provider value={value}>{children}</AppCtx.Provider>;

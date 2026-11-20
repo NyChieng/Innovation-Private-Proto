@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useApp } from '../lib/store.jsx';
 import { Avatar } from './ui.jsx';
+import { ScrollProgress } from './motion.jsx';
 import { homeFor, roleLabel } from '../lib/format.js';
 import { LANGUAGES, t } from '../lib/i18n.js';
 import * as I from '../lib/icons.jsx';
@@ -197,6 +198,19 @@ function AccountMenu() {
   );
 }
 
+function OfflineBanner() {
+  const { online } = useApp();
+  if (online) return null;
+  return (
+    <div className="offline-bar no-print" role="status" aria-live="polite">
+      <div className="wrap row" style={{ gap: 8, justifyContent: 'center' }}>
+        <I.Alert style={{ width: 15, height: 15, flex: 'none' }} />
+        <span>{t('You are offline. Showing pages saved on this device.')}</span>
+      </div>
+    </div>
+  );
+}
+
 /* ------------------------------------------------------------------ */
 /* Web shell                                                           */
 /* ------------------------------------------------------------------ */
@@ -207,6 +221,7 @@ export function WebShell({ children, sidebar = false }) {
 
   return (
     <div className="app">
+      <OfflineBanner />
       <header className="topbar no-print">
         <div className={'wrap ' + (sidebar ? 'wrap-wide' : '')}>
           <div className="topbar-in">
@@ -243,6 +258,7 @@ export function WebShell({ children, sidebar = false }) {
 
           </div>
         </div>
+        <ScrollProgress />
       </header>
 
       {sidebar ? (
@@ -326,6 +342,7 @@ export function MobileShell({ children, title, back, actions, noNav }) {
 
   return (
     <div className="app m-app">
+      <OfflineBanner />
       <header className="m-header no-print">
         {back ? (
           <button className="btn btn-ghost btn-icon" onClick={() => (typeof back === 'string' ? navigate(back) : navigate(-1))} aria-label={t('Back')}>
@@ -339,6 +356,7 @@ export function MobileShell({ children, title, back, actions, noNav }) {
         <LanguageSwitch />
         <ThemeSwitch />
         {actions}
+        <ScrollProgress />
       </header>
 
       <main style={{ flex: 1 }}>{children}</main>

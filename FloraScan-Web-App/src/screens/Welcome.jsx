@@ -32,9 +32,13 @@ export default function Welcome() {
     api.publicStats().then(setStats).catch(() => {});
     api.publicPlants({ limit: 12, sort: 'popular' })
       .then((r) => {
-        const pick = r.results.find((p) => p.photo && ['tree', 'palm'].includes(p.growth_form))
-          || r.results.find((p) => p.photo);
-        setHero(pick?.photo || null);
+        const pick = r.results.find((p) => (p.photo || p.photo_remote) && ['tree', 'palm'].includes(p.growth_form))
+          || r.results.find((p) => p.photo || p.photo_remote);
+        setHero(pick ? {
+          src: pick.photo || pick.photo_remote,
+          fallback: pick.photo ? pick.photo_remote : undefined,
+          tint: pick.photo_tint,
+        } : null);
         setHeroCredit(pick?.photo_credit || null);
       })
       .catch(() => {});
@@ -177,7 +181,7 @@ export default function Welcome() {
 
       {hero && (
         <div className="welcome-photo">
-          <SmartImage src={hero} alt="" eager />
+          <SmartImage src={hero.src} fallback={hero.fallback} tint={hero.tint} alt="" eager />
           {/* These are other people’s photographs under Creative Commons,
               so the credit travels with the image even here. */}
           {heroCredit && <span className="welcome-credit">{heroCredit}</span>}
