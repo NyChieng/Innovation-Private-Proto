@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useApp } from '../lib/store.jsx';
 import { Avatar } from './ui.jsx';
-import { ScrollProgress } from './motion.jsx';
+import { Reveal, ScrollProgress } from './motion.jsx';
 import { homeFor, roleLabel } from '../lib/format.js';
 import { LANGUAGES, t } from '../lib/i18n.js';
 import * as I from '../lib/icons.jsx';
@@ -304,6 +304,11 @@ export function WebShell({ children, sidebar = false }) {
               <Link to="/connect" className="tiny">{t('Open on phone')}</Link>
               <Link to="/login" className="tiny">{t('Staff sign in')}</Link>
             </div>
+          </div>
+          <div className="wrap">
+            <Reveal className="foot-wordmark" aria-hidden="true">
+              <span className="foot-wordmark-text">FloraScan</span>
+            </Reveal>
           </div>
         </footer>
       )}

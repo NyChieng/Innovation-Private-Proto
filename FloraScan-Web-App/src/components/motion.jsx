@@ -394,23 +394,37 @@ export function PhotoSlideshow({
   fadeMs = 1400,
   className = '',
   onChange,
+  jumpTo = null,
 }) {
   const [layers, setLayers] = useState([]);
   const onChangeRef = useRef(onChange);
+  const ctrlRef = useRef(null);
   onChangeRef.current = onChange;
 
   useEffect(() => {
-    if (!items?.length) return undefined;
+    if (!items?.length) {
+      ctrlRef.current = null;
+      return undefined;
+    }
 
     let cancelled = false;
     let uid = 0;
     let cursor = 0;
+    let gen = 0;
     let activeId = null;
     let cycleTimer = 0;
     let cleanupTimer = 0;
     let raf1 = 0;
     let raf2 = 0;
     let visHandler = null;
+
+    const clearPendingCycle = () => {
+      clearTimeout(cycleTimer);
+      if (visHandler) {
+        document.removeEventListener('visibilitychange', visHandler);
+        visHandler = null;
+      }
+    };
 
     const nextReadySlide = async () => {
       const total = items.length;
@@ -460,26 +474,28 @@ export function PhotoSlideshow({
     };
 
     const scheduleNext = () => {
-      if (cancelled || items.length < 2 || reduced()) return;
+      clearPendingCycle();
+      if (cancelled || items.length < 2 || reduced() || !interval) return;
+      const myGen = gen;
       // Preload and decode the upcoming slide in the background so the swap
       // starts on the exact frame with zero network or decode jank.
       const preloadedPromise = nextReadySlide();
 
       const advance = async () => {
         const ready = await preloadedPromise;
-        if (cancelled) return;
+        if (cancelled || myGen !== gen) return;
         if (ready) showSlide(ready);
         scheduleNext();
       };
 
       cycleTimer = setTimeout(() => {
-        if (cancelled) return;
+        if (cancelled || myGen !== gen) return;
         if (document.hidden) {
           visHandler = () => {
             if (!document.hidden) {
               document.removeEventListener('visibilitychange', visHandler);
               visHandler = null;
-              if (!cancelled) advance();
+              if (!cancelled && myGen === gen) advance();
             }
           };
           document.addEventListener('visibilitychange', visHandler);
@@ -489,21 +505,41 @@ export function PhotoSlideshow({
       }, interval);
     };
 
+    ctrlRef.current = {
+      jump: async (targetIndex) => {
+        if (cancelled || !items.length) return;
+        const idx = ((targetIndex % items.length) + items.length) % items.length;
+        const myGen = ++gen;
+        clearPendingCycle();
+        cursor = (idx + 1) % items.length;
+        const resolved = await resolveSlide(items[idx]);
+        if (cancelled || myGen !== gen) return;
+        if (resolved) showSlide(resolved);
+        scheduleNext();
+      },
+    };
+
     nextReadySlide().then((first) => {
-      if (cancelled || !first) return;
+      if (cancelled || !first || gen !== 0) return;
       showSlide(first);
       scheduleNext();
     });
 
     return () => {
       cancelled = true;
-      clearTimeout(cycleTimer);
+      ctrlRef.current = null;
+      clearPendingCycle();
       clearTimeout(cleanupTimer);
       cancelAnimationFrame(raf1);
       cancelAnimationFrame(raf2);
-      if (visHandler) document.removeEventListener('visibilitychange', visHandler);
     };
   }, [items, interval, fadeMs]);
+
+  useEffect(() => {
+    if (jumpTo && typeof jumpTo.index === 'number') {
+      ctrlRef.current?.jump(jumpTo.index);
+    }
+  }, [jumpTo]);
 
   return (
     <div
