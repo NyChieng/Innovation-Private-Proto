@@ -30,6 +30,10 @@ export default function Scan() {
   const [message, setMessage] = useState(null);
   const [samples, setSamples] = useState([]);
   const [reading, setReading] = useState(false);
+  const [hasTorch, setHasTorch] = useState(false);
+  const [torch, setTorch] = useState(false);
+  const [manualCode, setManualCode] = useState('');
+  const [lookingUp, setLookingUp] = useState(false);
 
   const secure = window.isSecureContext;
 
@@ -42,9 +46,23 @@ export default function Scan() {
 
   const stop = useCallback(() => {
     cancelAnimationFrame(rafRef.current);
-    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current?.getTracks().forEach((tr) => tr.stop());
     streamRef.current = null;
+    setHasTorch(false);
+    setTorch(false);
   }, []);
+
+  const toggleTorch = async () => {
+    const track = streamRef.current?.getVideoTracks?.()[0];
+    if (!track) return;
+    try {
+      const next = !torch;
+      await track.applyConstraints({ advanced: [{ torch: next }] });
+      setTorch(next);
+    } catch {
+      /* some devices report torch capability but refuse the constraint */
+    }
+  };
 
   const handleResult = useCallback((text) => {
     if (handledRef.current) return;
@@ -105,6 +123,9 @@ export default function Scan() {
         audio: false,
       });
       streamRef.current = stream;
+      const track = stream.getVideoTracks?.()[0];
+      const caps = track?.getCapabilities?.() || {};
+      setHasTorch(!!caps.torch);
       const video = videoRef.current;
       video.srcObject = stream;
       video.setAttribute('playsinline', 'true');
@@ -192,6 +213,30 @@ export default function Scan() {
     }
   };
 
+  const lookupCode = async (e) => {
+    e.preventDefault();
+    const raw = manualCode.trim();
+    if (!raw || lookingUp) return;
+    setMessage(null);
+    setLookingUp(true);
+    try {
+      const res = await api.publicPlants({ q: raw, limit: 5 });
+      const exact = res.results.find((p) => p.plant_code.toLowerCase() === raw.toLowerCase());
+      const hit = exact || (res.results.length === 1 ? res.results[0] : null);
+      if (hit) {
+        navigate(hit.qr_token ? '/p/' + hit.qr_token : '/plant/' + hit.id);
+        return;
+      }
+      handledRef.current = false;
+      handleResult(raw);
+    } catch {
+      handledRef.current = false;
+      handleResult(raw);
+    } finally {
+      setLookingUp(false);
+    }
+  };
+
   return (
     <div className="page" style={{ paddingTop: 18 }}>
       <div className="wrap wrap-narrow">
@@ -256,6 +301,11 @@ export default function Scan() {
         {state === 'scanning' && (
           <div className="row row-wrap" style={{ justifyContent: 'center', gap: 9, marginTop: 14 }}>
             <button className="btn" onClick={() => { stop(); setState('idle'); }}><I.X /> {t('Stop camera')}</button>
+            {hasTorch && (
+              <button className={'btn' + (torch ? ' btn-soft' : '')} onClick={toggleTorch}>
+                <I.Sun /> {torch ? t('Torch on') : t('Torch')}
+              </button>
+            )}
             <button className="btn" onClick={() => fileRef.current?.click()} disabled={reading}>
               {reading ? <span className="spinner" /> : <I.Image />} {t('Upload a photo instead')}
             </button>
@@ -273,6 +323,26 @@ export default function Scan() {
         />
 
         {message && <div style={{ marginTop: 14 }}><Notice kind="warn">{message}</Notice></div>}
+
+        {/* Manual code / Plant ID entry */}
+        <form className="card card-pad" style={{ marginTop: 18 }} onSubmit={lookupCode}>
+          <label htmlFor="scan-code" className="small strong" style={{ display: 'block', marginBottom: 6 }}>
+            {t('Enter a Plant ID or tag code')}
+          </label>
+          <div className="row row-wrap" style={{ gap: 8 }}>
+            <input
+              id="scan-code"
+              className="input grow"
+              style={{ minWidth: 180 }}
+              value={manualCode}
+              onChange={(e) => setManualCode(e.target.value)}
+              placeholder={t('e.g. PLT-0001')}
+            />
+            <button className="btn btn-primary" disabled={!manualCode.trim() || lookingUp}>
+              {lookingUp ? <span className="spinner" /> : <I.Search />} {t('Open')}
+            </button>
+          </div>
+        </form>
 
         {/* Fallback / demo shortcut */}
         <div className="card" style={{ marginTop: 22 }}>

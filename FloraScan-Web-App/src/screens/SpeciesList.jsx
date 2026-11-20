@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api.js';
 import { ConservationBadge, Empty, LoadingBlock, PageHead, SearchInput } from '../components/ui.jsx';
+import { Reveal } from '../components/motion.jsx';
 import { GROWTH_FORM, num, titleCase } from '../lib/format.js';
 import * as I from '../lib/icons.jsx';
 import { t } from '../lib/i18n.js';
@@ -48,15 +49,15 @@ export default function SpeciesList() {
 
         {filtered.length === 0 && <Empty icon={I.Book} title={t('No species match that search')} />}
 
-        {byFamily.map(([family, list]) => (
-          <div key={family} style={{ marginBottom: 26 }}>
+        {byFamily.map(([family, list], fi) => (
+          <Reveal key={family} index={fi % 6} style={{ marginBottom: 26 }}>
             <div className="row" style={{ gap: 10, marginBottom: 10 }}>
               <h2 style={{ fontSize: '1.05rem' }}>{family}</h2>
               <span className="tag">{list.length} species</span>
             </div>
             <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 288px), 1fr))', gap: 12 }}>
               {list.map((s) => (
-                <Link key={s.id} className="card card-pad" to={'/species/' + s.id} style={{ color: 'inherit', textDecoration: 'none' }}>
+                <Link key={s.id} className="card card-pad species-card" to={'/species/' + s.id} style={{ color: 'inherit', textDecoration: 'none' }}>
                   <div className="row row-between" style={{ alignItems: 'flex-start', gap: 10 }}>
                     <div style={{ minWidth: 0 }}>
                       <div className="sci strong" style={{ fontSize: '0.98rem' }}>{s.scientific_name}</div>
@@ -73,7 +74,7 @@ export default function SpeciesList() {
                 </Link>
               ))}
             </div>
-          </div>
+          </Reveal>
         ))}
       </div>
     </div>

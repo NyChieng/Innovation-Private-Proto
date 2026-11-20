@@ -102,6 +102,31 @@ function RecordCell({ entry }) {
   return <>{label}{entry.entity_id && <span className="mono tiny faint"> #{entry.entity_id}</span>}</>;
 }
 
+function exportAuditCsv(rows) {
+  const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const head = ['ID', 'Actor', 'Action', 'Entity Type', 'Entity ID', 'Old Values', 'New Values', 'Timestamp'];
+  const lines = [
+    head.map(esc).join(','),
+    ...rows.map((r) => [
+      r.id,
+      r.user_name || '',
+      r.action || '',
+      r.entity_type || '',
+      r.entity_id ?? '',
+      r.old_values ? JSON.stringify(r.old_values) : '',
+      r.new_values ? JSON.stringify(r.new_values) : '',
+      r.created_at || '',
+    ].map(esc).join(',')),
+  ];
+  const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'florascan-audit.csv';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 export default function Audit() {
   const { boot } = useApp();
   const [data, setData] = useState(null);
@@ -122,7 +147,13 @@ export default function Audit() {
         <PageHead
           title={t('Audit trail')}
           sub={t('A record of every change to plants, species, staff accounts and settings: who made it, when, and what it was before.')}
-        />
+        >
+          {data.results.length > 0 && (
+            <button type="button" className="btn" onClick={() => exportAuditCsv(data.results)}>
+              <I.Download /> {t('Export CSV')}
+            </button>
+          )}
+        </PageHead>
 
         <div style={{ marginBottom: 18 }}>
           <Notice kind="plain" title={t('Use this page to:')}>

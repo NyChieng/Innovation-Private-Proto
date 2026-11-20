@@ -7,7 +7,7 @@ import { shouldShowIntro } from './lib/intro.js';
 import { WebShell, MobileShell } from './components/Shell.jsx';
 import RoleSwitcher from './components/RoleSwitcher.jsx';
 import InstallPrompt from './components/InstallPrompt.jsx';
-import { PageTransition } from './components/motion.jsx';
+import { PageTransition, RouteProgress } from './components/motion.jsx';
 import { Toasts, LoadingBlock, Empty } from './components/ui.jsx';
 import * as I from './lib/icons.jsx';
 
@@ -124,6 +124,7 @@ export default function App() {
 
   return (
     <>
+      <RouteProgress k={loc.pathname} />
       <ScrollToTop />
       <Shell sidebar={!mobile && isStaff}>
         <Suspense fallback={<LoadingBlock />}>

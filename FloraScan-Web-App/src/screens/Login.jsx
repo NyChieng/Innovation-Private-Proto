@@ -6,7 +6,7 @@ import { Avatar } from '../components/ui.jsx';
 import Recover from './Recover.jsx';
 import { PasskeyOffer, PasskeySignIn, shouldOfferPasskey } from '../components/Passkeys.jsx';
 import { TwoFactorStep } from '../components/TwoFactor.jsx';
-import { SmartImage } from '../components/motion.jsx';
+import { PhotoSlideshow } from '../components/motion.jsx';
 import { homeFor, roleLabel } from '../lib/format.js';
 import * as I from '../lib/icons.jsx';
 import { t } from '../lib/i18n.js';
@@ -54,6 +54,7 @@ export default function Login() {
   // Set on every failed attempt and cleared when the animation ends, so the
   // shake replays each time without remounting (and unfocusing) the inputs.
   const [shake, setShake] = useState(false);
+  const [slides, setSlides] = useState([]);
   const [hero, setHero] = useState(null);
   const [recovering, setRecovering] = useState(false);
   // Signed in with a password just now, and being offered fingerprint / face.
@@ -63,13 +64,32 @@ export default function Login() {
   const emailRef = useRef(null);
 
   useEffect(() => {
-    api.publicPlants({ limit: 12, sort: 'popular' })
-      .then((r) => {
-        const pick = r.results.find((p) => p.photo && ['tree', 'palm', 'fern'].includes(p.growth_form))
-          || r.results.find((p) => p.photo);
-        if (pick) setHero({ src: pick.photo, credit: pick.photo_credit });
-      })
-      .catch(() => {});
+    let live = true;
+    const loadPhotos = async () => {
+      const first = await api.publicPlants({ sort: 'recent', limit: 100 });
+      const plants = [...(first.results || [])];
+      for (let offset = plants.length; offset < (first.total || 0); offset += first.limit) {
+        const page = await api.publicPlants({ sort: 'recent', limit: first.limit, offset });
+        plants.push(...(page.results || []));
+      }
+      if (!live) return;
+      const withPhotos = plants
+        .filter((p) => p.photo || p.photo_remote)
+        .map((p) => ({
+          id: p.id,
+          src: p.photo || p.photo_remote,
+          fallback: p.photo ? p.photo_remote : undefined,
+          tint: p.photo_tint,
+          credit: p.photo_credit,
+        }));
+      for (let i = withPhotos.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [withPhotos[i], withPhotos[j]] = [withPhotos[j], withPhotos[i]];
+      }
+      setSlides(withPhotos);
+    };
+    loadPhotos().catch(() => {});
+    return () => { live = false; };
   }, []);
 
   useEffect(() => { if (!user) emailRef.current?.focus(); }, [user]);
@@ -111,7 +131,9 @@ export default function Login() {
   return (
     <div className="signin">
       <aside className="signin-art">
-        {hero && <SmartImage src={hero.src} alt="" eager />}
+        {slides.length > 0 && (
+          <PhotoSlideshow items={slides} interval={6500} fadeMs={1400} onChange={setHero} />
+        )}
         <div className="signin-art-inner">
           <Link to="/" className="signin-brand">
             <img src="/icons/icon-192.png" alt="" width="40" height="40" />

@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api.js';
 import { useApp } from '../lib/store.jsx';
 import { PlantCard, SearchInput, Empty, LoadingBlock, ChipRow } from '../components/ui.jsx';
+import PlantMap from '../components/PlantMap.jsx';
 import { Reveal } from '../components/motion.jsx';
 import { CONSERVATION, GROWTH_FORM, num, titleCase } from '../lib/format.js';
 import * as I from '../lib/icons.jsx';
@@ -22,6 +23,7 @@ export default function Browse() {
   const [loading, setLoading] = useState(true);
   const [more, setMore] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [viewMode, setViewMode] = useState('grid');
 
   const q = params.get('q') || '';
   const family = params.get('family') || '';
@@ -158,12 +160,32 @@ export default function Browse() {
                   return one ? t('{n} published record', vars) : t('{n} published records', vars);
                 })()}
               </div>
-              <div className="row" style={{ gap: 8 }}>
+              <div className="row row-wrap" style={{ gap: 8 }}>
                 {mobile && (
                   <button className="btn btn-sm" onClick={() => setFiltersOpen((o) => !o)}>
                     <I.Filter /> Filters{active.length ? ` (${active.length})` : ''}
                   </button>
                 )}
+                <div className="segmented" role="group" aria-label={t('View mode')}>
+                  <button
+                    type="button"
+                    className={viewMode === 'grid' ? 'active' : ''}
+                    onClick={() => setViewMode('grid')}
+                    aria-label={t('Grid view')}
+                    title={t('Grid view')}
+                  >
+                    <I.Grid style={{ width: 15, height: 15 }} />
+                  </button>
+                  <button
+                    type="button"
+                    className={viewMode === 'map' ? 'active' : ''}
+                    onClick={() => setViewMode('map')}
+                    aria-label={t('Map view')}
+                    title={t('Map view')}
+                  >
+                    <I.MapPin style={{ width: 15, height: 15 }} />
+                  </button>
+                </div>
                 <select className="select" style={{ width: 'auto' }} value={sort} onChange={(e) => set('sort', e.target.value)} aria-label={t('Sort by')}>
                   {SORTS.map((s) => <option key={s.value} value={s.value}>{t(s.label)}</option>)}
                 </select>
@@ -196,11 +218,15 @@ export default function Browse() {
 
             {data && data.results.length > 0 && (
               <>
-                <div className="plant-grid" style={{ opacity: loading ? 0.55 : 1, transition: 'opacity 0.15s' }}>
-                  {data.results.map((p, i) => (
-                    <Reveal key={p.id} index={i % 8}><PlantCard plant={p} eager={i < 6} /></Reveal>
-                  ))}
-                </div>
+                {viewMode === 'map' ? (
+                  <PlantMap plants={data.results} />
+                ) : (
+                  <div className="plant-grid" style={{ opacity: loading ? 0.55 : 1, transition: 'opacity 0.15s' }}>
+                    {data.results.map((p, i) => (
+                      <Reveal key={p.id} index={i % 8}><PlantCard plant={p} eager={i < 6} /></Reveal>
+                    ))}
+                  </div>
+                )}
 
                 <div className="row" style={{ justifyContent: 'center', marginTop: 26 }}>
                   {data.has_more ? (

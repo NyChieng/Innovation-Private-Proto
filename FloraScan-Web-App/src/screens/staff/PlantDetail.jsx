@@ -6,6 +6,7 @@ import {
   ConfirmButton, ConservationBadge, CopyButton, Empty, LoadingBlock, Modal, Notice,
   PageHead, StatusBadge,
 } from '../../components/ui.jsx';
+import { SmartImage } from '../../components/motion.jsx';
 import PlantEditDialog from '../../components/PlantEdit.jsx';
 import { CONSERVATION, GROWTH_FORM, HEALTH, LIFE_STAGE, coords, formatDateTime, relativeTime, titleCase } from '../../lib/format.js';
 import * as I from '../../lib/icons.jsx';
@@ -48,12 +49,16 @@ function QrPanel({ plant }) {
 
       <div className="stack" style={{ '--gap': '14px' }}>
         <div>
-          <div className="label" style={{ marginBottom: 6 }}>{t('Printable tag preview')}</div>
-          <div className="qr-tag">
-            <img src={qr.png} alt="" style={{ width: 130, margin: '0 auto 8px' }} />
-            <div className="t-sci">{qr.scientific_name || plant.proposed_species_name}</div>
-            {qr.common_name && <div className="t-com">{qr.common_name}</div>}
-            <div className="t-code">{plant.plant_code}</div>
+          <div className="label no-print" style={{ marginBottom: 6 }}>{t('Printable tag preview')}</div>
+          <div className="print-region print-one">
+            <div className="qr-tag">
+              <img src={qr.png} alt="" style={{ width: 130, margin: '0 auto 8px' }} />
+              <div className="t-sci">{qr.scientific_name || plant.proposed_species_name}</div>
+              {qr.common_name && <div className="t-com">{qr.common_name}</div>}
+              {plant.local_name && <div className="t-com" style={{ opacity: 0.75 }}>{plant.local_name}</div>}
+              <div className="t-code">{plant.plant_code}</div>
+              <div className="t-foot">{t('Scan for details · Niah National Park')}</div>
+            </div>
           </div>
         </div>
 
@@ -364,7 +369,12 @@ export default function PlantDetail() {
               {plant.photos.map((p) => (
                 <div className="card" key={p.id} style={{ overflow: 'hidden' }}>
                   <div style={{ aspectRatio: '4/3', background: 'var(--surface-3)' }}>
-                    <img src={p.file_path} alt={p.caption || ''} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <SmartImage
+                      src={p.file_path || p.remote_url}
+                      fallback={p.file_path ? p.remote_url : undefined}
+                      tint={p.tint}
+                      alt={p.caption || ''}
+                    />
                   </div>
                   <div style={{ padding: 11 }}>
                     {p.is_primary ? <span className="badge badge-ok" style={{ marginBottom: 5 }}>{t('Main image')}</span> : null}

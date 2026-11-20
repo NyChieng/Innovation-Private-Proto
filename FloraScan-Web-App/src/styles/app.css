@@ -52,6 +52,16 @@
    Top bar (public web)
    ================================================================== */
 
+.offline-bar {
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+  border-bottom: 1px solid var(--warn-br);
+  font-size: 0.8rem;
+  font-weight: 560;
+  padding: 6px 0;
+  text-align: center;
+}
+
 .topbar {
   position: sticky; top: 0; z-index: 60;
   background: color-mix(in srgb, var(--surface) 88%, transparent);
@@ -121,7 +131,7 @@
 
 .content { flex: 1; min-width: 0; }
 
-@media (max-width: 960px) { .sidebar { display: none; } }
+@media (max-width: 860px) { .sidebar { display: none; } }
 
 /* ==================================================================
    Cards & panels
