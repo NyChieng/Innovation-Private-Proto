@@ -399,6 +399,10 @@ export function PhotoSlideshow({
   const [layers, setLayers] = useState([]);
   const onChangeRef = useRef(onChange);
   const ctrlRef = useRef(null);
+  // Lives outside the effect: the effect re-runs when `items` changes, but the
+  // previous top layer stays in `layers`, so a counter reset to 0 would hand the
+  // next slide the same React key as the layer it fades over.
+  const uidRef = useRef(0);
   onChangeRef.current = onChange;
 
   useEffect(() => {
@@ -408,7 +412,6 @@ export function PhotoSlideshow({
     }
 
     let cancelled = false;
-    let uid = 0;
     let cursor = 0;
     let gen = 0;
     let activeId = null;
@@ -445,7 +448,7 @@ export function PhotoSlideshow({
     const showSlide = (slide) => {
       if (cancelled || !slide) return;
       activeId = slide.id ?? slide.resolvedUrl;
-      const myUid = ++uid;
+      const myUid = ++uidRef.current;
       const immediate = reduced();
       const newLayer = { uid: myUid, url: slide.resolvedUrl, item: slide, visible: immediate };
 
