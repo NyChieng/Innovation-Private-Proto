@@ -225,8 +225,10 @@ const boot = bootId();
     check('time is the server\'s clock in UTC (within 60 s of now)',
       Math.abs(new Date(row.recorded_at).getTime() - Date.now()) < 60000, String(row.recorded_at));
   }
-  const [dev] = await rows('SELECT last_seen_at FROM sensor_devices WHERE id = ?', [deviceId]);
-  check('the device\'s last_seen_at is updated', !!dev.last_seen_at);
+  // The server saves the reading first and stamps the device after, so the row
+  // can be visible a moment before last_seen_at is; wait rather than race it.
+  const seen = await waitFor(async () => (await rows('SELECT last_seen_at FROM sensor_devices WHERE id = ?', [deviceId]))[0]?.last_seen_at, 5000, 20);
+  check('the device\'s last_seen_at is updated', !!seen);
 }
 
 section('3. Sequence protection: retries, restarts and replays (newest commit)');

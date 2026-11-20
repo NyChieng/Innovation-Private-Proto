@@ -436,6 +436,8 @@ section('6. Registration form - input validation');
   await waitFor(() => /\/staff\/plants\/\d+/.test(page.url()));
 
   check('a valid submission navigates to the new record', /\/staff\/plants\/\d+/.test(page.url()), page.url());
+  // The URL changes before the record has loaded; wait for its content, not just the header.
+  await waitFor(async () => /Pending review/i.test(await bodyText(page)));
   text = await bodyText(page);
   check('...and the record shows as pending review', /Pending review/i.test(text), text.slice(0, 200));
   check('...carrying the name the botanist typed', /Testus uiensis/.test(text));
