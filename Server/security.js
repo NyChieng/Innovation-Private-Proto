@@ -48,6 +48,9 @@ export function createApiRateLimits() {
   router.post('/users/:id/reset-password', limiter('passwordReset'));
   // Registration is the endpoint that accepts base64 photograph uploads.
   router.post('/plants', limiter('upload'));
+  // The AI camera posts a snapshot with each alert; it has its own cooldown,
+  // so 10 a minute per address is plenty and caps a leaked device key.
+  router.post('/camera/alerts', limiter('upload'));
   return router;
 }
 

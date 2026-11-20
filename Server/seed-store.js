@@ -34,6 +34,8 @@ export const store = {
   sensor_devices: [],  // IoT: the real-kit node, added in seed.js
   sensor_readings: [],
   sensor_alerts: [],
+  camera_devices: [],  // AI camera (ai-vision-node), added in seed.js
+  camera_alerts: [],
 };
 
 /** Alias kept so seed.js reads the same as it always did. */

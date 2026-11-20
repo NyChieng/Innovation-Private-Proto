@@ -29,6 +29,7 @@ import cv2
 import numpy as np
 
 from engine import EXPORT, Models
+from notifier import AlertSender
 from touchcrop import cut, hand_box
 from tracker import Tracker, iou
 
@@ -66,6 +67,12 @@ DEFAULTS = {
     "max_fps": 15,              # processing cap (the camera may deliver more)
     "after_hours": False,
     "open_hours": "08:00-17:00",
+    # Send ALERT / AFTER-HOURS snapshots to the FloraScan web app (rangers). Empty = off.
+    # See app/notifier.py; FLORAGUARD_* environment variables take precedence.
+    "server_url": "",
+    "camera_code": "CAM-001",
+    "camera_key": "",
+    "server_ca": "",
 }
 
 
@@ -111,6 +118,7 @@ class FloraGuard:
         self.models = Models(self.cfg["backend"], self.cfg["threads"])
         self.snap_dir = Path(snapshot_dir)
         self.snap_dir.mkdir(parents=True, exist_ok=True)
+        self.sender = AlertSender(self.cfg)
         self.reset()
 
     def reset(self):
@@ -400,7 +408,9 @@ class FloraGuard:
         x0, y0, x1, y1 = map(int, p["box"])
         cv2.rectangle(img, (x0, y0), (x1, y1), COLOURS.get(tier, (0, 0, 255)), 3)
         cv2.imwrite(snap, img)
-        out.append(Event(now, tier, tid, detail, snap))
+        ev = Event(now, tier, tid, detail, snap)
+        out.append(ev)
+        self.sender.send(ev)  # to the rangers, if a server is configured
 
     def _open(self, now):
         a, b = self.cfg["open_hours"].split("-")

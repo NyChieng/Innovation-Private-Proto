@@ -1,0 +1,329 @@
+{
+  "video": "look plants 2.mp4",
+  "slug": "look_plants_2",
+  "resolution": "1920x1080",
+  "fps": 25.0,
+  "frames": 275,
+  "duration_s": 11.0,
+  "expected": "ALERT",
+  "alert_raised": true,
+  "passed": true,
+  "first_seen": {
+    "WARNING": 0.0,
+    "ALERT": 0.12,
+    "SAFE": 0.72
+  },
+  "stage_frames": {
+    "SAFE": 1,
+    "WARNING": 210,
+    "ALERT": 64
+  },
+  "stage_seconds": {
+    "SAFE": 0.04,
+    "WARNING": 8.4,
+    "ALERT": 2.56
+  },
+  "max_people": 1,
+  "max_animals": 0,
+  "max_plants": 3,
+  "frames_with_plant": 275,
+  "frames_with_hand": 239,
+  "peak_touch_p": 0.938,
+  "peak_touch_t": 1.04,
+  "frames_touch_ge_06": 77,
+  "condition": "shake",
+  "zone": [
+    [
+      0.2,
+      0.62
+    ],
+    [
+      0.95,
+      0.62
+    ],
+    [
+      0.95,
+      1.0
+    ],
+    [
+      0.2,
+      1.0
+    ]
+  ],
+  "events": [
+    {
+      "t": 0.0,
+      "tier": "WARNING",
+      "track_id": 1,
+      "detail": "hand inside the plant buffer",
+      "snapshot": ""
+    },
+    {
+      "t": 0.12,
+      "tier": "ALERT",
+      "track_id": 1,
+      "detail": "touching the plant (touch model p=0.77)",
+      "snapshot": "snapshots/20270115_160000_ALERT_1.jpg"
+    },
+    {
+      "t": 10.0,
+      "tier": "WARNING",
+      "track_id": 1,
+      "detail": "hand inside the plant buffer",
+      "snapshot": ""
+    },
+    {
+      "t": 10.28,
+      "tier": "ALERT",
+      "track_id": 1,
+      "detail": "touching the plant (hand on plant + leaf motion, touch model p=0.25)",
+      "snapshot": "snapshots/20270115_160010_ALERT_1.jpg"
+    }
+  ],
+  "keyframes": [
+    {
+      "t": 0.0,
+      "stage": "WARNING",
+      "file": "keyframes/0000_WARNING.jpg",
+      "why": "first frame"
+    },
+    {
+      "t": 0.12,
+      "stage": "ALERT",
+      "file": "keyframes/0003_ALERT.jpg",
+      "why": "WARNING -> ALERT"
+    },
+    {
+      "t": 0.44,
+      "stage": "WARNING",
+      "file": "keyframes/0011_WARNING.jpg",
+      "why": "ALERT -> WARNING"
+    },
+    {
+      "t": 0.68,
+      "stage": "ALERT",
+      "file": "keyframes/0017_ALERT.jpg",
+      "why": "WARNING -> ALERT"
+    },
+    {
+      "t": 0.72,
+      "stage": "SAFE",
+      "file": "keyframes/0018_SAFE.jpg",
+      "why": "ALERT -> SAFE"
+    },
+    {
+      "t": 0.76,
+      "stage": "WARNING",
+      "file": "keyframes/0019_WARNING.jpg",
+      "why": "SAFE -> WARNING"
+    },
+    {
+      "t": 0.88,
+      "stage": "ALERT",
+      "file": "keyframes/0022_ALERT.jpg",
+      "why": "WARNING -> ALERT"
+    },
+    {
+      "t": 0.92,
+      "stage": "WARNING",
+      "file": "keyframes/0023_WARNING.jpg",
+      "why": "ALERT -> WARNING"
+    },
+    {
+      "t": 1.08,
+      "stage": "ALERT",
+      "file": "keyframes/0027_ALERT.jpg",
+      "why": "WARNING -> ALERT"
+    },
+    {
+      "t": 1.2,
+      "stage": "WARNING",
+      "file": "keyframes/0030_WARNING.jpg",
+      "why": "ALERT -> WARNING"
+    },
+    {
+      "t": 1.52,
+      "stage": "ALERT",
+      "file": "keyframes/0038_ALERT.jpg",
+      "why": "WARNING -> ALERT"
+    },
+    {
+      "t": 1.64,
+      "stage": "WARNING",
+      "file": "keyframes/0041_WARNING.jpg",
+      "why": "ALERT -> WARNING"
+    },
+    {
+      "t": 3.28,
+      "stage": "ALERT",
+      "file": "keyframes/0082_ALERT.jpg",
+      "why": "WARNING -> ALERT"
+    },
+    {
+      "t": 3.32,
+      "stage": "WARNING",
+      "file": "keyframes/0083_WARNING.jpg",
+      "why": "ALERT -> WARNING"
+    },
+    {
+      "t": 3.68,
+      "stage": "ALERT",
+      "file": "keyframes/0092_ALERT.jpg",
+      "why": "WARNING -> ALERT"
+    },
+    {
+      "t": 4.04,
+      "stage": "WARNING",
+      "file": "keyframes/0101_WARNING.jpg",
+      "why": "ALERT -> WARNING"
+    },
+    {
+      "t": 4.88,
+      "stage": "ALERT",
+      "file": "keyframes/0122_ALERT.jpg",
+      "why": "WARNING -> ALERT"
+    },
+    {
+      "t": 5.04,
+      "stage": "WARNING",
+      "file": "keyframes/0126_WARNING.jpg",
+      "why": "ALERT -> WARNING"
+    },
+    {
+      "t": 6.64,
+      "stage": "ALERT",
+      "file": "keyframes/0166_ALERT.jpg",
+      "why": "WARNING -> ALERT"
+    },
+    {
+      "t": 6.72,
+      "stage": "WARNING",
+      "file": "keyframes/0168_WARNING.jpg",
+      "why": "ALERT -> WARNING"
+    },
+    {
+      "t": 7.32,
+      "stage": "ALERT",
+      "file": "keyframes/0183_ALERT.jpg",
+      "why": "WARNING -> ALERT"
+    },
+    {
+      "t": 7.44,
+      "stage": "WARNING",
+      "file": "keyframes/0186_WARNING.jpg",
+      "why": "ALERT -> WARNING"
+    },
+    {
+      "t": 7.6,
+      "stage": "ALERT",
+      "file": "keyframes/0190_ALERT.jpg",
+      "why": "WARNING -> ALERT"
+    },
+    {
+      "t": 7.72,
+      "stage": "WARNING",
+      "file": "keyframes/0193_WARNING.jpg",
+      "why": "ALERT -> WARNING"
+    },
+    {
+      "t": 7.88,
+      "stage": "ALERT",
+      "file": "keyframes/0197_ALERT.jpg",
+      "why": "WARNING -> ALERT"
+    },
+    {
+      "t": 7.92,
+      "stage": "WARNING",
+      "file": "keyframes/0198_WARNING.jpg",
+      "why": "ALERT -> WARNING"
+    },
+    {
+      "t": 8.2,
+      "stage": "ALERT",
+      "file": "keyframes/0205_ALERT.jpg",
+      "why": "WARNING -> ALERT"
+    },
+    {
+      "t": 8.32,
+      "stage": "WARNING",
+      "file": "keyframes/0208_WARNING.jpg",
+      "why": "ALERT -> WARNING"
+    },
+    {
+      "t": 8.48,
+      "stage": "ALERT",
+      "file": "keyframes/0212_ALERT.jpg",
+      "why": "WARNING -> ALERT"
+    },
+    {
+      "t": 8.52,
+      "stage": "WARNING",
+      "file": "keyframes/0213_WARNING.jpg",
+      "why": "ALERT -> WARNING"
+    },
+    {
+      "t": 8.68,
+      "stage": "ALERT",
+      "file": "keyframes/0217_ALERT.jpg",
+      "why": "WARNING -> ALERT"
+    },
+    {
+      "t": 9.28,
+      "stage": "WARNING",
+      "file": "keyframes/0232_WARNING.jpg",
+      "why": "ALERT -> WARNING"
+    },
+    {
+      "t": 9.8,
+      "stage": "ALERT",
+      "file": "keyframes/0245_ALERT.jpg",
+      "why": "WARNING -> ALERT"
+    },
+    {
+      "t": 9.84,
+      "stage": "WARNING",
+      "file": "keyframes/0246_WARNING.jpg",
+      "why": "ALERT -> WARNING"
+    },
+    {
+      "t": 10.28,
+      "stage": "ALERT",
+      "file": "keyframes/0257_ALERT.jpg",
+      "why": "WARNING -> ALERT"
+    },
+    {
+      "t": 10.44,
+      "stage": "WARNING",
+      "file": "keyframes/0261_WARNING.jpg",
+      "why": "ALERT -> WARNING"
+    },
+    {
+      "t": 10.92,
+      "stage": "ALERT",
+      "file": "keyframes/0273_ALERT.jpg",
+      "why": "WARNING -> ALERT"
+    },
+    {
+      "t": 10.96,
+      "stage": "WARNING",
+      "file": "keyframes/0274_WARNING.jpg",
+      "why": "ALERT -> WARNING"
+    },
+    {
+      "t": 1.04,
+      "stage": "peak",
+      "file": "keyframes/peak_touch.jpg",
+      "why": "highest touch probability 0.94"
+    }
+  ],
+  "backend": "cuda",
+  "codec": "avc1",
+  "processing": {
+    "wall_s": 17.7,
+    "avg_ms": 35.5,
+    "p95_ms": 38.5,
+    "avg_model_ms": 35.5,
+    "model_frames": 275,
+    "effective_fps": 15.5
+  }
+}

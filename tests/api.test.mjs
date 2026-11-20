@@ -955,7 +955,11 @@ section('17f. Two-step verification with an authenticator app');
 section('18. QR codes');
 {
   const plant = (await get('/public/plants')).body.results[0];
-  const qr = await get(`/qr/${plant.id}`);
+  // Staff only: the reply names the plant even before it is published.
+  eq('signed out, nobody can fetch a QR code', (await get(`/qr/${plant.id}`)).status, 401);
+  eq('a ranger (no plant permission) cannot', (await get(`/qr/${plant.id}`, rangerT)).status, 403);
+  eq('an administrator (no plant permission) cannot', (await get(`/qr/${plant.id}`, adminT)).status, 403);
+  const qr = await get(`/qr/${plant.id}`, botT);
   eq('a QR payload is returned', qr.status, 200);
   check('...as a PNG data URL', (qr.body.png || '').startsWith('data:image/png;base64,'));
   check('...and as SVG', (qr.body.svg || '').includes('<svg'));
@@ -963,7 +967,7 @@ section('18. QR codes');
   check('the token is a UUID, not a database id',
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(qr.body.qr_token || ''));
 
-  const again = await get(`/qr/${plant.id}`);
+  const again = await get(`/qr/${plant.id}`, botT);
   eq('the token is stable across requests', again.body.qr_token, qr.body.qr_token);
 }
 
@@ -1000,6 +1004,84 @@ section('20. IoT monitoring');
     (await post('/sensors/alerts/999999/resolve', { note: 'x' }, botT)).status, 403);
   eq('a ranger can, and gets a 404 for an alert that does not exist',
     (await post('/sensors/alerts/999999/resolve', { note: 'x' }, rangerT)).status, 404);
+}
+
+/* ------------------------------------------------------------------ */
+section('20b. AI camera alerts reach the rangers, with the snapshot');
+{
+  // A real (1 x 1) JPEG; the server checks the JPEG signature.
+  const JPEG = '/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=';
+  const camera = (headers, body) => fetch(ORIGIN + '/api/camera/alerts', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...headers },
+    body: JSON.stringify(body),
+  }).then(async (r) => ({ status: r.status, body: await r.json().catch(() => null) }));
+  const signed = { 'X-Camera-Code': 'CAM-001', 'X-Camera-Key': 'demo-camera-key-change-me' };
+  const event = { tier: 'ALERT', track_id: 7, detail: 'touch 0.91 (test)', photo: JPEG };
+
+  eq('no camera key: refused', (await camera({}, event)).status, 401);
+  eq('a wrong key: refused', (await camera({ ...signed, 'X-Camera-Key': 'guess' }, event)).status, 401);
+  eq('an unknown camera: the same answer', (await camera({ ...signed, 'X-Camera-Code': 'CAM-999' }, event)).status, 401);
+  eq('a staff session is not a camera key', (await call('POST', '/camera/alerts', { token: rangerT, body: event })).status, 401);
+  eq('a warning tier (no picture) is refused', (await camera(signed, { ...event, tier: 'WARNING' })).status, 400);
+  eq('a picture that is not a JPEG is refused',
+    (await camera(signed, { ...event, photo: Buffer.from('<svg onload=alert(1)>').toString('base64') })).status, 400);
+  eq('no picture is refused', (await camera(signed, { ...event, photo: '' })).status, 400);
+  const big = Buffer.alloc(950 * 1024, 0); big[0] = 0xff; big[1] = 0xd8; big[2] = 0xff;
+  eq('a snapshot over 900 KB is refused', (await camera(signed, { ...event, photo: big.toString('base64') })).status, 413);
+
+  const made = await camera(signed, event);
+  eq('the camera reports an alert with its snapshot', made.status, 201);
+  const id = made.body?.id;
+  check('...and gets the alert id back', Number.isInteger(id), JSON.stringify(made.body));
+
+  const told = (notes) => (notes.body?.results || []).find((n) => n.related_type === 'camera_alert' && n.related_id === id);
+  const forRanger = told(await get('/notifications', rangerT));
+  check('the ranger is notified', !!forRanger);
+  eq('...as a camera alert', forRanger?.type, 'camera.alert');
+  check('...titled with the camera', /^Camera alert: CAM-001$/.test(forRanger?.title || ''), forRanger?.title);
+  check('the botanist is not notified', !told(await get('/notifications', botT)));
+  check('the administrator is not notified', !told(await get('/notifications', adminT)));
+  check('the reviewer is not notified', !told(await get('/notifications', revT)));
+
+  const photo = (t) => fetch(`${ORIGIN}/api/sensors/camera-alerts/${id}/photo`, { headers: t ? { Authorization: 'Bearer ' + t } : {} });
+  const asRanger = await photo(rangerT);
+  eq('the ranger can open the snapshot', asRanger.status, 200);
+  eq('...served as a JPEG', asRanger.headers.get('content-type'), 'image/jpeg');
+  check('...never kept by a shared cache', /no-store/.test(asRanger.headers.get('cache-control') || ''), asRanger.headers.get('cache-control'));
+  eq('...byte for byte what the camera sent',
+    Buffer.from(await asRanger.arrayBuffer()).toString('base64'), Buffer.from(JPEG, 'base64').toString('base64'));
+  eq('signed out, nobody can open it', (await photo()).status, 401);
+  eq('a reviewer (no sensor.view) cannot', (await photo(revT)).status, 403);
+  eq('an administrator (no sensor.view) cannot', (await photo(adminT)).status, 403);
+
+  const dash = await get('/sensors', rangerT);
+  const listed = dash.body?.camera_alerts?.find((a) => a.id === id);
+  check('the IoT dashboard lists it as open', listed?.status === 'open', JSON.stringify(listed));
+  check('...without the picture bytes in the list', listed && !('photo' in listed));
+  eq('...pointing at the protected picture', listed?.photo_url, `/api/sensors/camera-alerts/${id}/photo`);
+
+  eq('a botanist cannot resolve a camera alert', (await post(`/sensors/camera-alerts/${id}/resolve`, {}, botT)).status, 403);
+  const done = await post(`/sensors/camera-alerts/${id}/resolve`, { note: 'Visitor reminded not to touch' }, rangerT);
+  eq('the ranger resolves it', done.status, 200);
+  eq('...with the note', done.body?.alert?.resolution_note, 'Visitor reminded not to touch');
+  eq('resolving it twice is refused', (await post(`/sensors/camera-alerts/${id}/resolve`, {}, rangerT)).status, 409);
+
+  // With no mail account configured the server writes each email to the outbox.
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+  const outbox = path.join(path.dirname(path.dirname(fileURLToPath(import.meta.url))), '.outbox.log');
+  if (fs.existsSync(outbox)) {
+    let mails = [];
+    for (let i = 0; i < 30 && !mails.length; i++) {
+      mails = fs.readFileSync(outbox, 'utf8').trim().split('\n').map((l) => { try { return JSON.parse(l); } catch { return null; } })
+        .filter((m) => m && /camera alert/i.test(m.subject) && (m.attachments || []).some((a) => a.filename === `camera-alert-${id}.jpg`));
+      if (!mails.length) await new Promise((r) => setTimeout(r, 100));
+    }
+    check('the ranger is emailed, with the snapshot attached', mails.some((m) => m.to === RANGER && m.attachments[0].bytes > 0), JSON.stringify(mails.map((m) => m.to)));
+    check('...and nobody without alert.resolve is', !mails.some((m) => [ADMIN, BOTANIST, BOTANIST_2, REVIEWER].includes(m.to)));
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -1252,7 +1334,7 @@ section('28. A printed tag points somewhere a phone can reach');
   // The address must never come from the browser that asked for the code: a
   // botanist printing tags is on localhost, and a tag encoding localhost sends
   // every phone that scans it to its own device.
-  const spoofed = await get(`/qr/${plant.id}?origin=${encodeURIComponent('https://localhost:9999')}`);
+  const spoofed = await get(`/qr/${plant.id}?origin=${encodeURIComponent('https://localhost:9999')}`, botT);
   eq('a QR code is produced', spoofed.status, 200);
   check('the caller cannot dictate the address', !spoofed.body.target_url.includes('localhost:9999'),
     spoofed.body.target_url);
@@ -1262,7 +1344,7 @@ section('28. A printed tag points somewhere a phone can reach');
     !/^(localhost|127\.|::1)/.test(url.hostname), url.hostname);
   check('...and it carries the opaque token', url.pathname.includes(spoofed.body.qr_token));
 
-  const plain = await get(`/qr/${plant.id}`);
+  const plain = await get(`/qr/${plant.id}`, botT);
   eq('the address is the same with no origin given', plain.body.target_url, spoofed.body.target_url);
 
   // Following the encoded URL has to land on that plant.
@@ -1273,18 +1355,18 @@ section('28. A printed tag points somewhere a phone can reach');
 
   // A park with a real domain configures it, and tags then carry that instead.
   await patch('/settings/public_base_url', { value: 'https://florascan.example.gov.my' }, adminT);
-  const configured = await get(`/qr/${plant.id}`);
+  const configured = await get(`/qr/${plant.id}`, botT);
   check('a configured public address wins',
     configured.body.target_url.startsWith('https://florascan.example.gov.my/p/'),
     configured.body.target_url);
 
   await patch('/settings/public_base_url', { value: 'https://florascan.example.gov.my/' }, adminT);
-  const trailing = await get(`/qr/${plant.id}`);
+  const trailing = await get(`/qr/${plant.id}`, botT);
   check('a trailing slash does not double up',
     !trailing.body.target_url.includes('//p/'), trailing.body.target_url);
 
   await patch('/settings/public_base_url', { value: '' }, adminT);
-  const back = await get(`/qr/${plant.id}`);
+  const back = await get(`/qr/${plant.id}`, botT);
   check('clearing it falls back to the network address',
     !back.body.target_url.includes('example.gov.my'), back.body.target_url);
 }
@@ -1395,7 +1477,7 @@ section('32. Uploading a photograph');
     }, botT);
     eq('a plant with a photograph is accepted', made.status, 201);
     check('the photograph is served from a path, not stored as a data URL',
-      /^\/api\/photos\/upload\/\d+$/.test(made.body.plant.photo || ''), made.body.plant.photo);
+      /^\/api\/photos\/upload\/\d+(\?exp=\d+&sig=[\w-]+)?$/.test(made.body.plant.photo || ''), made.body.plant.photo);
 
     // A botanist's record waits for review, so its photograph is only visible
     // to the uploader (and staff) until it is approved - fetch it as them.
@@ -1438,12 +1520,26 @@ section('32. Uploading a photograph');
       photos: [{ data_url: dataUrl }],
     }, botT);
     eq('a botanist entry with a photograph is accepted', pending.status, 201);
-    const anon = await fetch(ORIGIN + pending.body.plant.photo);
+    const plainPath = pending.body.plant.photo.split('?')[0];
+    const anon = await fetch(ORIGIN + plainPath);
     eq('its photograph is not public while the record is pending', anon.status, 404);
-    const asStaff = await fetch(ORIGIN + pending.body.plant.photo, {
+    const asStaff = await fetch(ORIGIN + plainPath, {
       headers: { Authorization: 'Bearer ' + revT },
     });
     eq('...but the reviewer checking it can see it', asStaff.status, 200);
+    check('...kept out of shared caches', /private/.test(asStaff.headers.get('cache-control') || ''), asStaff.headers.get('cache-control'));
+
+    // The app shows photographs with <img>, which cannot send the session
+    // token, so the reviewer's copy of the record carries a signed address.
+    const forReviewer = await get(`/public/plants/${pending.body.plant.id}`, revT);
+    const signedPath = forReviewer.body?.plant?.photo || '';
+    check('the reviewer is given a signed address for it', /\?exp=\d+&sig=/.test(signedPath), signedPath);
+    eq('...which an <img> (no token) can load', (await fetch(ORIGIN + signedPath)).status, 200);
+    eq('...but not with the signature altered', (await fetch(ORIGIN + signedPath.replace(/sig=./, 'sig=Z'))).status, 404);
+    eq('...nor for another photograph', (await fetch(ORIGIN + signedPath.replace(/upload\/\d+/, 'upload/1'))).status, 404);
+    const forRanger = await get(`/public/plants/${pending.body.plant.id}`, rangerT);
+    check('a ranger, who cannot open the record, gets no signed address',
+      forRanger.status !== 200 || !/sig=/.test(forRanger.body?.plant?.photo || ''), `${forRanger.status} ${forRanger.body?.plant?.photo}`);
   }
 }
 

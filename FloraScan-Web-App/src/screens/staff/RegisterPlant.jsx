@@ -105,6 +105,43 @@ function SpeciesPicker({ value, proposed, onPick, onPropose }) {
 
 /* ------------------------------------------------------------------ */
 
+/**
+ * A phone photograph is 2-5 MB, and a stock XAMPP MariaDB refuses anything over
+ * 1 MB (max_allowed_packet), so registering with one failed. Scale it to at
+ * most 1600 pixels on the long side as a JPEG, about 200-500 KB - plenty for
+ * identifying a plant, and quicker on a field connection. A small picture, or
+ * one the browser cannot decode, is sent unchanged.
+ */
+const MAX_SIDE = 1600;
+const KEEP_UNDER = 700 * 1024;
+async function shrinkPhoto(dataUrl) {
+  const approxBytes = (dataUrl.length - dataUrl.indexOf(',') - 1) * 3 / 4;
+  try {
+    const img = await new Promise((res, rej) => {
+      const i = new Image();
+      i.onload = () => res(i);
+      i.onerror = rej;
+      i.src = dataUrl;
+    });
+    const scale = Math.min(1, MAX_SIDE / Math.max(img.naturalWidth, img.naturalHeight));
+    if (scale === 1 && approxBytes <= KEEP_UNDER) return dataUrl;
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(img.naturalWidth * scale);
+    canvas.height = Math.round(img.naturalHeight * scale);
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff'; // a transparent PNG would otherwise turn black as a JPEG
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    for (const quality of [0.85, 0.75, 0.6]) {
+      const out = canvas.toDataURL('image/jpeg', quality);
+      if ((out.length - out.indexOf(',') - 1) * 3 / 4 <= KEEP_UNDER) return out;
+    }
+    return canvas.toDataURL('image/jpeg', 0.5);
+  } catch {
+    return dataUrl;
+  }
+}
+
 function PhotoCapture({ photos, setPhotos }) {
   const fileRef = useRef(null);
   const [busy, setBusy] = useState(false);
@@ -113,12 +150,15 @@ function PhotoCapture({ photos, setPhotos }) {
     setBusy(true);
     const next = [];
     for (const file of Array.from(files).slice(0, 6 - photos.length)) {
-      const data_url = await new Promise((res) => {
+      const original = await new Promise((res) => {
         const fr = new FileReader();
         fr.onload = () => res(fr.result);
         fr.readAsDataURL(file);
       });
-      next.push({ data_url, file_name: file.name, mime_type: file.type, size_bytes: file.size });
+      const data_url = await shrinkPhoto(original);
+      const size_bytes = Math.round((data_url.length - data_url.indexOf(',') - 1) * 3 / 4);
+      const mime_type = data_url.slice(5, data_url.indexOf(';'));
+      next.push({ data_url, file_name: file.name, mime_type, size_bytes });
     }
     setPhotos([...photos, ...next]);
     setBusy(false);

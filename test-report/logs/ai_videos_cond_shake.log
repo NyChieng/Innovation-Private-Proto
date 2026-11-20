@@ -1,0 +1,61 @@
+YOLO26s summary (fused): 120 layers, 9,466,341 parameters, 0 gradients, 20.8 GFLOPs
+YOLO26s-pose summary (fused): 129 layers, 10,359,750 parameters, 0 gradients, 24.1 GFLOPs
+YOLO26s-cls summary (fused): 47 layers, 5,436,690 parameters, 0 gradients, 12.1 GFLOPs
+
+Failed to load OpenH264 library: openh264-2.5.0-win64.dll
+	Please check environment and/or download library: https://github.com/cisco/openh264/releases
+
+[libopenh264 @ 0000011f83e98d40] Unable to create encoder
+[ERROR:0@1.784] global cap_ffmpeg_impl.hpp:3568 open Could not open codec libopenh264, error: Unspecified error (-1313558101)
+[ERROR:0@1.784] global cap_ffmpeg_impl.hpp:3585 open VIDEOIO/FFMPEG: Failed to initialize VideoWriter
+PASS  look plants 2        expect=ALERT    alert=True  first={'WARNING': 0.0, 'ALERT': 0.12, 'SAFE': 0.72}  peak_p=0.94  events=[(0.0, 'WARNING'), (0.12, 'ALERT'), (10.0, 'WARNING'), (10.28, 'ALERT')]  15.5 fps
+YOLO26s summary (fused): 120 layers, 9,466,341 parameters, 0 gradients, 20.8 GFLOPs
+YOLO26s-pose summary (fused): 129 layers, 10,359,750 parameters, 0 gradients, 24.1 GFLOPs
+YOLO26s-cls summary (fused): 47 layers, 5,436,690 parameters, 0 gradients, 12.1 GFLOPs
+[libopenh264 @ 0000011f8208c2c0] Unable to create encoder
+[ERROR:0@19.990] global cap_ffmpeg_impl.hpp:3568 open Could not open codec libopenh264, error: Unspecified error (-1313558101)
+[ERROR:0@19.990] global cap_ffmpeg_impl.hpp:3585 open VIDEOIO/FFMPEG: Failed to initialize VideoWriter
+PASS  look plants          expect=NO_ALERT alert=False  first={'SAFE': 0.0, 'WARNING': 1.0}  peak_p=0.00  events=[(1.0, 'WARNING')]  11.2 fps
+YOLO26s summary (fused): 120 layers, 9,466,341 parameters, 0 gradients, 20.8 GFLOPs
+YOLO26s-pose summary (fused): 129 layers, 10,359,750 parameters, 0 gradients, 24.1 GFLOPs
+YOLO26s-cls summary (fused): 47 layers, 5,436,690 parameters, 0 gradients, 12.1 GFLOPs
+[libopenh264 @ 0000011f89249e40] Unable to create encoder
+[ERROR:0@48.997] global cap_ffmpeg_impl.hpp:3568 open Could not open codec libopenh264, error: Unspecified error (-1313558101)
+[ERROR:0@48.997] global cap_ffmpeg_impl.hpp:3585 open VIDEOIO/FFMPEG: Failed to initialize VideoWriter
+PASS  touch plants 2       expect=ALERT    alert=True  first={'WARNING': 0.0, 'ALERT': 0.16, 'SAFE': 0.24}  peak_p=0.97  events=[(0.0, 'WARNING'), (0.16, 'ALERT')]  5.7 fps
+YOLO26s summary (fused): 120 layers, 9,466,341 parameters, 0 gradients, 20.8 GFLOPs
+YOLO26s-pose summary (fused): 129 layers, 10,359,750 parameters, 0 gradients, 24.1 GFLOPs
+YOLO26s-cls summary (fused): 47 layers, 5,436,690 parameters, 0 gradients, 12.1 GFLOPs
+[libopenh264 @ 0000011f1633eec0] Unable to create encoder
+[ERROR:0@77.246] global cap_ffmpeg_impl.hpp:3568 open Could not open codec libopenh264, error: Unspecified error (-1313558101)
+[ERROR:0@77.246] global cap_ffmpeg_impl.hpp:3585 open VIDEOIO/FFMPEG: Failed to initialize VideoWriter
+PASS  touch plants 3       expect=ALERT    alert=True  first={'WARNING': 0.0, 'ALERT': 0.12, 'SAFE': 3.84}  peak_p=0.95  events=[(0.0, 'WARNING'), (0.12, 'ALERT'), (4.28, 'WARNING'), (4.6, 'ALERT')]  5.7 fps
+YOLO26s summary (fused): 120 layers, 9,466,341 parameters, 0 gradients, 20.8 GFLOPs
+YOLO26s-pose summary (fused): 129 layers, 10,359,750 parameters, 0 gradients, 24.1 GFLOPs
+YOLO26s-cls summary (fused): 47 layers, 5,436,690 parameters, 0 gradients, 12.1 GFLOPs
+[libopenh264 @ 0000011f89c65200] Unable to create encoder
+[ERROR:0@118.923] global cap_ffmpeg_impl.hpp:3568 open Could not open codec libopenh264, error: Unspecified error (-1313558101)
+[ERROR:0@118.923] global cap_ffmpeg_impl.hpp:3585 open VIDEOIO/FFMPEG: Failed to initialize VideoWriter
+PASS  touch plants 4       expect=ALERT    alert=True  first={'WARNING': 0.0, 'ALERT': 0.06, 'SAFE': 2.2}  peak_p=1.00  events=[(0.0, 'WARNING'), (0.06, 'ALERT'), (6.04, 'WARNING')]  5.7 fps
+YOLO26s summary (fused): 120 layers, 9,466,341 parameters, 0 gradients, 20.8 GFLOPs
+YOLO26s-pose summary (fused): 129 layers, 10,359,750 parameters, 0 gradients, 24.1 GFLOPs
+YOLO26s-cls summary (fused): 47 layers, 5,436,690 parameters, 0 gradients, 12.1 GFLOPs
+[libopenh264 @ 0000011f8871cbc0] Unable to create encoder
+[ERROR:0@192.322] global cap_ffmpeg_impl.hpp:3568 open Could not open codec libopenh264, error: Unspecified error (-1313558101)
+[ERROR:0@192.322] global cap_ffmpeg_impl.hpp:3585 open VIDEOIO/FFMPEG: Failed to initialize VideoWriter
+PASS  touch plants         expect=ALERT    alert=True  first={'WARNING': 0.0, 'ALERT': 0.12}  peak_p=0.99  events=[(0.0, 'WARNING'), (0.12, 'ALERT'), (0.44, 'WARNING'), (0.68, 'ALERT'), (5.04, 'WARNING'), (5.16, 'ALERT'), (5.68, 'WARNING')]  12.8 fps
+YOLO26s summary (fused): 120 layers, 9,466,341 parameters, 0 gradients, 20.8 GFLOPs
+YOLO26s-pose summary (fused): 129 layers, 10,359,750 parameters, 0 gradients, 24.1 GFLOPs
+YOLO26s-cls summary (fused): 47 layers, 5,436,690 parameters, 0 gradients, 12.1 GFLOPs
+[libopenh264 @ 0000011f162c1400] Unable to create encoder
+[ERROR:0@207.449] global cap_ffmpeg_impl.hpp:3568 open Could not open codec libopenh264, error: Unspecified error (-1313558101)
+[ERROR:0@207.449] global cap_ffmpeg_impl.hpp:3585 open VIDEOIO/FFMPEG: Failed to initialize VideoWriter
+PASS  ivy_touch            expect=ALERT    alert=True  first={'SAFE': 0.0, 'WARNING': 0.58, 'ALERT': 5.8}  peak_p=0.98  events=[(0.58, 'WARNING'), (5.8, 'ALERT')]  15.4 fps
+YOLO26s summary (fused): 120 layers, 9,466,341 parameters, 0 gradients, 20.8 GFLOPs
+YOLO26s-pose summary (fused): 129 layers, 10,359,750 parameters, 0 gradients, 24.1 GFLOPs
+YOLO26s-cls summary (fused): 47 layers, 5,436,690 parameters, 0 gradients, 12.1 GFLOPs
+[libopenh264 @ 0000011f162c2a40] Unable to create encoder
+[ERROR:0@220.758] global cap_ffmpeg_impl.hpp:3568 open Could not open codec libopenh264, error: Unspecified error (-1313558101)
+[ERROR:0@220.758] global cap_ffmpeg_impl.hpp:3585 open VIDEOIO/FFMPEG: Failed to initialize VideoWriter
+PASS  video2_4k            expect=ALERT    alert=True  first={'WARNING': 0.0, 'ALERT': 1.32}  peak_p=0.98  events=[(0.0, 'WARNING'), (1.32, 'ALERT'), (4.56, 'WARNING'), (9.76, 'ALERT'), (10.0, 'WARNING'), (11.32, 'ALERT')]  5.1 fps
+8/8 clips gave the expected result

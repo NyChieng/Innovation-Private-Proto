@@ -1,0 +1,1980 @@
+{
+  "sets": {
+    "coco": {
+      "label": "COCO val2017 (everyday photos)",
+      "images": 3735,
+      "empty_images": 500,
+      "boxes": {
+        "person": 7811,
+        "plant": 320,
+        "animal": 2094
+      },
+      "night_ir_images": 139
+    },
+    "openimages": {
+      "label": "Open Images (web photos, wide species range)",
+      "images": 1679,
+      "empty_images": 0,
+      "boxes": {
+        "animal": 2605,
+        "person": 216,
+        "plant": 120
+      },
+      "night_ir_images": 21
+    },
+    "swg": {
+      "label": "SWG camera traps (forest, held-out sites)",
+      "images": 2247,
+      "empty_images": 294,
+      "boxes": {
+        "animal": 2145
+      },
+      "night_ir_images": 1108
+    }
+  },
+  "models": {
+    "deployed ONNX 640x384 (OpenVINO, what the app runs)": {
+      "device": "CPU 4 threads",
+      "ms_per_image": 82.61780467304517,
+      "by_set": {
+        "coco": {
+          "mAP50-95": 0.4657264857917938,
+          "mAP50": 0.6640395692270962,
+          "mAP75": 0.49725235737547613,
+          "AP_small": 0.15620587741706551,
+          "AP_medium": 0.4216104835040706,
+          "AP_large": 0.6053480368541729,
+          "AR100": 0.6495204677133095,
+          "per_class": {
+            "person": {
+              "AP50": 0.7797196318954012,
+              "AP50-95": 0.5388405658677087
+            },
+            "animal": {
+              "AP50": 0.8070847741635934,
+              "AP50-95": 0.6104255813244144
+            },
+            "plant": {
+              "AP50": 0.40531430162229404,
+              "AP50-95": 0.2479133101832585
+            }
+          },
+          "fold_mAP50_mean": 0.6720320885231905,
+          "fold_mAP50_std": 0.021305175429044646,
+          "at_app_thresholds": {
+            "precision": 0.8433041601726412,
+            "recall": 0.687921760391198,
+            "boxes_drawn": 8341,
+            "objects": 10225
+          },
+          "empty_images_with_false_alarm": {
+            "images": 500,
+            "with_any_box": 68
+          }
+        },
+        "openimages": {
+          "mAP50-95": 0.6180511829200501,
+          "mAP50": 0.781109635786432,
+          "mAP75": 0.6492138392639234,
+          "AP_small": 0.08093540846898362,
+          "AP_medium": 0.3116479150921858,
+          "AP_large": 0.6775430691505513,
+          "AR100": 0.7404199545034478,
+          "per_class": {
+            "person": {
+              "AP50": 0.7228387146946008,
+              "AP50-95": 0.5285656778487385
+            },
+            "animal": {
+              "AP50": 0.816731959332986,
+              "AP50-95": 0.6863300186767358
+            },
+            "plant": {
+              "AP50": 0.8037582333317094,
+              "AP50-95": 0.639257852234676
+            }
+          },
+          "fold_mAP50_mean": 0.787513313472701,
+          "fold_mAP50_std": 0.04048811022543117,
+          "at_app_thresholds": {
+            "precision": 0.9100288898060256,
+            "recall": 0.7497449846990819,
+            "boxes_drawn": 2423,
+            "objects": 2941
+          },
+          "empty_images_with_false_alarm": {
+            "images": 0,
+            "with_any_box": 0
+          }
+        },
+        "swg": {
+          "mAP50-95": 0.5377609527054175,
+          "mAP50": 0.7845758115185993,
+          "mAP75": 0.5748075156160146,
+          "AP_small": 0.0036785138498244712,
+          "AP_medium": 0.32204413841375085,
+          "AP_large": 0.6381233303967166,
+          "AR100": 0.6741724941724941,
+          "per_class": {
+            "person": {
+              "AP50": null,
+              "AP50-95": null
+            },
+            "animal": {
+              "AP50": 0.7845758115185993,
+              "AP50-95": 0.5377609527054175
+            },
+            "plant": {
+              "AP50": null,
+              "AP50-95": null
+            }
+          },
+          "fold_mAP50_mean": 0.7850036321930144,
+          "fold_mAP50_std": 0.00991282722239733,
+          "at_app_thresholds": {
+            "precision": 0.8607594936708861,
+            "recall": 0.6974358974358974,
+            "boxes_drawn": 1738,
+            "objects": 2145
+          },
+          "empty_images_with_false_alarm": {
+            "images": 294,
+            "with_any_box": 37
+          }
+        },
+        "all": {
+          "mAP50-95": 0.5077050891101823,
+          "mAP50": 0.7027808013684989,
+          "mAP75": 0.5395629764869496,
+          "AP_small": 0.14598066940349555,
+          "AP_medium": 0.3807670727907305,
+          "AP_large": 0.6585420446592294,
+          "AR100": 0.6663780139733536,
+          "per_class": {
+            "person": {
+              "AP50": 0.7774566780811554,
+              "AP50-95": 0.53836246108784
+            },
+            "animal": {
+              "AP50": 0.8031465184222949,
+              "AP50-95": 0.6183672401132929
+            },
+            "plant": {
+              "AP50": 0.5277392076020466,
+              "AP50-95": 0.36638556612941414
+            }
+          },
+          "fold_mAP50_mean": 0.7060863414297963,
+          "fold_mAP50_std": 0.01859438271267548,
+          "at_app_thresholds": {
+            "precision": 0.8586626139817629,
+            "recall": 0.7011299066030958,
+            "boxes_drawn": 12502,
+            "objects": 15311
+          },
+          "empty_images_with_false_alarm": {
+            "images": 794,
+            "with_any_box": 105
+          }
+        }
+      }
+    },
+    "det_B .pt 640 (ours)": {
+      "device": "GPU",
+      "ms_per_image": 41.78595760339465,
+      "by_set": {
+        "coco": {
+          "mAP50-95": 0.47779440635149767,
+          "mAP50": 0.6771087262814214,
+          "mAP75": 0.5104563693395857,
+          "AP_small": 0.18310233665040548,
+          "AP_medium": 0.4387583379812037,
+          "AP_large": 0.6104022022880229,
+          "AR100": 0.6669854523179561,
+          "per_class": {
+            "person": {
+              "AP50": 0.8045821578891985,
+              "AP50-95": 0.5623869936931958
+            },
+            "animal": {
+              "AP50": 0.8168180044697536,
+              "AP50-95": 0.6180175897053287
+            },
+            "plant": {
+              "AP50": 0.409926016485312,
+              "AP50-95": 0.2529786356559685
+            }
+          },
+          "fold_mAP50_mean": 0.684434945970978,
+          "fold_mAP50_std": 0.018099347086611907,
+          "at_app_thresholds": {
+            "precision": 0.8362445414847162,
+            "recall": 0.7116870415647921,
+            "boxes_drawn": 8702,
+            "objects": 10225
+          },
+          "empty_images_with_false_alarm": {
+            "images": 500,
+            "with_any_box": 71
+          }
+        },
+        "openimages": {
+          "mAP50-95": 0.6062333855722573,
+          "mAP50": 0.7736363080001984,
+          "mAP75": 0.6427278418927693,
+          "AP_small": 0.08226503987751982,
+          "AP_medium": 0.34206586738363837,
+          "AP_large": 0.6601236370454382,
+          "AR100": 0.7389932703016515,
+          "per_class": {
+            "person": {
+              "AP50": 0.7123101781033058,
+              "AP50-95": 0.5060849360035399
+            },
+            "animal": {
+              "AP50": 0.8159356716073793,
+              "AP50-95": 0.6869844969546594
+            },
+            "plant": {
+              "AP50": 0.7926630742899101,
+              "AP50-95": 0.6256307237585724
+            }
+          },
+          "fold_mAP50_mean": 0.7823737643428228,
+          "fold_mAP50_std": 0.05833136333862551,
+          "at_app_thresholds": {
+            "precision": 0.9002860645688598,
+            "recall": 0.7490649438966338,
+            "boxes_drawn": 2447,
+            "objects": 2941
+          },
+          "empty_images_with_false_alarm": {
+            "images": 0,
+            "with_any_box": 0
+          }
+        },
+        "swg": {
+          "mAP50-95": 0.5451269984161374,
+          "mAP50": 0.796148345262732,
+          "mAP75": 0.5885672087846949,
+          "AP_small": 0.03811456059523848,
+          "AP_medium": 0.34937583221192425,
+          "AP_large": 0.6379955939467832,
+          "AR100": 0.6824242424242424,
+          "per_class": {
+            "person": {
+              "AP50": null,
+              "AP50-95": null
+            },
+            "animal": {
+              "AP50": 0.796148345262732,
+              "AP50-95": 0.5451269984161374
+            },
+            "plant": {
+              "AP50": null,
+              "AP50-95": null
+            }
+          },
+          "fold_mAP50_mean": 0.7967453107510833,
+          "fold_mAP50_std": 0.015303570563276364,
+          "at_app_thresholds": {
+            "precision": 0.8687963491158015,
+            "recall": 0.71002331002331,
+            "boxes_drawn": 1753,
+            "objects": 2145
+          },
+          "empty_images_with_false_alarm": {
+            "images": 294,
+            "with_any_box": 36
+          }
+        },
+        "all": {
+          "mAP50-95": 0.5139028736901393,
+          "mAP50": 0.7112470111316768,
+          "mAP75": 0.5494346416986648,
+          "AP_small": 0.17224500615061594,
+          "AP_medium": 0.39915265222493135,
+          "AP_large": 0.6510011071047842,
+          "AR100": 0.6803249318162364,
+          "per_class": {
+            "person": {
+              "AP50": 0.8015788776960538,
+              "AP50-95": 0.5606490735943955
+            },
+            "animal": {
+              "AP50": 0.8088745489159943,
+              "AP50-95": 0.6220047773741689
+            },
+            "plant": {
+              "AP50": 0.5232876067829823,
+              "AP50-95": 0.3590547701018535
+            }
+          },
+          "fold_mAP50_mean": 0.7157531001782639,
+          "fold_mAP50_std": 0.012047831218751342,
+          "at_app_thresholds": {
+            "precision": 0.852813517284142,
+            "recall": 0.7186336620730194,
+            "boxes_drawn": 12902,
+            "objects": 15311
+          },
+          "empty_images_with_false_alarm": {
+            "images": 794,
+            "with_any_box": 107
+          }
+        }
+      }
+    },
+    "yolo26n stock COCO-80 -> 3": {
+      "device": "GPU",
+      "ms_per_image": 40.536426693522564,
+      "by_set": {
+        "coco": {
+          "mAP50-95": 0.4872101250487258,
+          "mAP50": 0.6836168122759578,
+          "mAP75": 0.5241932685405746,
+          "AP_small": 0.17037578175365994,
+          "AP_medium": 0.43725476965536225,
+          "AP_large": 0.6408249315578363,
+          "AR100": 0.6490912804765042,
+          "per_class": {
+            "person": {
+              "AP50": 0.7892598656906128,
+              "AP50-95": 0.5585375487411965
+            },
+            "animal": {
+              "AP50": 0.8274661402631744,
+              "AP50-95": 0.6370449288396753
+            },
+            "plant": {
+              "AP50": 0.43412443087408636,
+              "AP50-95": 0.26604789756530545
+            }
+          },
+          "fold_mAP50_mean": 0.6927421901653928,
+          "fold_mAP50_std": 0.02789778214119802,
+          "at_app_thresholds": {
+            "precision": 0.9202066590126292,
+            "recall": 0.6270904645476773,
+            "boxes_drawn": 6968,
+            "objects": 10225
+          },
+          "empty_images_with_false_alarm": {
+            "images": 500,
+            "with_any_box": 20
+          }
+        },
+        "openimages": {
+          "mAP50-95": 0.49607910083253426,
+          "mAP50": 0.6709526076054502,
+          "mAP75": 0.52041772188593,
+          "AP_small": 0.06839466785152694,
+          "AP_medium": 0.26552665423600025,
+          "AP_large": 0.5480303023738532,
+          "AR100": 0.6957879552617238,
+          "per_class": {
+            "person": {
+              "AP50": 0.7225975113547198,
+              "AP50-95": 0.5210373534912349
+            },
+            "animal": {
+              "AP50": 0.7692219216368894,
+              "AP50-95": 0.6239188459501201
+            },
+            "plant": {
+              "AP50": 0.5210383898247416,
+              "AP50-95": 0.34328110305624754
+            }
+          },
+          "fold_mAP50_mean": 0.6796275847993875,
+          "fold_mAP50_std": 0.05511763625461488,
+          "at_app_thresholds": {
+            "precision": 0.9150753768844221,
+            "recall": 0.6191771506290378,
+            "boxes_drawn": 1990,
+            "objects": 2941
+          },
+          "empty_images_with_false_alarm": {
+            "images": 0,
+            "with_any_box": 0
+          }
+        },
+        "swg": {
+          "mAP50-95": 0.21345932452228217,
+          "mAP50": 0.3205122307276329,
+          "mAP75": 0.226017165617239,
+          "AP_small": 0.013972992388966373,
+          "AP_medium": 0.0600907958398831,
+          "AP_large": 0.28671718614833896,
+          "AR100": 0.3406526806526806,
+          "per_class": {
+            "person": {
+              "AP50": null,
+              "AP50-95": null
+            },
+            "animal": {
+              "AP50": 0.3205122307276329,
+              "AP50-95": 0.21345932452228217
+            },
+            "plant": {
+              "AP50": null,
+              "AP50-95": null
+            }
+          },
+          "fold_mAP50_mean": 0.3214166572397775,
+          "fold_mAP50_std": 0.041413881029897376,
+          "at_app_thresholds": {
+            "precision": 0.8930348258706468,
+            "recall": 0.16736596736596737,
+            "boxes_drawn": 402,
+            "objects": 2145
+          },
+          "empty_images_with_false_alarm": {
+            "images": 294,
+            "with_any_box": 6
+          }
+        },
+        "all": {
+          "mAP50-95": 0.443474420141373,
+          "mAP50": 0.624806820850428,
+          "mAP75": 0.4731280428582227,
+          "AP_small": 0.1572716081554273,
+          "AP_medium": 0.34135718214074107,
+          "AP_large": 0.5688631675287329,
+          "AR100": 0.6154484452810262,
+          "per_class": {
+            "person": {
+              "AP50": 0.7839038273388389,
+              "AP50-95": 0.5556218858715533
+            },
+            "animal": {
+              "AP50": 0.6486034910193008,
+              "AP50-95": 0.5006287132633971
+            },
+            "plant": {
+              "AP50": 0.44191314419314415,
+              "AP50-95": 0.2741726612891686
+            }
+          },
+          "fold_mAP50_mean": 0.6287898111165104,
+          "fold_mAP50_std": 0.014470103921632081,
+          "at_app_thresholds": {
+            "precision": 0.9179487179487179,
+            "recall": 0.5611651753641173,
+            "boxes_drawn": 9360,
+            "objects": 15311
+          },
+          "empty_images_with_false_alarm": {
+            "images": 794,
+            "with_any_box": 26
+          }
+        }
+      }
+    },
+    "yolo26s stock COCO-80 -> 3": {
+      "device": "GPU",
+      "ms_per_image": 40.509950659200676,
+      "by_set": {
+        "coco": {
+          "mAP50-95": 0.5557869835696229,
+          "mAP50": 0.751398764681182,
+          "mAP75": 0.6062426271948568,
+          "AP_small": 0.2467242412488585,
+          "AP_medium": 0.5199605806312239,
+          "AP_large": 0.6937606398331101,
+          "AR100": 0.7083155840865732,
+          "per_class": {
+            "person": {
+              "AP50": 0.850373202477195,
+              "AP50-95": 0.6328810102654681
+            },
+            "animal": {
+              "AP50": 0.8681850584034996,
+              "AP50-95": 0.6923537629420982
+            },
+            "plant": {
+              "AP50": 0.5356380331628516,
+              "AP50-95": 0.342126177501302
+            }
+          },
+          "fold_mAP50_mean": 0.763202279251401,
+          "fold_mAP50_std": 0.041288707238160985,
+          "at_app_thresholds": {
+            "precision": 0.9098139990210474,
+            "recall": 0.7271393643031785,
+            "boxes_drawn": 8172,
+            "objects": 10225
+          },
+          "empty_images_with_false_alarm": {
+            "images": 500,
+            "with_any_box": 26
+          }
+        },
+        "openimages": {
+          "mAP50-95": 0.5636083213876377,
+          "mAP50": 0.7233007054885376,
+          "mAP75": 0.5865026853533098,
+          "AP_small": 0.09082697923632756,
+          "AP_medium": 0.33584323598016436,
+          "AP_large": 0.6198457691725979,
+          "AR100": 0.7515352716760267,
+          "per_class": {
+            "person": {
+              "AP50": 0.7644430855775155,
+              "AP50-95": 0.591673495229709
+            },
+            "animal": {
+              "AP50": 0.7842375759344077,
+              "AP50-95": 0.6653287691128831
+            },
+            "plant": {
+              "AP50": 0.62122145495369,
+              "AP50-95": 0.433822699820321
+            }
+          },
+          "fold_mAP50_mean": 0.7240743658154936,
+          "fold_mAP50_std": 0.03052059583984155,
+          "at_app_thresholds": {
+            "precision": 0.9189566837447601,
+            "recall": 0.6708602516150969,
+            "boxes_drawn": 2147,
+            "objects": 2941
+          },
+          "empty_images_with_false_alarm": {
+            "images": 0,
+            "with_any_box": 0
+          }
+        },
+        "swg": {
+          "mAP50-95": 0.2635051331862954,
+          "mAP50": 0.37814160477015263,
+          "mAP75": 0.28434759523583336,
+          "AP_small": 0.0029006847804090375,
+          "AP_medium": 0.09466227801517843,
+          "AP_large": 0.34744165293883283,
+          "AR100": 0.4211188811188811,
+          "per_class": {
+            "person": {
+              "AP50": null,
+              "AP50-95": null
+            },
+            "animal": {
+              "AP50": 0.37814160477015263,
+              "AP50-95": 0.2635051331862954
+            },
+            "plant": {
+              "AP50": null,
+              "AP50-95": null
+            }
+          },
+          "fold_mAP50_mean": 0.3799377066279001,
+          "fold_mAP50_std": 0.022386072944774217,
+          "at_app_thresholds": {
+            "precision": 0.8521739130434782,
+            "recall": 0.22843822843822845,
+            "boxes_drawn": 575,
+            "objects": 2145
+          },
+          "empty_images_with_false_alarm": {
+            "images": 294,
+            "with_any_box": 6
+          }
+        },
+        "all": {
+          "mAP50-95": 0.514152618754183,
+          "mAP50": 0.6951359046804176,
+          "mAP75": 0.554472868111495,
+          "AP_small": 0.22748977631462694,
+          "AP_medium": 0.41939385541215696,
+          "AP_large": 0.6335126366191615,
+          "AR100": 0.6773816109591926,
+          "per_class": {
+            "person": {
+              "AP50": 0.84536063958413,
+              "AP50-95": 0.6299930247683242
+            },
+            "animal": {
+              "AP50": 0.6886055048856549,
+              "AP50-95": 0.5519177337695902
+            },
+            "plant": {
+              "AP50": 0.5514415695714681,
+              "AP50-95": 0.36054709772463467
+            }
+          },
+          "fold_mAP50_mean": 0.6966134049502843,
+          "fold_mAP50_std": 0.012370322897823255,
+          "at_app_thresholds": {
+            "precision": 0.9085735267119516,
+            "recall": 0.6464633270197897,
+            "boxes_drawn": 10894,
+            "objects": 15311
+          },
+          "empty_images_with_false_alarm": {
+            "images": 794,
+            "with_any_box": 32
+          }
+        }
+      }
+    }
+  },
+  "app_conf": {
+    "person": 0.4,
+    "animal": 0.35,
+    "plant": 0.35
+  },
+  "note": "box area (not mask area) is used for the small/medium/large split in every set",
+  "deployed": "deployed ONNX 640x384 (OpenVINO, what the app runs)",
+  "slices": {
+    "set": {
+      "coco": {
+        "objects": 10225,
+        "recall": 0.687921760391198,
+        "found": 7034,
+        "missed": 2222,
+        "found as wrong class": 34,
+        "poor box": 935
+      },
+      "openimages": {
+        "objects": 2941,
+        "recall": 0.7497449846990819,
+        "found": 2205,
+        "missed": 225,
+        "found as wrong class": 168,
+        "poor box": 343
+      },
+      "swg": {
+        "objects": 2145,
+        "recall": 0.6974358974358974,
+        "found": 1496,
+        "missed": 541,
+        "found as wrong class": 0,
+        "poor box": 108
+      }
+    },
+    "class": {
+      "person": {
+        "objects": 8027,
+        "recall": 0.6714837423695029,
+        "found": 5390,
+        "missed": 1868,
+        "found as wrong class": 30,
+        "poor box": 739
+      },
+      "animal": {
+        "objects": 6844,
+        "recall": 0.7421098772647574,
+        "found": 5079,
+        "missed": 988,
+        "found as wrong class": 172,
+        "poor box": 605
+      },
+      "plant": {
+        "objects": 440,
+        "recall": 0.6045454545454545,
+        "found": 266,
+        "missed": 132,
+        "found as wrong class": 0,
+        "poor box": 42
+      }
+    },
+    "object size": {
+      "large": {
+        "objects": 8978,
+        "recall": 0.8430608153263534,
+        "found": 7569,
+        "missed": 552,
+        "found as wrong class": 150,
+        "poor box": 707
+      },
+      "medium": {
+        "objects": 3998,
+        "recall": 0.6283141570785392,
+        "found": 2512,
+        "missed": 977,
+        "found as wrong class": 45,
+        "poor box": 464
+      },
+      "small": {
+        "objects": 2335,
+        "recall": 0.28008565310492506,
+        "found": 654,
+        "missed": 1459,
+        "found as wrong class": 7,
+        "poor box": 215
+      }
+    },
+    "crowding": {
+      "5+ objects": {
+        "objects": 6370,
+        "recall": 0.5886970172684458,
+        "found": 3750,
+        "missed": 1691,
+        "found as wrong class": 115,
+        "poor box": 814
+      },
+      "2-4 objects": {
+        "objects": 4678,
+        "recall": 0.7259512612227448,
+        "found": 3396,
+        "missed": 750,
+        "found as wrong class": 74,
+        "poor box": 458
+      },
+      "1 object": {
+        "objects": 4263,
+        "recall": 0.8418953788411917,
+        "found": 3589,
+        "missed": 547,
+        "found as wrong class": 13,
+        "poor box": 114
+      }
+    },
+    "frame edge": {
+      "fully in frame": {
+        "objects": 11412,
+        "recall": 0.6791097090781634,
+        "found": 7750,
+        "missed": 2488,
+        "found as wrong class": 123,
+        "poor box": 1051
+      },
+      "cut by frame edge": {
+        "objects": 3899,
+        "recall": 0.7655809181841498,
+        "found": 2985,
+        "missed": 500,
+        "found as wrong class": 79,
+        "poor box": 335
+      }
+    },
+    "lighting": {
+      "normal": {
+        "objects": 13113,
+        "recall": 0.7031953023716923,
+        "found": 9221,
+        "missed": 2474,
+        "found as wrong class": 181,
+        "poor box": 1237
+      },
+      "dark": {
+        "objects": 1495,
+        "recall": 0.6836120401337793,
+        "found": 1022,
+        "missed": 351,
+        "found as wrong class": 12,
+        "poor box": 110
+      },
+      "bright": {
+        "objects": 703,
+        "recall": 0.6998577524893315,
+        "found": 492,
+        "missed": 163,
+        "found as wrong class": 9,
+        "poor box": 39
+      }
+    },
+    "colour": {
+      "colour": {
+        "objects": 13895,
+        "recall": 0.7020510975170925,
+        "found": 9755,
+        "missed": 2647,
+        "found as wrong class": 199,
+        "poor box": 1294
+      },
+      "greyscale (night IR)": {
+        "objects": 1416,
+        "recall": 0.692090395480226,
+        "found": 980,
+        "missed": 341,
+        "found as wrong class": 3,
+        "poor box": 92
+      }
+    },
+    "camera trap: day vs night": {
+      "colour": {
+        "objects": 1119,
+        "recall": 0.7015192135835567,
+        "found": 785,
+        "missed": 284,
+        "found as wrong class": 0,
+        "poor box": 50
+      },
+      "greyscale (night IR)": {
+        "objects": 1026,
+        "recall": 0.6929824561403509,
+        "found": 711,
+        "missed": 257,
+        "found as wrong class": 0,
+        "poor box": 58
+      }
+    },
+    "animal species (all sets, >=15 objects)": {
+      "Mammal": {
+        "objects": 372,
+        "recall": 0.1935483870967742,
+        "found": 72,
+        "missed": 68,
+        "found as wrong class": 159,
+        "poor box": 73
+      },
+      "cow": {
+        "objects": 245,
+        "recall": 0.7428571428571429,
+        "found": 182,
+        "missed": 46,
+        "found as wrong class": 1,
+        "poor box": 16
+      },
+      "sheep": {
+        "objects": 239,
+        "recall": 0.7112970711297071,
+        "found": 170,
+        "missed": 32,
+        "found as wrong class": 1,
+        "poor box": 36
+      },
+      "horse": {
+        "objects": 238,
+        "recall": 0.773109243697479,
+        "found": 184,
+        "missed": 31,
+        "found as wrong class": 4,
+        "poor box": 19
+      },
+      "zebra": {
+        "objects": 236,
+        "recall": 0.8177966101694916,
+        "found": 193,
+        "missed": 12,
+        "found as wrong class": 0,
+        "poor box": 31
+      },
+      "giraffe": {
+        "objects": 230,
+        "recall": 0.8391304347826087,
+        "found": 193,
+        "missed": 16,
+        "found as wrong class": 0,
+        "poor box": 21
+      },
+      "bird": {
+        "objects": 217,
+        "recall": 0.5576036866359447,
+        "found": 121,
+        "missed": 89,
+        "found as wrong class": 0,
+        "poor box": 7
+      },
+      "dog": {
+        "objects": 208,
+        "recall": 0.8461538461538461,
+        "found": 176,
+        "missed": 20,
+        "found as wrong class": 3,
+        "poor box": 9
+      },
+      "elephant": {
+        "objects": 208,
+        "recall": 0.8125,
+        "found": 169,
+        "missed": 12,
+        "found as wrong class": 1,
+        "poor box": 26
+      },
+      "cat": {
+        "objects": 202,
+        "recall": 0.8811881188118812,
+        "found": 178,
+        "missed": 11,
+        "found as wrong class": 0,
+        "poor box": 13
+      },
+      "pig_tailed_macaque": {
+        "objects": 105,
+        "recall": 0.7714285714285715,
+        "found": 81,
+        "missed": 21,
+        "found as wrong class": 0,
+        "poor box": 3
+      },
+      "stump_tailed_macaque": {
+        "objects": 103,
+        "recall": 0.7378640776699029,
+        "found": 76,
+        "missed": 24,
+        "found as wrong class": 0,
+        "poor box": 3
+      },
+      "eurasian_wild_pig": {
+        "objects": 99,
+        "recall": 0.696969696969697,
+        "found": 69,
+        "missed": 27,
+        "found as wrong class": 0,
+        "poor box": 3
+      },
+      "sambar": {
+        "objects": 93,
+        "recall": 0.7526881720430108,
+        "found": 70,
+        "missed": 14,
+        "found as wrong class": 0,
+        "poor box": 9
+      },
+      "Animal": {
+        "objects": 88,
+        "recall": 0.26136363636363635,
+        "found": 23,
+        "missed": 26,
+        "found as wrong class": 1,
+        "poor box": 38
+      },
+      "chinese serow": {
+        "objects": 86,
+        "recall": 0.7790697674418605,
+        "found": 67,
+        "missed": 19,
+        "found as wrong class": 0,
+        "poor box": 0
+      },
+      "crab_eating_mongoose": {
+        "objects": 83,
+        "recall": 0.7831325301204819,
+        "found": 65,
+        "missed": 17,
+        "found as wrong class": 0,
+        "poor box": 1
+      },
+      "roosevelts_muntjac_group": {
+        "objects": 83,
+        "recall": 0.8795180722891566,
+        "found": 73,
+        "missed": 7,
+        "found as wrong class": 0,
+        "poor box": 3
+      },
+      "unidentified_bird": {
+        "objects": 83,
+        "recall": 0.5542168674698795,
+        "found": 46,
+        "missed": 32,
+        "found as wrong class": 0,
+        "poor box": 5
+      },
+      "unidentified_squirrel": {
+        "objects": 82,
+        "recall": 0.43902439024390244,
+        "found": 36,
+        "missed": 41,
+        "found as wrong class": 0,
+        "poor box": 5
+      },
+      "large_antlered_muntjac": {
+        "objects": 81,
+        "recall": 0.8641975308641975,
+        "found": 70,
+        "missed": 10,
+        "found as wrong class": 0,
+        "poor box": 1
+      },
+      "unidentified_small_mammal": {
+        "objects": 81,
+        "recall": 0.5925925925925926,
+        "found": 48,
+        "missed": 31,
+        "found as wrong class": 0,
+        "poor box": 2
+      },
+      "red_cheeked_squirrel": {
+        "objects": 81,
+        "recall": 0.6296296296296297,
+        "found": 51,
+        "missed": 25,
+        "found as wrong class": 0,
+        "poor box": 5
+      },
+      "ferret_badger": {
+        "objects": 80,
+        "recall": 0.7875,
+        "found": 63,
+        "missed": 12,
+        "found as wrong class": 0,
+        "poor box": 5
+      },
+      "unidentified_murid": {
+        "objects": 80,
+        "recall": 0.4375,
+        "found": 35,
+        "missed": 24,
+        "found as wrong class": 0,
+        "poor box": 21
+      },
+      "common_palm_civet": {
+        "objects": 76,
+        "recall": 0.75,
+        "found": 57,
+        "missed": 16,
+        "found as wrong class": 0,
+        "poor box": 3
+      },
+      "Carnivore": {
+        "objects": 75,
+        "recall": 0.6933333333333334,
+        "found": 52,
+        "missed": 2,
+        "found as wrong class": 0,
+        "poor box": 21
+      },
+      "bear": {
+        "objects": 71,
+        "recall": 0.9014084507042254,
+        "found": 64,
+        "missed": 3,
+        "found as wrong class": 0,
+        "poor box": 4
+      },
+      "masked_palm_civet": {
+        "objects": 68,
+        "recall": 0.7647058823529411,
+        "found": 52,
+        "missed": 12,
+        "found as wrong class": 0,
+        "poor box": 4
+      },
+      "Cattle": {
+        "objects": 64,
+        "recall": 0.78125,
+        "found": 50,
+        "missed": 3,
+        "found as wrong class": 0,
+        "poor box": 11
+      },
+      "silver_pheasant": {
+        "objects": 64,
+        "recall": 0.84375,
+        "found": 54,
+        "missed": 8,
+        "found as wrong class": 0,
+        "poor box": 2
+      },
+      "assam_or_rhesus_macaque": {
+        "objects": 61,
+        "recall": 0.6557377049180327,
+        "found": 40,
+        "missed": 20,
+        "found as wrong class": 0,
+        "poor box": 1
+      },
+      "Sheep": {
+        "objects": 59,
+        "recall": 0.847457627118644,
+        "found": 50,
+        "missed": 3,
+        "found as wrong class": 0,
+        "poor box": 6
+      },
+      "Goose": {
+        "objects": 58,
+        "recall": 0.7931034482758621,
+        "found": 46,
+        "missed": 4,
+        "found as wrong class": 0,
+        "poor box": 8
+      },
+      "Bird": {
+        "objects": 56,
+        "recall": 0.6964285714285714,
+        "found": 39,
+        "missed": 8,
+        "found as wrong class": 0,
+        "poor box": 9
+      },
+      "yellow_throated_marten": {
+        "objects": 54,
+        "recall": 0.8333333333333334,
+        "found": 45,
+        "missed": 7,
+        "found as wrong class": 0,
+        "poor box": 2
+      },
+      "Horse": {
+        "objects": 53,
+        "recall": 0.7547169811320755,
+        "found": 40,
+        "missed": 6,
+        "found as wrong class": 0,
+        "poor box": 7
+      },
+      "unidentified_muntjac": {
+        "objects": 52,
+        "recall": 0.75,
+        "found": 39,
+        "missed": 11,
+        "found as wrong class": 0,
+        "poor box": 2
+      },
+      "Dog": {
+        "objects": 51,
+        "recall": 0.9019607843137255,
+        "found": 46,
+        "missed": 1,
+        "found as wrong class": 0,
+        "poor box": 4
+      },
+      "Antelope": {
+        "objects": 48,
+        "recall": 0.8333333333333334,
+        "found": 40,
+        "missed": 1,
+        "found as wrong class": 0,
+        "poor box": 7
+      },
+      "Duck": {
+        "objects": 45,
+        "recall": 0.8,
+        "found": 36,
+        "missed": 3,
+        "found as wrong class": 0,
+        "poor box": 6
+      },
+      "Cat": {
+        "objects": 44,
+        "recall": 0.9772727272727273,
+        "found": 43,
+        "missed": 0,
+        "found as wrong class": 0,
+        "poor box": 1
+      },
+      "Goat": {
+        "objects": 44,
+        "recall": 0.8636363636363636,
+        "found": 38,
+        "missed": 2,
+        "found as wrong class": 0,
+        "poor box": 4
+      },
+      "Zebra": {
+        "objects": 44,
+        "recall": 0.9545454545454546,
+        "found": 42,
+        "missed": 0,
+        "found as wrong class": 0,
+        "poor box": 2
+      },
+      "Chicken": {
+        "objects": 42,
+        "recall": 0.9285714285714286,
+        "found": 39,
+        "missed": 1,
+        "found as wrong class": 0,
+        "poor box": 2
+      },
+      "malayan_porcupine": {
+        "objects": 42,
+        "recall": 0.6666666666666666,
+        "found": 28,
+        "missed": 10,
+        "found as wrong class": 0,
+        "poor box": 4
+      },
+      "Alpaca": {
+        "objects": 41,
+        "recall": 0.926829268292683,
+        "found": 38,
+        "missed": 0,
+        "found as wrong class": 0,
+        "poor box": 3
+      },
+      "Giraffe": {
+        "objects": 40,
+        "recall": 0.925,
+        "found": 37,
+        "missed": 0,
+        "found as wrong class": 0,
+        "poor box": 3
+      },
+      "Swan": {
+        "objects": 40,
+        "recall": 0.9,
+        "found": 36,
+        "missed": 3,
+        "found as wrong class": 0,
+        "poor box": 1
+      },
+      "pallass_squirrel": {
+        "objects": 40,
+        "recall": 0.725,
+        "found": 29,
+        "missed": 8,
+        "found as wrong class": 0,
+        "poor box": 3
+      },
+      "Mule": {
+        "objects": 39,
+        "recall": 0.8461538461538461,
+        "found": 33,
+        "missed": 2,
+        "found as wrong class": 0,
+        "poor box": 4
+      },
+      "Penguin": {
+        "objects": 39,
+        "recall": 0.7948717948717948,
+        "found": 31,
+        "missed": 5,
+        "found as wrong class": 0,
+        "poor box": 3
+      },
+      "asiatic_brush_tailed_porcupine": {
+        "objects": 39,
+        "recall": 0.717948717948718,
+        "found": 28,
+        "missed": 8,
+        "found as wrong class": 0,
+        "poor box": 3
+      },
+      "Eagle": {
+        "objects": 38,
+        "recall": 0.9736842105263158,
+        "found": 37,
+        "missed": 0,
+        "found as wrong class": 0,
+        "poor box": 1
+      },
+      "unidentified_animal": {
+        "objects": 38,
+        "recall": 0.5526315789473685,
+        "found": 21,
+        "missed": 16,
+        "found as wrong class": 0,
+        "poor box": 1
+      },
+      "Camel": {
+        "objects": 37,
+        "recall": 0.8378378378378378,
+        "found": 31,
+        "missed": 3,
+        "found as wrong class": 0,
+        "poor box": 3
+      },
+      "Rhinoceros": {
+        "objects": 37,
+        "recall": 0.972972972972973,
+        "found": 36,
+        "missed": 0,
+        "found as wrong class": 0,
+        "poor box": 1
+      },
+      "Reptile": {
+        "objects": 36,
+        "recall": 0.6388888888888888,
+        "found": 23,
+        "missed": 7,
+        "found as wrong class": 1,
+        "poor box": 5
+      },
+      "Monkey": {
+        "objects": 34,
+        "recall": 0.8529411764705882,
+        "found": 29,
+        "missed": 0,
+        "found as wrong class": 0,
+        "poor box": 5
+      },
+      "Mouse": {
+        "objects": 34,
+        "recall": 0.6470588235294118,
+        "found": 22,
+        "missed": 1,
+        "found as wrong class": 0,
+        "poor box": 11
+      },
+      "Canary": {
+        "objects": 34,
+        "recall": 0.8823529411764706,
+        "found": 30,
+        "missed": 1,
+        "found as wrong class": 0,
+        "poor box": 3
+      },
+      "Hamster": {
+        "objects": 34,
+        "recall": 0.7647058823529411,
+        "found": 26,
+        "missed": 1,
+        "found as wrong class": 0,
+        "poor box": 7
+      },
+      "Raven": {
+        "objects": 34,
+        "recall": 0.9411764705882353,
+        "found": 32,
+        "missed": 2,
+        "found as wrong class": 0,
+        "poor box": 0
+      },
+      "Bull": {
+        "objects": 34,
+        "recall": 0.9117647058823529,
+        "found": 31,
+        "missed": 2,
+        "found as wrong class": 0,
+        "poor box": 1
+      },
+      "chinese_serow": {
+        "objects": 34,
+        "recall": 0.7941176470588235,
+        "found": 27,
+        "missed": 5,
+        "found as wrong class": 0,
+        "poor box": 2
+      },
+      "Kangaroo": {
+        "objects": 33,
+        "recall": 0.9696969696969697,
+        "found": 32,
+        "missed": 0,
+        "found as wrong class": 0,
+        "poor box": 1
+      },
+      "Brown bear": {
+        "objects": 33,
+        "recall": 0.9696969696969697,
+        "found": 32,
+        "missed": 1,
+        "found as wrong class": 0,
+        "poor box": 0
+      },
+      "Elephant": {
+        "objects": 33,
+        "recall": 1.0,
+        "found": 33,
+        "missed": 0,
+        "found as wrong class": 0,
+        "poor box": 0
+      },
+      "Hippopotamus": {
+        "objects": 33,
+        "recall": 0.9393939393939394,
+        "found": 31,
+        "missed": 2,
+        "found as wrong class": 0,
+        "poor box": 0
+      },
+      "Polar bear": {
+        "objects": 33,
+        "recall": 0.8787878787878788,
+        "found": 29,
+        "missed": 0,
+        "found as wrong class": 0,
+        "poor box": 4
+      },
+      "grey_peacock_pheasant": {
+        "objects": 33,
+        "recall": 0.7878787878787878,
+        "found": 26,
+        "missed": 6,
+        "found as wrong class": 0,
+        "poor box": 1
+      },
+      "Turkey": {
+        "objects": 32,
+        "recall": 0.6875,
+        "found": 22,
+        "missed": 7,
+        "found as wrong class": 0,
+        "poor box": 3
+      },
+      "Crocodile": {
+        "objects": 31,
+        "recall": 0.8064516129032258,
+        "found": 25,
+        "missed": 4,
+        "found as wrong class": 0,
+        "poor box": 2
+      },
+      "Deer": {
+        "objects": 30,
+        "recall": 0.9333333333333333,
+        "found": 28,
+        "missed": 0,
+        "found as wrong class": 0,
+        "poor box": 2
+      },
+      "Panda": {
+        "objects": 30,
+        "recall": 0.9,
+        "found": 27,
+        "missed": 1,
+        "found as wrong class": 0,
+        "poor box": 2
+      },
+      "Sparrow": {
+        "objects": 30,
+        "recall": 0.9666666666666667,
+        "found": 29,
+        "missed": 0,
+        "found as wrong class": 0,
+        "poor box": 1
+      },
+      "Magpie": {
+        "objects": 30,
+        "recall": 0.9666666666666667,
+        "found": 29,
+        "missed": 0,
+        "found as wrong class": 0,
+        "poor box": 1
+      },
+      "red_junglefowl": {
+        "objects": 30,
+        "recall": 0.5333333333333333,
+        "found": 16,
+        "missed": 12,
+        "found as wrong class": 0,
+        "poor box": 2
+      },
+      "Rabbit": {
+        "objects": 29,
+        "recall": 0.9310344827586207,
+        "found": 27,
+        "missed": 0,
+        "found as wrong class": 0,
+        "poor box": 2
+      },
+      "Parrot": {
+        "objects": 29,
+        "recall": 0.8620689655172413,
+        "found": 25,
+        "missed": 0,
+        "found as wrong class": 0,
+        "poor box": 4
+      },
+      "Lion": {
+        "objects": 29,
+        "recall": 0.9655172413793104,
+        "found": 28,
+        "missed": 0,
+        "found as wrong class": 0,
+        "poor box": 1
+      },
+      "chevrotain": {
+        "objects": 29,
+        "recall": 0.9655172413793104,
+        "found": 28,
+        "missed": 1,
+        "found as wrong class": 0,
+        "poor box": 0
+      },
+      "Blue jay": {
+        "objects": 28,
+        "recall": 0.9642857142857143,
+        "found": 27,
+        "missed": 0,
+        "found as wrong class": 0,
+        "poor box": 1
+      },
+      "Ostrich": {
+        "objects": 28,
+        "recall": 0.8571428571428571,
+        "found": 24,
+        "missed": 1,
+        "found as wrong class": 0,
+        "poor box": 3
+      },
+      "Woodpecker": {
+        "objects": 28,
+        "recall": 0.8928571428571429,
+        "found": 25,
+        "missed": 0,
+        "found as wrong class": 0,
+        "poor box": 3
+      },
+      "Snake": {
+        "objects": 27,
+        "recall": 0.9259259259259259,
+        "found": 25,
+        "missed": 0,
+        "found as wrong class": 0,
+        "poor box": 2
+      },
+      "Koala": {
+        "objects": 27,
+        "recall": 0.9259259259259259,
+        "found": 25,
+        "missed": 0,
+        "found as wrong class": 0,
+        "poor box": 2
+      },
+      "Red panda": {
+        "objects": 27,
+        "recall": 0.9259259259259259,
+        "found": 25,
+        "missed": 0,
+        "found as wrong class": 0,
+        "poor box": 2
+      },
+      "northern_treeshrew": {
+        "objects": 27,
+        "recall": 0.6296296296296297,
+        "found": 17,
+        "missed": 10,
+        "found as wrong class": 0,
+        "poor box": 0
+      },
+      "Lizard": {
+        "objects": 26,
+        "recall": 0.9230769230769231,
+        "found": 24,
+        "missed": 0,
+        "found as wrong class": 0,
+        "poor box": 2
+      },
+      "Pig": {
+        "objects": 26,
+        "recall": 0.9615384615384616,
+        "found": 25,
+        "missed": 0,
+        "found as wrong class": 0,
+        "poor box": 1
+      },
+      "Lynx": {
+        "objects": 26,
+        "recall": 0.8076923076923077,
+        "found": 21,
+        "missed": 0,
+        "found as wrong class": 0,
+        "poor box": 5
+      },
+      "spotted_linsang": {
+        "objects": 26,
+        "recall": 0.46153846153846156,
+        "found": 12,
+        "missed": 12,
+        "found as wrong class": 0,
+        "poor box": 2
+      },
+      "unidentified_partridge": {
+        "objects": 25,
+        "recall": 0.32,
+        "found": 8,
+        "missed": 16,
+        "found as wrong class": 0,
+        "poor box": 1
+      },
+      "Jaguar (Animal)": {
+        "objects": 23,
+        "recall": 0.782608695652174,
+        "found": 18,
+        "missed": 0,
+        "found as wrong class": 0,
+        "poor box": 5
+      },
+      "Skunk": {
+        "objects": 22,
+        "recall": 0.7727272727272727,
+        "found": 17,
+        "missed": 1,
+        "found as wrong class": 0,
+        "poor box": 4
+      },
+      "Frog": {
+        "objects": 20,
+        "recall": 0.95,
+        "found": 19,
+        "missed": 0,
+        "found as wrong class": 0,
+        "poor box": 1
+      },
+      "Falcon": {
+        "objects": 19,
+        "recall": 1.0,
+        "found": 19,
+        "missed": 0,
+        "found as wrong class": 0,
+        "poor box": 0
+      },
+      "Cheetah": {
+        "objects": 19,
+        "recall": 0.8421052631578947,
+        "found": 16,
+        "missed": 0,
+        "found as wrong class": 0,
+        "poor box": 3
+      },
+      "Leopard": {
+        "objects": 19,
+        "recall": 0.8947368421052632,
+        "found": 17,
+        "missed": 0,
+        "found as wrong class": 0,
+        "poor box": 2
+      },
+      "unidentified_mammal": {
+        "objects": 18,
+        "recall": 0.3888888888888889,
+        "found": 7,
+        "missed": 10,
+        "found as wrong class": 0,
+        "poor box": 1
+      },
+      "blue_whistling_thrush": {
+        "objects": 18,
+        "recall": 0.7777777777777778,
+        "found": 14,
+        "missed": 4,
+        "found as wrong class": 0,
+        "poor box": 0
+      },
+      "Squirrel": {
+        "objects": 16,
+        "recall": 1.0,
+        "found": 16,
+        "missed": 0,
+        "found as wrong class": 0,
+        "poor box": 0
+      },
+      "large_indian_civet": {
+        "objects": 16,
+        "recall": 0.75,
+        "found": 12,
+        "missed": 4,
+        "found as wrong class": 0,
+        "poor box": 0
+      },
+      "red_muntjac": {
+        "objects": 15,
+        "recall": 0.8,
+        "found": 12,
+        "missed": 1,
+        "found as wrong class": 0,
+        "poor box": 2
+      }
+    },
+    "set x class": {
+      "coco / person": {
+        "objects": 7811,
+        "recall": 0.6698246063244143,
+        "found": 5232,
+        "missed": 1837,
+        "found as wrong class": 24,
+        "poor box": 718
+      },
+      "openimages / animal": {
+        "objects": 2605,
+        "recall": 0.7497120921305183,
+        "found": 1953,
+        "missed": 175,
+        "found as wrong class": 162,
+        "poor box": 315
+      },
+      "swg / animal": {
+        "objects": 2145,
+        "recall": 0.6974358974358974,
+        "found": 1496,
+        "missed": 541,
+        "found as wrong class": 0,
+        "poor box": 108
+      },
+      "coco / animal": {
+        "objects": 2094,
+        "recall": 0.778414517669532,
+        "found": 1630,
+        "missed": 272,
+        "found as wrong class": 10,
+        "poor box": 182
+      },
+      "coco / plant": {
+        "objects": 320,
+        "recall": 0.5375,
+        "found": 172,
+        "missed": 113,
+        "found as wrong class": 0,
+        "poor box": 35
+      },
+      "openimages / person": {
+        "objects": 216,
+        "recall": 0.7314814814814815,
+        "found": 158,
+        "missed": 31,
+        "found as wrong class": 6,
+        "poor box": 21
+      },
+      "openimages / plant": {
+        "objects": 120,
+        "recall": 0.7833333333333333,
+        "found": 94,
+        "missed": 19,
+        "found as wrong class": 0,
+        "poor box": 7
+      }
+    },
+    "size x class": {
+      "large animal": {
+        "objects": 5178,
+        "recall": 0.8155658555426806,
+        "found": 4223,
+        "missed": 371,
+        "found as wrong class": 132,
+        "poor box": 452
+      },
+      "large person": {
+        "objects": 3600,
+        "recall": 0.8869444444444444,
+        "found": 3193,
+        "missed": 153,
+        "found as wrong class": 18,
+        "poor box": 236
+      },
+      "medium person": {
+        "objects": 2469,
+        "recall": 0.6747671121911705,
+        "found": 1666,
+        "missed": 478,
+        "found as wrong class": 8,
+        "poor box": 317
+      },
+      "small person": {
+        "objects": 1958,
+        "recall": 0.27119509703779365,
+        "found": 531,
+        "missed": 1237,
+        "found as wrong class": 4,
+        "poor box": 186
+      },
+      "medium animal": {
+        "objects": 1349,
+        "recall": 0.5515196441808747,
+        "found": 744,
+        "missed": 438,
+        "found as wrong class": 37,
+        "poor box": 130
+      },
+      "small animal": {
+        "objects": 317,
+        "recall": 0.35331230283911674,
+        "found": 112,
+        "missed": 179,
+        "found as wrong class": 3,
+        "poor box": 23
+      },
+      "large plant": {
+        "objects": 200,
+        "recall": 0.765,
+        "found": 153,
+        "missed": 28,
+        "found as wrong class": 0,
+        "poor box": 19
+      },
+      "medium plant": {
+        "objects": 180,
+        "recall": 0.5666666666666667,
+        "found": 102,
+        "missed": 61,
+        "found as wrong class": 0,
+        "poor box": 17
+      },
+      "small plant": {
+        "objects": 60,
+        "recall": 0.18333333333333332,
+        "found": 11,
+        "missed": 43,
+        "found as wrong class": 0,
+        "poor box": 6
+      }
+    }
+  },
+  "false_box_types": {
+    "coco": {
+      "correct": 7034,
+      "background": 560,
+      "poor box": 520,
+      "duplicate": 148,
+      "wrong class": 46,
+      "wrong class + poor box": 33
+    },
+    "all": {
+      "correct": 10735,
+      "background": 714,
+      "poor box": 722,
+      "duplicate": 211,
+      "wrong class": 78,
+      "wrong class + poor box": 42
+    },
+    "openimages": {
+      "correct": 2205,
+      "poor box": 93,
+      "wrong class": 32,
+      "duplicate": 31,
+      "background": 53,
+      "wrong class + poor box": 9
+    },
+    "swg": {
+      "correct": 1496,
+      "poor box": 109,
+      "background": 101,
+      "duplicate": 32
+    }
+  },
+  "object_outcomes": {
+    "coco": {
+      "found": 7034,
+      "poor box": 935,
+      "missed": 2222,
+      "found as wrong class": 34
+    },
+    "all": {
+      "found": 10735,
+      "poor box": 1386,
+      "missed": 2988,
+      "found as wrong class": 202
+    },
+    "openimages": {
+      "found": 2205,
+      "poor box": 343,
+      "found as wrong class": 168,
+      "missed": 225
+    },
+    "swg": {
+      "found": 1496,
+      "missed": 541,
+      "poor box": 108
+    }
+  },
+  "false_box_types_by_class": {
+    "plant": {
+      "background": 207,
+      "wrong class + poor box": 20,
+      "poor box": 32,
+      "wrong class": 2,
+      "duplicate": 6
+    },
+    "person": {
+      "poor box": 394,
+      "duplicate": 104,
+      "background": 208,
+      "wrong class": 36,
+      "wrong class + poor box": 14
+    },
+    "animal": {
+      "background": 299,
+      "poor box": 296,
+      "duplicate": 101,
+      "wrong class": 40,
+      "wrong class + poor box": 8
+    }
+  },
+  "confusion_iou50": {
+    "rows_truth_cols_predicted": [
+      "person",
+      "animal",
+      "plant",
+      "nothing"
+    ],
+    "matrix": [
+      [
+        5330,
+        32,
+        0,
+        2665
+      ],
+      [
+        94,
+        5074,
+        2,
+        1674
+      ],
+      [
+        0,
+        1,
+        265,
+        174
+      ],
+      [
+        722,
+        716,
+        266,
+        0
+      ]
+    ]
+  },
+  "galleries": [
+    {
+      "file": "slice_coco.jpg",
+      "title": "COCO val2017, random sample  (green = truth, colour = detected)"
+    },
+    {
+      "file": "slice_oi_animals.jpg",
+      "title": "Open Images animals, random sample  (green = truth, colour = detected)"
+    },
+    {
+      "file": "slice_oi_plants.jpg",
+      "title": "Open Images houseplants, random sample  (green = truth, colour = detected)"
+    },
+    {
+      "file": "slice_swg_day.jpg",
+      "title": "Camera trap, daytime colour, random sample  (green = truth, colour = detected)"
+    },
+    {
+      "file": "slice_swg_night.jpg",
+      "title": "Camera trap, night infrared, random sample  (green = truth, colour = detected)"
+    },
+    {
+      "file": "slice_swg_empty.jpg",
+      "title": "Camera trap with nothing in it (wind, light), random sample  (green = truth, colour = detected)"
+    },
+    {
+      "file": "slice_dark.jpg",
+      "title": "Dark colour photos, random sample  (green = truth, colour = detected)"
+    },
+    {
+      "file": "slice_crowded.jpg",
+      "title": "Crowded scenes (5+ objects), random sample  (green = truth, colour = detected)"
+    },
+    {
+      "file": "slice_small.jpg",
+      "title": "Pictures with small animals, random sample  (green = truth, colour = detected)"
+    },
+    {
+      "file": "slice_edge.jpg",
+      "title": "Animals cut by the frame edge, random sample  (green = truth, colour = detected)"
+    },
+    {
+      "file": "err_background.jpg",
+      "title": "False boxes: background (most confident first, yellow = the box in question)"
+    },
+    {
+      "file": "err_wrong_class.jpg",
+      "title": "False boxes: wrong class (most confident first, yellow = the box in question)"
+    },
+    {
+      "file": "err_poor_box.jpg",
+      "title": "False boxes: poor box (most confident first, yellow = the box in question)"
+    },
+    {
+      "file": "err_duplicate.jpg",
+      "title": "False boxes: duplicate (most confident first, yellow = the box in question)"
+    },
+    {
+      "file": "err_missed_large.jpg",
+      "title": "Missed large objects (largest first, yellow = the missed object)"
+    },
+    {
+      "file": "err_missed_small.jpg",
+      "title": "Missed small objects (largest first, yellow = the missed object)"
+    },
+    {
+      "file": "cmp_coco.jpg",
+      "title": "COCO val2017 (everyday photos): ours (left) vs stock yolo26s (right), random pictures"
+    },
+    {
+      "file": "cmp_openimages.jpg",
+      "title": "Open Images (web photos, wide species range): ours (left) vs stock yolo26s (right), random pictures"
+    },
+    {
+      "file": "cmp_swg.jpg",
+      "title": "SWG camera traps (forest, held-out sites): ours (left) vs stock yolo26s (right), random pictures"
+    }
+  ]
+}

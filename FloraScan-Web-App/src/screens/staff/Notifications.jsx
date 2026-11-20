@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../../lib/api.js';
 import { useApp } from '../../lib/store.jsx';
 import { Empty, LoadingBlock, PageHead } from '../../components/ui.jsx';
+import AuthImage from '../../components/AuthImage.jsx';
 import { formatDateTime, relativeTime } from '../../lib/format.js';
 import * as I from '../../lib/icons.jsx';
 import { msg, t } from '../../lib/i18n.js';
@@ -13,6 +14,7 @@ const TYPES = {
   'submission.rejected': { icon: I.XCircle, cls: 'badge-danger', label: msg('Returned') },
   'report.new': { icon: I.Flag, cls: 'badge-info', label: msg('Visitor report') },
   'sensor.alert': { icon: I.Alert, cls: 'badge-danger', label: msg('Sensor alert') },
+  'camera.alert': { icon: I.Alert, cls: 'badge-danger', label: msg('Camera alert') },
 };
 
 /**
@@ -26,6 +28,8 @@ const TITLES = [
   [/^Submission published(?:: (.+))?$/, (code) => (code ? t('Submission published: {code}', { code }) : t('Submission published'))],
   [/^Submission returned: (.+)$/, (code) => t('Submission returned: {code}', { code })],
   [/^Submission withdrawn: (.+)$/, (code) => t('Submission withdrawn: {code}', { code })],
+  [/^Sensor alert: (.+)$/, (code) => t('Sensor alert: {code}', { code })],
+  [/^Camera alert: (.+)$/, (code) => t('Camera alert: {code}', { code })],
 ];
 
 function noticeTitle(title) {
@@ -37,7 +41,7 @@ function noticeTitle(title) {
 }
 
 export default function Notifications() {
-  const { refreshCounts, toast } = useApp();
+  const { refreshCounts, toast, can } = useApp();
   const [data, setData] = useState(null);
   const navigate = useNavigate();
 
@@ -52,6 +56,8 @@ export default function Notifications() {
     else if (n.related_type === 'submission') navigate('/staff/review');
     // A password reset request opens that person's account, where the reset is.
     else if (n.related_type === 'user' && n.related_id) navigate('/staff/users?open=' + n.related_id);
+    else if (n.related_type === 'sensor_alert') navigate('/staff/iot');
+    else if (n.related_type === 'camera_alert') navigate('/staff/iot#camera-alerts');
     else load();
   };
 
@@ -100,6 +106,13 @@ export default function Notifications() {
                       {!n.is_read && <span className="badge badge-ok" style={{ fontSize: '0.62rem' }}>{t('New')}</span>}
                     </span>
                     {n.body && <span className="small mute" style={{ display: 'block' }}>{n.body}</span>}
+                    {n.related_type === 'camera_alert' && n.related_id && can('sensor.view') && (
+                      <AuthImage
+                        src={`/api/sensors/camera-alerts/${n.related_id}/photo`}
+                        alt={t('Camera snapshot')}
+                        style={{ width: 220, maxWidth: '100%', aspectRatio: '16 / 9', objectFit: 'cover', borderRadius: 6, display: 'block', marginTop: 6 }}
+                      />
+                    )}
                     <span className="tiny faint" style={{ display: 'block', marginTop: 4 }}>
                       {relativeTime(n.created_at)} &middot; {formatDateTime(n.created_at)}
                     </span>

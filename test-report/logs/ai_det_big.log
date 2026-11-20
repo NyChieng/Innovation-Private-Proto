@@ -1,0 +1,119 @@
+coco         3735 images, 500 empty, boxes person 7811, animal 2094, plant 320
+openimages   1679 images, 0 empty, boxes person 216, animal 2605, plant 120
+swg          2253 images, 300 empty, boxes animal 2145
+Corrupt JPEG data: premature end of data segment
+Corrupt JPEG data: premature end of data segment
+downloaded/available 7661/7667
+  inference 0/7661  11s
+  inference 500/7661  232s
+  inference 1000/7661  416s
+  inference 1500/7661  614s
+  inference 2000/7661  696s
+  inference 2500/7661  778s
+  inference 3000/7661  870s
+  inference 3500/7661  960s
+  inference 4000/7661  1050s
+  inference 4500/7661  1135s
+  inference 5000/7661  1225s
+  inference 5500/7661  1323s
+  inference 6000/7661  1420s
+  inference 6500/7661  1516s
+  inference 7000/7661  1617s
+  inference 7500/7661  1713s
+deployed ONNX 640x384 (OpenVINO, what the app runs)  coco mAP50 0.664  openimages mAP50 0.781  swg mAP50 0.785  all mAP50 0.703  82.6 ms
+det_B .pt 640 (ours)                                 coco mAP50 0.677  openimages mAP50 0.774  swg mAP50 0.796  all mAP50 0.711  41.8 ms
+yolo26n stock COCO-80 -> 3                           coco mAP50 0.684  openimages mAP50 0.671  swg mAP50 0.321  all mAP50 0.625  40.5 ms
+yolo26s stock COCO-80 -> 3                           coco mAP50 0.751  openimages mAP50 0.723  swg mAP50 0.378  all mAP50 0.695  40.5 ms
+{
+ "sets": {
+  "coco": {
+   "label": "COCO val2017 (everyday photos)",
+   "images": 3735,
+   "empty_images": 500,
+   "boxes": {
+    "person": 7811,
+    "plant": 320,
+    "animal": 2094
+   },
+   "night_ir_images": 139
+  },
+  "openimages": {
+   "label": "Open Images (web photos, wide species range)",
+   "images": 1679,
+   "empty_images": 0,
+   "boxes": {
+    "animal": 2605,
+    "person": 216,
+    "plant": 120
+   },
+   "night_ir_images": 21
+  },
+  "swg": {
+   "label": "SWG camera traps (forest, held-out sites)",
+   "images": 2247,
+   "empty_images": 294,
+   "boxes": {
+    "animal": 2145
+   },
+   "night_ir_images": 1108
+  }
+ },
+ "false_box_types": {
+  "coco": {
+   "correct": 7034,
+   "background": 560,
+   "poor box": 520,
+   "duplicate": 148,
+   "wrong class": 46,
+   "wrong class + poor box": 33
+  },
+  "all": {
+   "correct": 10735,
+   "background": 714,
+   "poor box": 722,
+   "duplicate": 211,
+   "wrong class": 78,
+   "wrong class + poor box": 42
+  },
+  "openimages": {
+   "correct": 2205,
+   "poor box": 93,
+   "wrong class": 32,
+   "duplicate": 31,
+   "background": 53,
+   "wrong class + poor box": 9
+  },
+  "swg": {
+   "correct": 1496,
+   "poor box": 109,
+   "background": 101,
+   "duplicate": 32
+  }
+ },
+ "object_outcomes": {
+  "coco": {
+   "found": 7034,
+   "poor box": 935,
+   "missed": 2222,
+   "found as wrong class": 34
+  },
+  "all": {
+   "found": 10735,
+   "poor box": 1386,
+   "missed": 2988,
+   "found as wrong class": 202
+  },
+  "openimages": {
+   "found": 2205,
+   "poor box": 343,
+   "found as wrong class": 168,
+   "missed": 225
+  },
+  "swg": {
+   "found": 1496,
+   "missed": 541,
+   "poor box": 108
+  }
+ }
+}
+saved ..\test-report\ai\det_big\det_big.json

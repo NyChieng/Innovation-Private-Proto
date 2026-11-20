@@ -1,0 +1,68 @@
+6231 crops (2959 touch), kinds: Counter({'100DOH: hand holding an object': 2722, '100DOH: hand touching nothing': 1818, '100DOH: hand on own body': 1003, 'plant scene: hand near the plant, not touching': 317, '100DOH: hand on a fixed object (wall, tree, table)': 227, '100DOH: hand on another person': 112, 'plant scene: no touch': 22, 'plant scene: hand on the plant': 10})
+  100DOH: hand holding an object                       n= 2722  correct 0.712
+  100DOH: hand touching nothing                        n= 1818  correct 0.843
+  100DOH: hand on own body                             n= 1003  correct 0.886
+  plant scene: hand near the plant, not touching       n=  317  correct 0.994
+  100DOH: hand on a fixed object (wall, tree, table)   n=  227  correct 0.507
+  100DOH: hand on another person                       n=  112  correct 0.750
+  plant scene: no touch                                n=   22  correct 0.955
+  plant scene: hand on the plant                       n=   10  correct 0.100
+  sensor noise                       acc 0.672 / 0.592 / 0.534
+  focus blur                         acc 0.786 / 0.766 / 0.724
+  motion blur                        acc 0.777 / 0.756 / 0.725
+  dusk (dark + noise)                acc 0.729 / 0.658 / 0.595
+  overexposed (sun)                  acc 0.781 / 0.779 / 0.775
+  low contrast (haze)                acc 0.786 / 0.779 / 0.762
+  fog                                acc 0.782 / 0.777 / 0.772
+  rain streaks                       acc 0.726 / 0.679 / 0.648
+  JPEG compression                   acc 0.732 / 0.690 / 0.606
+  pixelated (far away)               acc 0.699 / 0.588 / 0.561
+  green canopy tint                  acc 0.779 / 0.770 / 0.757
+  leaf occlusion                     acc 0.727 / 0.688 / 0.667
+  rotated                            acc 0.783 / 0.749 / 0.688
+  zoomed-out crop (pose too big)     acc 0.771 / 0.734 / 0.695
+  off-centre crop (pose error)       acc 0.778 / 0.768 / 0.753
+  mirrored                           acc 0.785
+  greyscale (night IR)               acc 0.707
+{
+ "splits": {
+  "test": 0.7880685563612393,
+  "val": 0.7829214888958399,
+  "test + val": 0.7854277002086343
+ },
+ "damage_summary": {
+  "clean_accuracy": 0.7854277002086343,
+  "mean_accuracy_by_level": {
+   "1": 0.7537580912641094,
+   "2": 0.7182260739314184,
+   "3": 0.6840742523939443
+  },
+  "worst_at_level_3": [
+   [
+    "sensor noise",
+    0.5344246509388542
+   ],
+   [
+    "pixelated (far away)",
+    0.56058417589472
+   ],
+   [
+    "dusk (dark + noise)",
+    0.5949285828919917
+   ],
+   [
+    "JPEG compression",
+    0.6060022468303643
+   ],
+   [
+    "rain streaks",
+    0.6480500722195475
+   ]
+  ],
+  "safe_at_level_3": [
+   "overexposed (sun)",
+   "fog",
+   "mirrored"
+  ]
+ }
+}
