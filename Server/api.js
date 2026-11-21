@@ -1335,6 +1335,17 @@ export function createApi() {
       name: (a, b) => (a.scientific_name || '').localeCompare(b.scientific_name || ''),
       code: (a, b) => a.plant_code.localeCompare(b.plant_code),
       popular: (a, b) => b.view_count - a.view_count,
+      // By trail and marker, so a list can be grouped by where plants stand.
+      // Withheld locations go last and in name order: sorting them by their
+      // real site would let the order give the location away.
+      place: (a, b) => {
+        const pa = !req.user && isLocationProtected(a.conservation_code);
+        const pb = !req.user && isLocationProtected(b.conservation_code);
+        if (pa !== pb) return pa ? 1 : -1;
+        if (pa) return (a.scientific_name || '').localeCompare(b.scientific_name || '');
+        return (a.site_name || '').localeCompare(b.site_name || '', 'en', { numeric: true })
+          || (a.scientific_name || '').localeCompare(b.scientific_name || '');
+      },
     };
     rows.sort(sorters[sort] || sorters.recent);
 

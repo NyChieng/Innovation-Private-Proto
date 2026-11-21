@@ -13,6 +13,7 @@ import {
 import * as I from '../lib/icons.jsx';
 import { t } from '../lib/i18n.js';
 import { isRealPhoto } from '../lib/photo.js';
+import { ForestBand, MarkerDot } from '../components/forest.jsx';
 
 /* ------------------------------------------------------------------ */
 
@@ -262,7 +263,40 @@ export default function PlantInfo({ byToken }) {
     [t('Distribution'), sp.distribution],
   ].filter(([, v]) => v);
 
+  // Everyday name on top for visitors; the scientific name sits right under it.
+  const title = plant.common_name || plant.local_name || name;
+  const bandPhoto = (plant.photos || []).map((p) => p.file_path).find((src) => isRealPhoto(src));
+
   return (
+    <div className="plant-page">
+      <ForestBand photo={bandPhoto} className="plant-band">
+        <div className="wrap-narrow plant-band-in">
+          {byToken && (
+            <div className="row row-wrap" style={{ gap: 8 }}>
+              <span className="badge badge-ok scan-pulse"><I.Check style={{ width: 12, height: 12 }} /> {t('Tag scanned')}</span>
+              <span className="tiny plant-band-mist">{t('Verified record from the park register')}</span>
+            </div>
+          )}
+          <div className="row row-wrap plant-band-tags">
+            {plant.conservation_code && <ConservationBadge code={plant.conservation_code} />}
+            {sp.growth_form && <span className="tag">{GROWTH_FORM[sp.growth_form] || titleCase(sp.growth_form)}</span>}
+            {user && <StatusBadge status={plant.status} />}
+          </div>
+          <h1 className="display plant-title">{title}</h1>
+          <div className="plant-band-sub">
+            {title !== name && <span className={plant.scientific_name ? 'sci' : ''}>{name}</span>}
+            {plant.common_name && plant.common_name !== title && <span>&middot; {plant.common_name}</span>}
+            {plant.local_name && plant.local_name !== title && <span>&middot; {plant.local_name}</span>}
+          </div>
+          {!plant.location_protected && plant.site_name && (
+            <div className="plant-band-site">
+              <MarkerDot site={plant.site_name} />
+              <span>{plant.site_name}</span>
+            </div>
+          )}
+        </div>
+      </ForestBand>
+
     <div className="page">
       <div className="wrap wrap-narrow">
         {plant.status !== 'approved' && (
@@ -273,33 +307,13 @@ export default function PlantInfo({ byToken }) {
           </div>
         )}
 
-        {byToken && (
-          <div className="row" style={{ gap: 8, marginBottom: 14 }}>
-            <span className="badge badge-ok scan-pulse"><I.Check style={{ width: 12, height: 12 }} /> {t('Tag scanned')}</span>
-            <span className="tiny mute">{t('Verified record from the park register')}</span>
+        {plant.species_not_listed && (
+          <div style={{ marginBottom: 18 }}>
+            <Notice kind="warn" title={t('Species not yet confirmed')}>
+              {t('A botanist recorded this specimen as {name}. The identification has not yet been confirmed.', { name: <>&ldquo;{plant.proposed_species_name}&rdquo;</> })}
+            </Notice>
           </div>
         )}
-
-        {/* Header */}
-        <div style={{ marginBottom: 20 }}>
-          <div className="row row-wrap" style={{ gap: 8, marginBottom: 10 }}>
-            {plant.conservation_code && <ConservationBadge code={plant.conservation_code} />}
-            {sp.growth_form && <span className="tag">{GROWTH_FORM[sp.growth_form] || titleCase(sp.growth_form)}</span>}
-            {user && <StatusBadge status={plant.status} />}
-          </div>
-          <h1 className={plant.scientific_name ? 'sci' : ''} style={{ fontSize: 'clamp(1.6rem, 5vw, 2.2rem)' }}>{name}</h1>
-          <div className="row row-wrap" style={{ gap: 10, marginTop: 6 }}>
-            {plant.common_name && <span style={{ fontSize: '1.02rem', color: 'var(--text-soft)' }}>{plant.common_name}</span>}
-            {plant.local_name && <span className="mute">&middot; {plant.local_name}</span>}
-          </div>
-          {plant.species_not_listed && (
-            <div style={{ marginTop: 12 }}>
-              <Notice kind="warn" title={t('Species not yet confirmed')}>
-                {t('A botanist recorded this specimen as {name}. The identification has not yet been confirmed.', { name: <>&ldquo;{plant.proposed_species_name}&rdquo;</> })}
-              </Notice>
-            </div>
-          )}
-        </div>
 
         <div style={{ display: 'grid', gap: 22, gridTemplateColumns: mobile ? '1fr' : '1.15fr 1fr', alignItems: 'start' }}>
           <Gallery photos={plant.photos} alt={name} />
@@ -441,11 +455,12 @@ export default function PlantInfo({ byToken }) {
         </div>
 
         <div className="tiny faint" style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
-          {t('Photographs are contributed to iNaturalist under Creative Commons licences and credited to the photographer; where no photograph exists the page falls back to a generated illustration. Taxonomy and Red List categories come from GBIF.')}
+          {t('Photographs are contributed to iNaturalist under Creative Commons licences and credited to the photographer; where no photograph exists the page shows a placeholder. Taxonomy and Red List categories come from GBIF.')}
         </div>
       </div>
 
       {reporting && <ReportDialog plant={plant} onClose={() => setReporting(false)} />}
+    </div>
     </div>
   );
 }

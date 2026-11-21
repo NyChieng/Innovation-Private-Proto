@@ -1,11 +1,22 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api.js';
-import { ConservationBadge, Empty, LoadingBlock, PageHead, SearchInput } from '../components/ui.jsx';
-import { Reveal } from '../components/motion.jsx';
-import { GROWTH_FORM, num, titleCase } from '../lib/format.js';
+import { ConservationBadge, Empty, LoadingBlock, SearchInput } from '../components/ui.jsx';
+import { Reveal, SmartImage } from '../components/motion.jsx';
+import { ForestBand } from '../components/forest.jsx';
+import { num } from '../lib/format.js';
 import * as I from '../lib/icons.jsx';
 import { t } from '../lib/i18n.js';
+
+/** The first credited photograph of a species, as a served path. */
+export function speciesPhoto(s) {
+  let credits = s?.photo_credits;
+  if (typeof credits === 'string') {
+    try { credits = JSON.parse(credits); } catch { credits = []; }
+  }
+  const file = (credits || []).find((c) => c?.file)?.file;
+  return file ? '/api/photos/file/' + encodeURIComponent(file) : null;
+}
 
 export default function SpeciesList() {
   const [rows, setRows] = useState(null);
@@ -35,47 +46,53 @@ export default function SpeciesList() {
 
   if (!rows) return <LoadingBlock label={t('Loading the species list')} />;
 
+  const families = new Set(rows.map((s) => s.family).filter(Boolean)).size;
+  const bandPhoto = rows.map(speciesPhoto).find(Boolean);
+
   return (
-    <div className="page">
-      <div className="wrap">
-        <PageHead
-          title={t('Species')}
-          sub={t('The botanical reference behind the register. Taxonomy is held once per species, so a correction is made in one place rather than on every specimen.')}
-        />
-
-        <div style={{ maxWidth: 480, marginBottom: 22 }}>
-          <SearchInput value={q} onChange={setQ} placeholder={t('Search species, family or local name')} />
+    <div className="species-page">
+      <ForestBand photo={bandPhoto} className="list-band">
+        <div className="list-band-head">
+          <h1 className="display">{t('Species')}</h1>
+          <span className="list-band-count">{t('{n} species in {f} families', { n: num(rows.length), f: num(families) })}</span>
         </div>
+        <div className="band-search-wrap">
+          <SearchInput value={q} onChange={setQ} large placeholder={t('Search species, family or local name')} />
+        </div>
+      </ForestBand>
 
+      <div className="wrap section-pad">
         {filtered.length === 0 && <Empty icon={I.Book} title={t('No species match that search')} />}
 
-        {byFamily.map(([family, list], fi) => (
-          <Reveal key={family} index={fi % 6} style={{ marginBottom: 26 }}>
-            <div className="row" style={{ gap: 10, marginBottom: 10 }}>
-              <h2 style={{ fontSize: '1.05rem' }}>{family}</h2>
-              <span className="tag">{list.length} species</span>
-            </div>
-            <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 288px), 1fr))', gap: 12 }}>
-              {list.map((s) => (
-                <Link key={s.id} className="card card-pad species-card" to={'/species/' + s.id} style={{ color: 'inherit', textDecoration: 'none' }}>
-                  <div className="row row-between" style={{ alignItems: 'flex-start', gap: 10 }}>
-                    <div style={{ minWidth: 0 }}>
-                      <div className="sci strong" style={{ fontSize: '0.98rem' }}>{s.scientific_name}</div>
-                      {s.common_name && <div className="small mute truncate">{s.common_name}</div>}
-                      {s.local_name && <div className="tiny faint truncate">{s.local_name}</div>}
-                    </div>
+        <div className="site-groups">
+          {byFamily.map(([family, list], fi) => (
+            <Reveal key={family} index={fi % 6} className="site-group">
+              <div className="site-group-head">
+                <h2 className="display">{family}</h2>
+                <span className="small mute">{t('{n} species', { n: list.length })}</span>
+              </div>
+              <div className="species-grid">
+                {list.map((s) => (
+                  <Link key={s.id} className="species-card" to={'/species/' + s.id}>
+                    <span className="species-thumb">
+                      <SmartImage src={speciesPhoto(s)} alt="" placeholderLabel={false} />
+                    </span>
+                    <span className="species-text">
+                      <span className="sci strong species-sci">{s.scientific_name}</span>
+                      {(s.common_name || s.local_name) && (
+                        <span className="small mute truncate">{[s.common_name, s.local_name].filter(Boolean).join(' · ')}</span>
+                      )}
+                      <span className="tiny faint">
+                        {s.plant_count === 1 ? t('1 plant in the park') : t('{n} plants in the park', { n: num(s.plant_count) })}
+                      </span>
+                    </span>
                     <ConservationBadge code={s.conservation_code} showLabel={false} />
-                  </div>
-                  <div className="row" style={{ gap: 8, marginTop: 10 }}>
-                    {s.growth_form && <span className="tag">{GROWTH_FORM[s.growth_form] || titleCase(s.growth_form)}</span>}
-                    <span className="spacer" />
-                    <span className="tiny faint">{num(s.plant_count)} specimen{s.plant_count === 1 ? '' : 's'}</span>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </Reveal>
-        ))}
+                  </Link>
+                ))}
+              </div>
+            </Reveal>
+          ))}
+        </div>
       </div>
     </div>
   );

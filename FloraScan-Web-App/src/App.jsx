@@ -19,6 +19,7 @@ import Login from './screens/Login.jsx';
 import Connect from './screens/Connect.jsx';
 import Scan from './screens/Scan.jsx';
 import Welcome from './screens/Welcome.jsx';
+import NotFound from './screens/NotFound.jsx';
 
 import PlantRegister from './screens/staff/PlantRegister.jsx';
 import RegisterPlant from './screens/staff/RegisterPlant.jsx';
@@ -157,16 +158,7 @@ export default function App() {
             <Route path="/staff/me" element={<Guard><Me /></Guard>} />
             <Route path="/staff/password" element={<Guard><ChangePassword /></Guard>} />
 
-            <Route
-              path="*"
-              element={
-                <div className="page"><div className="wrap wrap-narrow">
-                  <Empty icon={I.Compass} title={t('Page not found')}>
-                    {t('That address does not match any page.')}
-                  </Empty>
-                </div></div>
-              }
-            />
+            <Route path="*" element={<NotFound />} />
           </Routes>
           </PageTransition>
         </Suspense>

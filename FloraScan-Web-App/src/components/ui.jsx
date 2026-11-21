@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { CONSERVATION, STATUS, fromServer, initials, relativeTime, titleCase } from '../lib/format.js';
 import { useApp } from '../lib/store.jsx';
 import { SmartImage, useCardTilt } from './motion.jsx';
+import { MarkerDot } from './forest.jsx';
 import { t } from '../lib/i18n.js';
 import * as I from '../lib/icons.jsx';
 
@@ -222,8 +223,11 @@ export function Toasts() {
 /* Plant card                                                          */
 /* ------------------------------------------------------------------ */
 
-export function PlantCard({ plant, to, showStatus, eager = false }) {
-  const name = plant.scientific_name || plant.proposed_species_name || t('Unidentified specimen');
+export function PlantCard({ plant, to, showStatus, eager = false, hideSite = false }) {
+  const sci = plant.scientific_name || plant.proposed_species_name || t('Unidentified specimen');
+  // Visitors know plants by their everyday name; the scientific name sits under it.
+  const title = plant.common_name || plant.local_name || sci;
+  const showSci = title !== sci;
   const tilt = useCardTilt();
   return (
     <Link className="plant-card" to={to || `/plant/${plant.id}`} {...tilt}>
@@ -236,16 +240,16 @@ export function PlantCard({ plant, to, showStatus, eager = false }) {
         {plant.conservation_code && (
           <div className="overlay-tr"><ConservationBadge code={plant.conservation_code} showLabel={false} /></div>
         )}
-        <div className="overlay-b">
-          <I.MapPin style={{ width: 13, height: 13 }} />
-          <span className="truncate">{fromServer(plant.site_name)}</span>
-        </div>
+        {!plant.location_protected && <MarkerDot site={plant.site_name} className="overlay-marker" />}
       </div>
       <div className="plant-card-body">
-        <div className="plant-card-name" style={plant.scientific_name ? undefined : { fontStyle: 'normal', fontFamily: 'var(--font)', fontSize: '0.94rem' }}>
-          {name}
-        </div>
-        {plant.common_name && <div className="plant-card-common">{plant.common_name}</div>}
+        <div className="plant-card-title">{title}</div>
+        {showSci && <div className="plant-card-name">{sci}</div>}
+        {!hideSite && (
+          <div className="plant-card-site truncate">
+            {plant.location_protected ? t('Location withheld') : fromServer(plant.site_name)}
+          </div>
+        )}
         <div className="plant-card-foot">
           <span className="mono tiny faint">{plant.plant_code}</span>
           <span className="spacer" />
