@@ -21,7 +21,7 @@
 -- 1. Staff job titles
 -- ---------------------------------------------------------------------
 -- Shown beside a name wherever the app credits someone - "verified by
--- Dr Lee Sue Han, Senior Botanist" reads better than the name alone.
+-- Dr Grace Lim, Senior Botanist" reads better than the name alone.
 
 ALTER TABLE users
   ADD COLUMN title VARCHAR(120) NULL AFTER full_name;

@@ -16,15 +16,26 @@
  * attacking through, fast enough that a demo login feels instant.
  */
 
+import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
 
 const COST = 10;
 
 /**
- * Temporary password an administrator hands out when creating or resetting an
- * account. Seeded accounts have their own passwords (see seed.js).
+ * A new random temporary password, issued when an administrator creates or
+ * resets an account and shown to them once. The account must change it at the
+ * next sign in. Seeded accounts have their own passwords (see seed.js).
  */
-export const DEMO_PASSWORD = 'demo1234';
+export function temporaryPassword() {
+  // Three groups of four from an alphabet without look-alikes (no 0/o, 1/l/i),
+  // so it can be read out or copied by hand: about 59 bits, different every time.
+  const ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789';
+  const group = () => Array.from({ length: 4 }, () => ALPHABET[crypto.randomInt(ALPHABET.length)]).join('');
+  let pw;
+  do pw = [group(), group(), group()].join('-');
+  while (!/[a-z]/.test(pw) || !/\d/.test(pw)); // meets the password rules itself
+  return pw;
+}
 
 export const hashPassword = (plain) => bcrypt.hashSync(String(plain), COST);
 

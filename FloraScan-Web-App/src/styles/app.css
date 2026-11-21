@@ -753,41 +753,10 @@
 .avatar-reviewer{ background: var(--surface-3);  color: var(--text);       border-color: var(--border-strong, var(--border)); }
 
 /* ==================================================================
-   Role switcher (prototype only)
+   List picker rows (species and tag pickers)
    ================================================================== */
 
-.rs-fab {
-  position: fixed; z-index: 180; right: 18px; bottom: 18px;
-  display: flex; align-items: center; gap: 9px;
-  padding: 8px 15px 8px 9px; border-radius: var(--r-pill);
-  background: var(--green-900); color: #e9f2e9;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  box-shadow: var(--sh-4); font-size: 0.85rem; font-weight: 580;
-}
-.rs-fab:hover { background: var(--green-800); }
-.rs-fab .avatar { width: 27px; height: 27px; font-size: 0.68rem; }
-.rs-fab .kbd { opacity: 0.55; font-size: 0.7rem; }
-
-@media (max-width: 860px) {
-  .rs-fab { bottom: 76px; right: 12px; }
-  /* Screens without the bottom tab bar - the welcome screen - have nothing to
-     clear, so the pill sits in the corner instead of floating over content. */
-  body:not(:has(.bottom-nav)) .rs-fab { bottom: 14px; }
-}
-
-.rs-panel {
-  position: fixed; z-index: 190; right: 18px; bottom: 68px;
-  width: min(360px, calc(100vw - 28px));
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--r-lg); box-shadow: var(--sh-4); overflow: hidden;
-  animation: pop 0.16s cubic-bezier(0.2, 0.9, 0.3, 1.2);
-  max-height: min(70dvh, 620px); display: flex; flex-direction: column;
-}
-@media (max-width: 860px) { .rs-panel { bottom: 126px; right: 12px; } }
-
-.rs-head { padding: 13px 16px 11px; border-bottom: 1px solid var(--border); background: var(--surface-2); }
-.rs-list { overflow-y: auto; padding: 6px; }
-/* Used for the switcher list and reused for the demo account and tag pickers.
+/* Rows in the species and tag pickers.
    min-width:0 overrides the automatic minimum size a flex or grid item gets,
    without which the long text inside refuses to shrink and pushes the row
    past the edge of a narrow phone screen. */
@@ -925,7 +894,7 @@
 @media print {
   @page { size: A4 portrait; margin: 10mm; }
 
-  .topbar, .sidebar, .bottom-nav, .rs-fab, .rs-panel, .toasts, .no-print { display: none !important; }
+  .topbar, .sidebar, .bottom-nav, .toasts, .no-print { display: none !important; }
   body { background: #fff; }
   .page { padding: 0; }
 

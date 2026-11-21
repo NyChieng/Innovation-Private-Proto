@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import jsQR from 'jsqr';
 import { api } from '../lib/api.js';
 import { useApp } from '../lib/store.jsx';
-import { Notice, Empty, PageHead } from '../components/ui.jsx';
+import { Notice, PageHead } from '../components/ui.jsx';
 import * as I from '../lib/icons.jsx';
 import { t } from '../lib/i18n.js';
 
@@ -28,7 +28,6 @@ export default function Scan() {
 
   const [state, setState] = useState('idle'); // idle | starting | scanning | denied | unsupported
   const [message, setMessage] = useState(null);
-  const [samples, setSamples] = useState([]);
   const [reading, setReading] = useState(false);
   const [hasTorch, setHasTorch] = useState(false);
   const [torch, setTorch] = useState(false);
@@ -36,13 +35,6 @@ export default function Scan() {
   const [lookingUp, setLookingUp] = useState(false);
 
   const secure = window.isSecureContext;
-
-  /* Demo fallback: a few real tags from the register. */
-  useEffect(() => {
-    api.publicPlants({ sort: 'popular' })
-      .then((r) => setSamples(r.results.filter((p) => p.qr_token).slice(0, 6)))
-      .catch(() => {});
-  }, []);
 
   const stop = useCallback(() => {
     cancelAnimationFrame(rafRef.current);
@@ -343,42 +335,6 @@ export default function Scan() {
             </button>
           </div>
         </form>
-
-        {/* Fallback / demo shortcut */}
-        <div className="card" style={{ marginTop: 22 }}>
-          <div className="card-head">
-            <h3 className="grow">{t('Or open a tag directly')}</h3>
-            <span className="badge badge-warn">{t('Demo')}</span>
-          </div>
-          <div className="card-body">
-            <div className="small mute" style={{ marginBottom: 12 }}>
-              {t('These are real tokens from the register, so they follow exactly the same path as a scanned tag. Useful on a laptop, or when the camera is unavailable.')}
-            </div>
-            {samples.length === 0 ? (
-              <Empty icon={I.QrIcon} title={t('No published tags yet')} />
-            ) : (
-              <div style={{ display: 'grid', gap: 7 }}>
-                {samples.map((p) => (
-                  <button
-                    key={p.id}
-                    className="rs-item"
-                    style={{ border: '1px solid var(--border)', background: 'var(--surface)' }}
-                    onClick={() => navigate('/p/' + p.qr_token)}
-                  >
-                    <span style={{ width: 34, height: 34, borderRadius: 7, overflow: 'hidden', background: 'var(--surface-3)', flex: 'none' }}>
-                      {p.photo && <img src={p.photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
-                    </span>
-                    <span className="grow" style={{ minWidth: 0 }}>
-                      <span className="nm sci truncate">{p.scientific_name}</span>
-                      <span className="rl truncate">{p.plant_code} &middot; {p.site_name}</span>
-                    </span>
-                    <I.ChevronRight style={{ width: 15, height: 15, color: 'var(--text-faint)' }} />
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
 
         <canvas ref={canvasRef} style={{ display: 'none' }} />
       </div>

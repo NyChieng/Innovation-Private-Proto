@@ -49,11 +49,13 @@ async function api(method, path, body, token) {
 console.log(`Passkey tests against ${BASE}\n`);
 
 /* A throwaway account that has chosen its own password. */
-const admin = (await api('POST', '/auth/login', { email: 'nengyichieng@gmail.com', password: 'nengyichieng123' })).body.token;
+const admin = (await api('POST', '/auth/login', { email: 'farah.hamid@florascan.test', password: 'farah.hamid123' })).body.token;
 const email = `test.passkey.${Date.now()}@niah.sarawak.gov.my`;
 const made = await api('POST', '/users', { full_name: 'Passkey Test User', email, role_id: 2 }, admin);
-let token = (await api('POST', '/auth/login', { email, password: 'demo1234' })).body.token;
-await api('POST', '/auth/password', { current_password: 'demo1234', new_password: 'passkey-pass-1' }, token);
+// Temporary passwords are random: use the one the API issued.
+let temp = made.body.temporary_password;
+let token = (await api('POST', '/auth/login', { email, password: temp })).body.token;
+await api('POST', '/auth/password', { current_password: temp, new_password: 'passkey-pass-1' }, token);
 
 console.log('\x1b[1mServer refuses what it should\x1b[0m');
 check('signed-out users cannot add a passkey', (await api('POST', '/auth/passkeys/register/options')).status === 401);
@@ -156,15 +158,15 @@ try {
   await onAgain.click();
   await page.waitForSelector('::-p-text(Add another device)', { timeout: 10000 }).catch(() => null);
   check('set up again', (await api('GET', '/auth/passkeys', null, token)).body.results?.length === 1);
-  await api('POST', `/users/${made.body.user.id}/reset-password`, {}, admin);
-  const fresh = (await api('POST', '/auth/login', { email, password: 'demo1234' })).body.token;
+  temp = (await api('POST', `/users/${made.body.user.id}/reset-password`, {}, admin)).body.temporary_password;
+  const fresh = (await api('POST', '/auth/login', { email, password: temp })).body.token;
   check('after the reset the account has none', (await api('GET', '/auth/passkeys', null, fresh)).body.results?.length === 0);
 
   console.log('\n\x1b[1mOffered straight after a password sign-in\x1b[0m');
   const email2 = `test.passkey.offer.${Date.now()}@niah.sarawak.gov.my`;
-  await api('POST', '/users', { full_name: 'Passkey Offer User', email: email2, role_id: 2 }, admin);
-  const t2 = (await api('POST', '/auth/login', { email: email2, password: 'demo1234' })).body.token;
-  await api('POST', '/auth/password', { current_password: 'demo1234', new_password: 'offer-pass-1' }, t2);
+  const temp2 = (await api('POST', '/users', { full_name: 'Passkey Offer User', email: email2, role_id: 2 }, admin)).body.temporary_password;
+  const t2 = (await api('POST', '/auth/login', { email: email2, password: temp2 })).body.token;
+  await api('POST', '/auth/password', { current_password: temp2, new_password: 'offer-pass-1' }, t2);
   await cdp.send('WebAuthn.clearCredentials', { authenticatorId });
 
   await page.evaluate(() => localStorage.removeItem('florascan.token'));

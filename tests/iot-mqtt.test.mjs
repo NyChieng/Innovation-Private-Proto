@@ -103,7 +103,7 @@ async function call(method, p, { token, body } = {}) {
   try { json = await r.json(); } catch { /* not JSON */ }
   return { status: r.status, body: json };
 }
-const passwordFor = (email) => (email.endsWith('@gmail.com') ? email.split('@')[0] + '123' : 'demo1234');
+const passwordFor = (email) => (email.endsWith('@florascan.test') ? email.split('@')[0] + '123' : null);
 async function login(email) {
   const r = await call('POST', '/auth/login', { body: { email, password: passwordFor(email) } });
   if (!r.body?.token) throw new Error(`Could not sign in as ${email}: ${r.status} ${JSON.stringify(r.body)}`);
@@ -316,7 +316,7 @@ section('4. Messages the server must refuse');
 }
 
 section('5. Alerts when a reading leaves the botanist\'s limits');
-const rangerT = await login('edmundguoqianyu@gmail.com');
+const rangerT = await login('ahmad.rosli@florascan.test');
 {
   await db.query("UPDATE sensor_alerts SET status = 'resolved', resolved_at = UTC_TIMESTAMP() WHERE device_id = ? AND status = 'open'", [deviceId]);
   const openAlerts = () => rows("SELECT * FROM sensor_alerts WHERE device_id = ? AND status = 'open' ORDER BY id", [deviceId]);
@@ -384,7 +384,7 @@ const rangerT = await login('edmundguoqianyu@gmail.com');
 section('6. Who may see sensors and resolve alerts');
 {
   const [botT, revT, adminT] = await Promise.all([
-    login('drsuehanlee@gmail.com'), login('drmeilingwong@gmail.com'), login('nengyichieng@gmail.com'),
+    login('grace.lim@florascan.test'), login('aisyah.rahman@florascan.test'), login('farah.hamid@florascan.test'),
   ]);
   const [open] = await rows("SELECT id FROM sensor_alerts WHERE device_id = ? AND status = 'open' ORDER BY id LIMIT 1", [deviceId]);
   eq('anonymous GET /sensors is refused', (await call('GET', '/sensors')).status, 401);

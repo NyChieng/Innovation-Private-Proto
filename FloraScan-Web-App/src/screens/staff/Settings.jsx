@@ -130,9 +130,6 @@ export default function SettingsScreen() {
               </tbody>
             </table>
           </div>
-          <div className="card-foot tiny mute">
-            {t('In the shipped design these live behind the future superuser role; the prototype gives them to the administrator so the workflow can be demonstrated.')}
-          </div>
         </div>
       </div>
     </div>

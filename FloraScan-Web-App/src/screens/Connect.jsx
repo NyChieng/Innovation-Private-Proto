@@ -54,7 +54,7 @@ function TrustCard({ caUrl }) {
         </div>
       </div>
       <div className="card-foot tiny mute">
-        {t('The certificate can only vouch for {local} and private network addresses ({ranges}), never a public website. Remove it when you are done with the prototype: on iPhone, {path}.', {
+        {t('The certificate can only vouch for {local} and private network addresses ({ranges}), never a public website. Remove it when you no longer need it: on iPhone, {path}.', {
           local: <span className="mono">localhost</span>,
           ranges: <><span className="mono">10.x</span>, <span className="mono">172.16–31.x</span>, <span className="mono">192.168.x</span></>,
           path: <><strong>{t('General')}</strong> &rarr; <strong>{t('VPN & Device Management')}</strong></>,
@@ -99,7 +99,7 @@ export default function Connect() {
 
         {onPhone ? (
           <Notice kind="ok" title={t('You are already on a phone')}>
-            {t('You are viewing the prototype on a mobile device. Use the switcher (bottom right) to force the website layout instead, if you want to compare them.')}
+            {t('You are on a mobile device, so the phone layout is showing. Use the Layout setting below to switch to the website layout.')}
           </Notice>
         ) : (
           <div className="card card-pad center" style={{ marginBottom: 20 }}>
@@ -157,7 +157,7 @@ export default function Connect() {
           <div className="card card-pad">
             <h3 style={{ marginBottom: 8 }}>{t('Layout')}</h3>
             <div className="small mute" style={{ marginBottom: 12 }}>
-              {t('The prototype follows the screen size, but you can force either layout for a demo.')}
+              {t('The layout follows the screen size, but you can choose either one.')}
             </div>
             <div className="segmented">
               {[['auto', t('Auto')], ['web', t('Website')], ['mobile', t('Phone app')]].map(([v, l]) => (
