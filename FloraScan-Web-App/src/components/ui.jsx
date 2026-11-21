@@ -228,9 +228,7 @@ export function PlantCard({ plant, to, showStatus, eager = false }) {
   return (
     <Link className="plant-card" to={to || `/plant/${plant.id}`} {...tilt}>
       <div className="plant-photo">
-        {plant.photo
-          ? <SmartImage src={plant.photo} fallback={plant.photo_remote} tint={plant.photo_tint} alt="" eager={eager} />
-          : <div style={{ width: '100%', height: '100%', display: 'grid', placeItems: 'center' }}><I.Leaf style={{ width: 34, height: 34, color: 'var(--text-faint)' }} /></div>}
+        <SmartImage src={plant.photo} fallback={plant.photo_remote} tint={plant.photo_tint} alt="" eager={eager} />
         <div className="overlay-tl">
           {showStatus && <StatusBadge status={plant.status} />}
           {plant.species_not_listed && <span className="badge badge-info">{t('Species not listed')}</span>}
@@ -266,7 +264,7 @@ export function PlantRow({ plant, onClick, children }) {
     <tr onClick={onClick} style={onClick ? { cursor: 'pointer' } : undefined}>
       <td style={{ width: 54 }}>
         <div style={{ width: 42, height: 42, borderRadius: 8, overflow: 'hidden', background: 'var(--surface-3)' }}>
-          {plant.photo && <img src={plant.photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} loading="lazy" />}
+          <SmartImage src={plant.photo} fallback={plant.photo_remote} tint={plant.photo_tint} alt="" placeholderLabel={false} />
         </div>
       </td>
       <td>

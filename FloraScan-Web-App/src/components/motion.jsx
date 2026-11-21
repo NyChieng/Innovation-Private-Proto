@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import { realPhoto } from '../lib/photo.js';
+import { t } from '../lib/i18n.js';
 
 /**
  * Motion helpers.
@@ -116,17 +118,38 @@ function tintFor(src) {
   return `hsl(${hue} 22% 26%)`;
 }
 
+/**
+ * Shown when there is no real photograph, or it would not load: a leaf on the
+ * tint, never a generated drawing or another plant's picture.
+ */
+function PhotoPlaceholder({ label = true }) {
+  return (
+    <span className="photo-placeholder" role="img" aria-label={t('No photo yet')}>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z" />
+        <path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12" />
+      </svg>
+      {label && <span className="photo-placeholder-text">{t('No photo yet')}</span>}
+    </span>
+  );
+}
+
 export function SmartImage({
-  src, alt = '', fallback, tint, className = '', ratio, style, eager = false, ...rest
+  src: rawSrc, alt = '', fallback: rawFallback, tint, className = '', ratio, style, eager = false,
+  placeholderLabel = true, ...rest
 }) {
-  const [state, setState] = useState('loading'); // loading | ready | failed
+  // Generated stand-in drawings are not photographs: drop them, and use the
+  // fallback (a remote photo) or the placeholder instead.
+  const src = realPhoto(rawSrc) || realPhoto(rawFallback);
+  const fallback = src === rawFallback ? null : realPhoto(rawFallback);
+  const [state, setState] = useState(src ? 'loading' : 'failed'); // loading | ready | failed
   const [current, setCurrent] = useState(src);
   const triedFallback = useRef(false);
   const imgRef = useRef(null);
 
   useEffect(() => {
     setCurrent(src);
-    setState('loading');
+    setState(src ? 'loading' : 'failed');
     triedFallback.current = false;
   }, [src]);
 
@@ -179,7 +202,8 @@ export function SmartImage({
       // better than a grey box.
       style={{ aspectRatio: ratio, '--tint': tint || tintFor(current), ...style }}
     >
-      {current && (
+      {state === 'failed' && <PhotoPlaceholder label={placeholderLabel} />}
+      {current && state !== 'failed' && (
         <img
           ref={imgRef}
           src={current}
@@ -369,8 +393,8 @@ function preloadImageUrl(url) {
 
 async function resolveSlide(item) {
   if (!item) return null;
-  const primary = item.src || item.photo || null;
-  const fallback = item.fallback || item.photo_remote || null;
+  const primary = realPhoto(item.src || item.photo) || null;
+  const fallback = realPhoto(item.fallback || item.photo_remote) || null;
   if (primary) {
     const ok = await preloadImageUrl(primary);
     if (ok) return { ...item, resolvedUrl: ok };
