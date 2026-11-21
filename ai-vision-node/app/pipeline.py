@@ -6,10 +6,15 @@
 Stages (people only; animals live in the forest, so they are labelled but never alerted):
     SAFE     person in view, away from the plant
     WARNING  person's body or wrist inside the buffer zone around the plant for warn_seconds
-    ALERT    touch classifier says a hand is on the plant for touch_frames frames in a row
+    ALERT    touch classifier says a hand is on the plant in touch_frames of the last touch_window
+             model frames, AND the plant backs it up: its leaves move, or the hand crop is among
+             green plant pixels (plant_green_min). The classifier alone can never alert, so a hand
+             holding a camera in front of a coat stays a WARNING. Colour alone is not required,
+             because a bare winter tree has no green but its branches still move when pruned.
              (without a trained touch model: wrist inside the plant outline + leaf motion)
 
-The plant zone is the polygon drawn in the app; without one, detected plants are the zones.
+The plant zone is the polygon drawn in the app; the app's Live tab needs one (require_zone).
+Without one (scripts and tests), detected plants are the zones.
 
 Built to run on a small CPU-only machine (app/engine.py: OpenVINO; an NVIDIA GPU is used if present):
   - the models run only when something moves, plus a heartbeat every heartbeat_seconds, so drawn
@@ -53,7 +58,10 @@ DEFAULTS = {
     "warn_seconds": 1.0,        # how long someone must be in the buffer before WARNING
     "touch_conf": 0.6,          # touch classifier probability that counts as a touch frame
     "touch_assist": 0.2,        # ... or this much, when the wrist is on the plant and its leaves move
-    "touch_frames": 4,          # debounce: touch frames in a row before ALERT
+    "touch_frames": 4,          # debounce: touch frames needed before ALERT ...
+    "touch_window": 6,          # ... among the last this many model frames (0 = in a row, the old rule)
+    "plant_green_min": 0.15,    # plant evidence: share of green pixels (2G - R - B) in the hand crop
+    "require_zone": True,       # Live does not start until a plant zone is drawn
     "cooldown_seconds": 10.0,   # per person and stage
     "motion_multiplier": 2.5,   # fallback touch rule: leaf motion must exceed baseline x this
     "leaf_motion_floor": 0.004, # ... and at least this share of plant pixels changing
@@ -88,6 +96,17 @@ def save_config(cfg):
     CONFIG.write_text(json.dumps({k: cfg[k] for k in DEFAULTS if k in cfg}, indent=2))
 
 
+def green_share(crop):
+    """Share of a BGR crop that is green vegetation: excess-green index 2g - r - b > 0.1 on
+    chromaticity (r, g, b = channel / sum), which ignores brightness, so shade and sun score alike."""
+    if crop is None or crop.size == 0:
+        return 0.0
+    f = crop.astype(np.float32)
+    s = f.sum(axis=2) + 1e-6
+    exg = (2 * f[..., 1] - f[..., 2] - f[..., 0]) / s
+    return float((exg > 0.1).mean())
+
+
 def model_info():
     """models.json from scripts/export_models.py: what each network is and where it came from."""
     p = EXPORT / "models.json"
@@ -107,6 +126,7 @@ class Event:
 class PersonState:
     first_near: float = 0.0
     streak: int = 0
+    recent: list = field(default_factory=list)  # touch (True/False) at each of the last model frames
     stage: str = "SAFE"
     seen: float = 0.0
     last_alert: dict = field(default_factory=dict)
@@ -313,6 +333,7 @@ class FloraGuard:
                 hand = {"wrist": wpt, "box": hb, "in_plant": in_plant, "p": None, "crop": None}
                 p["hands"].append(hand)
                 hand["crop"] = cut(frame, hb)  # also saved by the app's training-data recorder
+                hand["green"] = green_share(hand["crop"])
                 if self.models.touch is not None and hand["crop"] is not None:
                     crops.append(hand["crop"])
                     metas.append(hand)
@@ -339,7 +360,7 @@ class FloraGuard:
             if p["near"] or p["hands"]:
                 st.first_near = st.first_near or now
             else:
-                st.first_near, st.streak = 0.0, 0
+                st.first_near, st.streak, st.recent = 0.0, 0, []
             probs = [hd["p"] for hd in p["hands"] if hd["p"] is not None]
             p["touch_p"] = max(probs, default=0.0)
             info["touch_p"] = max(info["touch_p"], p["touch_p"])
@@ -347,12 +368,19 @@ class FloraGuard:
                 # a hand on the plant that makes its leaves move needs only weak model support:
                 # public data has few plant touches, so the model under-scores them (see reports/touch.json)
                 geometric = any(hd["in_plant"] for hd in p["hands"]) and leaves_moving
+                green = any(hd.get("green", 0.0) >= cfg["plant_green_min"] for hd in p["hands"])
+                p["plant_evidence"] = leaves_moving or green
                 if self.models.touch is not None:
                     touching = p["touch_p"] >= cfg["touch_conf"] or (geometric and p["touch_p"] >= cfg["touch_assist"])
+                    # the plant has to back the classifier up: leaves move, or the hand is among plant pixels
+                    touching = touching and p["plant_evidence"]
                 else:  # fallback rule until the touch model is trained
                     touching = geometric
                 st.streak = st.streak + 1 if touching else 0
-            if st.streak >= cfg["touch_frames"]:
+                st.recent = (st.recent + [touching])[-max(1, cfg["touch_window"]):]
+            # touch_frames of the last touch_window frames: one weak frame no longer resets the count
+            hits = sum(st.recent) if cfg["touch_window"] else st.streak
+            if hits >= cfg["touch_frames"]:
                 st.stage = "ALERT"
                 if self.models.touch is None:
                     how = "wrist in plant zone + leaf motion (no touch model yet)"

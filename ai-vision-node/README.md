@@ -5,7 +5,8 @@ warns when a person gets too close or touches it.
 
 - **SAFE**: a person is in view, away from the plant.
 - **WARNING**: a person stays inside the buffer zone around the plant for 1 second, or puts a hand inside it.
-- **ALERT**: a hand is touching the plant for several frames in a row. A snapshot is saved.
+- **ALERT**: a hand is touching the plant in 4 of the last 6 frames, and the plant backs it up
+  (its leaves move, or the hand is among green plant pixels). A snapshot is saved.
 - Animals are detected and labelled, but never trigger an alert (they live in the forest).
 
 It runs on a normal laptop CPU with no GPU (OpenVINO, about 10 frames per second), and uses an
@@ -65,7 +66,7 @@ flowchart TD
     WAIT -- no --> SAFE
     WAIT -- yes --> WARN["🟠 WARNING"]
     HAND -- yes --> TOUCH["5. Touch model<br/>looks at a crop of the hand<br/>→ touch probability"]
-    TOUCH --> T{"Touching for<br/>4 frames in a row?"}
+    TOUCH --> T{"Touching in<br/>4 of the last 6 frames?"}
     T -- no --> WARN
     T -- yes --> ALERT["🔴 ALERT<br/>+ snapshot saved"]
 
@@ -81,7 +82,7 @@ flowchart TD
 | --- | --- | --- | --- |
 | 1. Motion check | none (background subtraction) | Compares the frame with the recent background | Every frame |
 | 2. Detector | YOLO26s, **trained by us** | Boxes people, animals and plants. A tracker keeps each person's ID across frames. | Something moves, or once a second |
-| 3. Zones | none | Plant zone = the shape you drew, or each detected plant. Buffer = plant zone grown by 25% of its width. | Every frame |
+| 3. Zones | none | Plant zone = the shape you drew (Live needs one; `require_zone`). Without one (scripts, tests), each detected plant. Buffer = plant zone grown by 25% of its width. | Every frame |
 | 4. Pose | YOLO26s-pose (stock) | Finds wrists and elbows, on a crop around the nearby people only | Someone is inside the buffer |
 | 5. Touch | YOLO26s-cls, **trained by us** | Says `touch` or `no_touch` for a 224×224 crop of each hand | A wrist is inside the buffer |
 
@@ -92,7 +93,7 @@ Every person has their own stage. The stage shown at the top of the screen is th
 ```mermaid
 flowchart LR
     S["🟢 SAFE"] -- "in the buffer 1 s,<br/>or hand in buffer" --> W["🟠 WARNING"]
-    W -- "touching<br/>4 frames in a row" --> A["🔴 ALERT"]
+    W -- "touching in<br/>4 of the last 6 frames" --> A["🔴 ALERT"]
     A -- "stops touching" --> W
     W -- "walks away" --> S
 
@@ -112,6 +113,14 @@ Walking away from ALERT goes straight back to SAFE.
 - The wrist is inside the plant itself, the plant's leaves are moving, **and** the touch model is at least **20%** sure.
   The leaf check helps because public datasets have few photos of hands on plants, so the model
   under-scores real touches.
+
+**The plant must back it up.** A touch frame also needs plant evidence: the plant's leaves are moving,
+**or** at least **15%** of the hand crop is green vegetation (excess-green index, 2G − R − B). So the
+touch model alone can never alert: a hand holding a camera in front of a coat stays a WARNING. Either
+one is enough, because a bare winter tree has no green but its branches move when someone prunes it.
+
+**Debounce:** ALERT needs **4** touch frames among the last **6** model frames (`touch_frames`,
+`touch_window`; `touch_window: 0` = 4 in a row, the old rule). One weak frame no longer resets the count.
 
 Leaf movement is measured against a baseline learned while nobody is near, so wind and changing
 light don't count as a touch.
