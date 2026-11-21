@@ -295,7 +295,7 @@ export function WebShell({ children, sidebar = false }) {
         <footer className="site-foot no-print">
           <div className="wrap row row-wrap row-between" style={{ gap: 14 }}>
             <div className="tiny mute">
-              <strong style={{ color: 'var(--text-soft)' }}>FloraScan</strong> &middot; {t('Prototype X for NeuonAI and Sarawak Forestry Corporation')}
+              <strong style={{ color: 'var(--text-soft)' }}>FloraScan</strong> &middot; {t('Built for NeuonAI and Sarawak Forestry Corporation')}
               <br />{t('COS30049 Computing Technology Innovation Project')} &middot; {t('Swinburne University of Technology Sarawak')}
             </div>
             <div className="row" style={{ gap: 14 }}>

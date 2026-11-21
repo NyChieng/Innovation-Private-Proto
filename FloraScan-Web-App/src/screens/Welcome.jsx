@@ -7,6 +7,7 @@ import { installAdvice, onInstallChange, promptInstall, isStandalone, platform }
 import { markIntroSeen } from '../lib/intro.js';
 import * as I from '../lib/icons.jsx';
 import { t } from '../lib/i18n.js';
+import { plantPhoto, realPhoto } from '../lib/photo.js';
 
 /**
  * First run.
@@ -32,11 +33,11 @@ export default function Welcome() {
     api.publicStats().then(setStats).catch(() => {});
     api.publicPlants({ limit: 12, sort: 'popular' })
       .then((r) => {
-        const pick = r.results.find((p) => (p.photo || p.photo_remote) && ['tree', 'palm'].includes(p.growth_form))
-          || r.results.find((p) => p.photo || p.photo_remote);
+        const pick = r.results.find((p) => plantPhoto(p) && ['tree', 'palm'].includes(p.growth_form))
+          || r.results.find((p) => plantPhoto(p));
         setHero(pick ? {
-          src: pick.photo || pick.photo_remote,
-          fallback: pick.photo ? pick.photo_remote : undefined,
+          src: plantPhoto(pick),
+          fallback: realPhoto(pick.photo) ? realPhoto(pick.photo_remote) : undefined,
           tint: pick.photo_tint,
         } : null);
         setHeroCredit(pick?.photo_credit || null);

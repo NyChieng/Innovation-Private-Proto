@@ -8,10 +8,9 @@ import {
   audit, activity, notify, notifyPermission, recordRevisions, requestContext,
 } from './db.js';
 import path from 'node:path';
-import { renderPhoto } from './images.js';
 import { photoExists, PHOTO_DIR, SPECIES_DATA, hasRealPhotos } from './species-data.js';
 import { lanAddresses, localHostName } from './net.js';
-import { hashPassword, verifyPassword, DEMO_PASSWORD } from './passwords.js';
+import { hashPassword, verifyPassword, temporaryPassword } from './passwords.js';
 import { createApiRateLimits } from './security.js';
 import * as passkeys from './passkeys.js';
 import { sendMail, maskEmail } from './mailer.js';
@@ -134,7 +133,7 @@ function newPasswordProblem(pw, current) {
   // Fixed wording rather than templates, so the browser can translate them.
   if (pw.length < MIN_PASSWORD) return 'The new password must be at least 8 characters.';
   if (pw.length > 128) return 'The new password is too long (maximum 128 characters).';
-  if ((current && pw === String(current)) || pw === DEMO_PASSWORD) {
+  if (current && pw === String(current)) {
     return 'Choose a password you have not used here before.';
   }
   if (!/[a-z]/i.test(pw) || !/\d/.test(pw)) return 'The new password needs at least one letter and one number.';
@@ -2127,17 +2126,18 @@ export function createApi() {
     if (dupe) return res.status(409).json({ error: 'An account with that email address already exists.' });
     if (!roleById(b.role_id)) return res.status(400).json({ error: 'Choose a role.' });
 
+    const temporary = temporaryPassword();
     const row = await insert('users', {
       role_id: Number(b.role_id),
       full_name: b.full_name.trim(), email: b.email.trim().toLowerCase(),
       title: b.title || null, phone: b.phone || null,
-      password_hash: hashPassword(DEMO_PASSWORD),
+      password_hash: hashPassword(temporary),
       must_change_password: 1, is_active: 1,
       email_verified_at: null, last_login_at: null,
       created_by: req.user.id, updated_at: nowIso(), deleted_at: null,
     });
     audit({ user_id: req.user.id, action: 'create', entity_type: 'users', entity_id: row.id, new_values: { email: row.email, role_id: row.role_id } });
-    res.status(201).json({ user: shapeUser(row), temporary_password: DEMO_PASSWORD });
+    res.status(201).json({ user: shapeUser(row), temporary_password: temporary });
   }));
 
   api.patch('/users/:id', need('user.manage'), route(async (req, res) => {
@@ -2171,10 +2171,11 @@ export function createApi() {
   api.post('/users/:id/reset-password', need('user.manage'), route(async (req, res) => {
     const u = await byId('users', req.params.id);
     if (!u) return res.status(404).json({ error: 'Not found' });
+    const temporary = temporaryPassword();
     // This used to flag the account and report a temporary password without
     // ever setting one - the old password went on working.
     await update('users', u.id, {
-      password_hash: hashPassword(DEMO_PASSWORD),
+      password_hash: hashPassword(temporary),
       must_change_password: 1,
       // A reset may be because the account was taken over, so a code the
       // intruder could have seen goes too; a new one comes with the new password.
@@ -2195,7 +2196,7 @@ export function createApi() {
     await q("UPDATE password_reset_requests SET status = 'closed' WHERE user_id = ? AND status IN ('pending', 'approved')", [u.id]);
     audit({ user_id: req.user.id, action: 'password_reset', entity_type: 'users', entity_id: u.id, new_values: { must_change_password: 1 } });
     activity({ user_id: req.user.id, action: 'password_changed', detail: 'Reset the password for ' + u.email });
-    res.json({ ok: true, temporary_password: DEMO_PASSWORD });
+    res.json({ ok: true, temporary_password: temporary });
   }));
 
   /**
@@ -2675,12 +2676,6 @@ export function createApi() {
     res.type(row.mime_type || 'image/jpeg');
     res.send(row.bytes);
   }));
-
-  api.get('/photos/:name', (req, res) => {
-    res.type('image/svg+xml');
-    res.set('Cache-Control', 'public, max-age=86400');
-    res.send(renderPhoto(req.params.name));
-  });
 
   /** Everything the "open on your phone" screen needs. */
   api.get('/connect', route(async (req, res) => {

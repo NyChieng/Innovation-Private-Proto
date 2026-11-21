@@ -5,6 +5,7 @@ import { Empty, LoadingBlock, Notice, PageHead, StatusBadge } from '../../compon
 import { formatDateTime, relativeTime } from '../../lib/format.js';
 import * as I from '../../lib/icons.jsx';
 import { msg, t } from '../../lib/i18n.js';
+import { SmartImage } from '../../components/motion.jsx';
 
 const STEPS = [
   { key: 'submitted', label: msg('Submitted') },
@@ -105,7 +106,7 @@ function Card({ sub }) {
     <div className="card card-pad">
       <div className="row row-wrap" style={{ gap: 14, alignItems: 'flex-start' }}>
         <div style={{ width: 74, height: 58, borderRadius: 8, overflow: 'hidden', background: 'var(--surface-3)', flex: 'none', border: '1px solid var(--border)' }}>
-          {p.photo && <img src={p.photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
+          <SmartImage src={p.photo} fallback={p.photo_remote} alt="" placeholderLabel={false} />
         </div>
         <div className="grow" style={{ minWidth: 150 }}>
           <div className="row row-wrap" style={{ gap: 8, marginBottom: 3 }}>

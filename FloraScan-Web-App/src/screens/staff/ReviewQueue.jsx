@@ -9,6 +9,7 @@ import PlantEditDialog from '../../components/PlantEdit.jsx';
 import { HEALTH, LIFE_STAGE, coords, formatDateTime, relativeTime } from '../../lib/format.js';
 import { t } from '../../lib/i18n.js';
 import * as I from '../../lib/icons.jsx';
+import { SmartImage } from '../../components/motion.jsx';
 
 /**
  * The reviewer's queue (issues #6 and #8).
@@ -149,9 +150,7 @@ function SubmissionCard({ sub, onChanged }) {
         <div className="review-grid">
           <div>
             <div style={{ aspectRatio: '4/3', borderRadius: 'var(--r-sm)', overflow: 'hidden', background: 'var(--surface-3)', border: '1px solid var(--border)' }}>
-              {p.photo
-                ? <img src={p.photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                : <div style={{ display: 'grid', placeItems: 'center', height: '100%' }}><I.Image style={{ width: 26, height: 26, color: 'var(--text-faint)' }} /></div>}
+              <SmartImage src={p.photo} fallback={p.photo_remote} alt="" />
             </div>
             {p.photo_count > 1 && <div className="tiny mute" style={{ marginTop: 6 }}>{t('{n} photographs', { n: p.photo_count })}</div>}
           </div>

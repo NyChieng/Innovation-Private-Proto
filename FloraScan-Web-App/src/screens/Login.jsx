@@ -10,6 +10,7 @@ import { PhotoSlideshow } from '../components/motion.jsx';
 import { homeFor, roleLabel } from '../lib/format.js';
 import * as I from '../lib/icons.jsx';
 import { t } from '../lib/i18n.js';
+import { plantPhoto, realPhoto } from '../lib/photo.js';
 
 /**
  * Staff sign in.
@@ -74,11 +75,11 @@ export default function Login() {
       }
       if (!live) return;
       const withPhotos = plants
-        .filter((p) => p.photo || p.photo_remote)
+        .filter((p) => plantPhoto(p))
         .map((p) => ({
           id: p.id,
-          src: p.photo || p.photo_remote,
-          fallback: p.photo ? p.photo_remote : undefined,
+          src: plantPhoto(p),
+          fallback: realPhoto(p.photo) ? realPhoto(p.photo_remote) : undefined,
           tint: p.photo_tint,
           credit: p.photo_credit,
         }));
@@ -208,7 +209,7 @@ export default function Login() {
                         // "webauthn" lets the browser offer a saved fingerprint / face sign-in here.
                         ref={emailRef} type="email" inputMode="email" autoComplete="username webauthn"
                         value={email} onChange={(e) => setEmail(e.target.value)}
-                        placeholder="name@gmail.com" required aria-invalid={!!error}
+                        placeholder="name@florascan.test" required aria-invalid={!!error}
                       />
                     </span>
                   </label>

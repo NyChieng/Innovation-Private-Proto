@@ -108,17 +108,17 @@ export function seed() {
   /* Each account has its own password: the email's local part + 123. */
   /* ---------------------------------------------------------------- */
   const USERS = [
-    { role: 1, full_name: 'Neng Yi Chieng', email: 'nengyichieng@gmail.com', password: 'nengyichieng123', title: 'System Administrator' },
-    { role: 3, full_name: 'Dr Sue Han Lee', email: 'drsuehanlee@gmail.com', password: 'drsuehanlee123', title: 'Senior Botanist' },
-    { role: 3, full_name: 'Hans Jia Syn Yee', email: 'hansjiasynyee@gmail.com', password: 'hansjiasynyee123', title: 'Botanist' },
-    { role: 2, full_name: 'Edmund Guo Qian Yu', email: 'edmundguoqianyu@gmail.com', password: 'edmundguoqianyu123', title: 'Park Ranger' },
-    { role: 2, full_name: 'Lim Yon', email: 'limyon@gmail.com', password: 'limyon123', title: 'Park Ranger' },
-    { role: 2, full_name: 'Edward Ngie Jie Ling', email: 'edwardngiejieling@gmail.com', password: 'edwardngiejieling123', title: 'Field Ranger' },
-    { role: 2, full_name: 'Darren Chong Yue Yang', email: 'darrenyueyangchong@gmail.com', password: 'darrenyueyangchong123', title: 'Field Ranger' },
-    { role: 1, full_name: 'Jiaqi Hu', email: 'jiaqihu@gmail.com', password: 'jiaqihu123', title: 'Administrator' },
+    { role: 1, full_name: 'Farah Hamid', email: 'farah.hamid@florascan.test', password: 'farah.hamid123', title: 'System Administrator' },
+    { role: 3, full_name: 'Dr Grace Lim', email: 'grace.lim@florascan.test', password: 'grace.lim123', title: 'Senior Botanist' },
+    { role: 3, full_name: 'Daniel Jugah', email: 'daniel.jugah@florascan.test', password: 'daniel.jugah123', title: 'Botanist' },
+    { role: 2, full_name: 'Ahmad Rosli', email: 'ahmad.rosli@florascan.test', password: 'ahmad.rosli123', title: 'Park Ranger' },
+    { role: 2, full_name: 'Nurul Aini', email: 'nurul.aini@florascan.test', password: 'nurul.aini123', title: 'Park Ranger' },
+    { role: 2, full_name: 'Jonathan Ngau', email: 'jonathan.ngau@florascan.test', password: 'jonathan.ngau123', title: 'Field Ranger' },
+    { role: 2, full_name: 'Mary Liew', email: 'mary.liew@florascan.test', password: 'mary.liew123', title: 'Field Ranger' },
+    { role: 1, full_name: 'Kevin Tan', email: 'kevin.tan@florascan.test', password: 'kevin.tan123', title: 'Administrator' },
     // Appended rather than inserted, so the indexes used further down for the
     // audit history still point at the same people.
-    { role: 4, full_name: 'Dr Mei Ling Wong', email: 'drmeilingwong@gmail.com', password: 'drmeilingwong123', title: 'Herbarium Curator' },
+    { role: 4, full_name: 'Dr Aisyah Rahman', email: 'aisyah.rahman@florascan.test', password: 'aisyah.rahman123', title: 'Herbarium Curator' },
   ];
 
   USERS.forEach((u, i) => insert('users', {
@@ -358,26 +358,10 @@ export function seed() {
   });
 
   /* ---------------------------------------------------------------- */
-  /* Photos - procedural SVG, generated on demand by server/images.js  */
+  /* Photos - real photographs only                                    */
   /* ---------------------------------------------------------------- */
-  /**
-   * Which shots make sense for a given plant. A conifer has no flowers and
-   * Rafflesia has no leaves or bark, so those angles are left out rather than
-   * illustrated wrongly - a botanist reviewing the demo would spot it at once.
-   * The first shot is always the whole plant, since that is what the card
-   * thumbnail and the hero image on the plant page use.
-   */
-  function anglesFor(sp) {
-    if (!sp) return ['habit', 'habitat'];
-    const name = sp.scientific_name;
-    if (name.startsWith('Rafflesia')) return ['habit', 'flower', 'habitat'];
-    if (sp.family === 'Araucariaceae') return ['habit', 'leaf', 'bark', 'habitat']; // conifer: cones, not flowers
-    if (sp.growth_form === 'tree') return ['habit', 'leaf', 'bark', 'flower', 'fruit', 'habitat'];
-    if (sp.growth_form === 'palm') return ['habit', 'leaf', 'fruit', 'habitat'];
-    if (sp.growth_form === 'climber') return ['habit', 'leaf', 'flower', 'habitat'];
-    return ['habit', 'leaf', 'flower', 'habitat'];
-  }
-
+  // A species with no photograph gets none: the app shows a placeholder
+  // rather than a generated drawing that could pass for the wrong plant.
   db.plants.forEach((p) => {
     const sp = db.species.find((s) => s.id === p.species_id);
     const source = sp ? SPECIES.find((x) => x.scientific_name === sp.scientific_name) : null;
@@ -409,40 +393,6 @@ export function seed() {
         created_at: p.registered_at,
         deleted_at: null,
       }));
-      return;
-    }
-
-    // No photograph for this species: fall back to the generated illustration.
-    const base = (sp?.scientific_name || p.proposed_species_name || p.plant_code).replace(/s+/g, '-').toLowerCase();
-    const available = anglesFor(sp);
-    const n = Math.min(available.length, 3 + Math.floor(rnd() * 2));
-    for (let i = 0; i < n; i++) {
-      const angle = i === 0 ? available[0] : available[1 + ((p.id + i) % (available.length - 1))];
-      insert('plant_photos', {
-        plant_id: p.id,
-        file_path: '/api/photos/' + base + '--' + angle + '--' + p.id + '.svg',
-        thumbnail_path: '/api/photos/' + base + '--' + angle + '--' + p.id + '.svg',
-        file_name: base + '-' + angle + '.svg',
-        mime_type: 'image/svg+xml',
-        size_bytes: 0,
-        width_px: 1600, height_px: 1200,
-        caption: {
-          habit: 'Whole plant, showing overall habit and setting.',
-          leaf: 'Leaf detail, upper and lower surface.',
-          bark: 'Bark and trunk detail at breast height.',
-          flower: 'Inflorescence at the time of survey.',
-          fruit: 'Fruit, collected from beneath the specimen.',
-          habitat: 'Surrounding habitat and canopy position.',
-        }[angle],
-        credit: null,
-        license: null,
-        source_name: 'Generated illustration',
-        source_url: null,
-        is_primary: i === 0 ? 1 : 0,
-        uploaded_by: p.registered_by,
-        created_at: p.registered_at,
-        deleted_at: null,
-      });
     }
   });
 

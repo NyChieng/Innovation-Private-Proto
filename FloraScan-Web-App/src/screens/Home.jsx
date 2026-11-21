@@ -7,6 +7,7 @@ import { Reveal, CountUp, PhotoSlideshow, SmartImage, useParallax } from '../com
 import { num } from '../lib/format.js';
 import * as I from '../lib/icons.jsx';
 import { msg, t } from '../lib/i18n.js';
+import { plantPhoto, realPhoto } from '../lib/photo.js';
 
 const WORKFLOW_STEPS = [
   {
@@ -214,11 +215,11 @@ export default function Home() {
   const heroSlides = useMemo(() => {
     if (!recent?.length) return [];
     const shuffled = recent
-      .filter((p) => p.photo || p.photo_remote)
+      .filter((p) => plantPhoto(p))
       .map((p) => ({
         id: p.id,
-        src: p.photo || p.photo_remote,
-        fallback: p.photo ? p.photo_remote : undefined,
+        src: plantPhoto(p),
+        fallback: realPhoto(p.photo) ? realPhoto(p.photo_remote) : undefined,
         tint: p.photo_tint,
         plant_code: p.plant_code,
         scientific_name: p.scientific_name || p.proposed_species_name,

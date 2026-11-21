@@ -279,19 +279,21 @@ It is for demos only and comes out before release.
 
 ### Staff accounts
 
-Each seeded account's password is the part of the email before the `@`, followed by `123`.
+The staff are fictional. Each seeded account's password is the part of the email before the
+`@`, followed by `123`. The addresses use the reserved `.test` domain, which can never receive
+mail, so no real person gets a recovery-code email from the demo data.
 
 | Role | Name | Email | Password |
 | --- | --- | --- | --- |
-| Administrator | Neng Yi Chieng | `nengyichieng@gmail.com` | `nengyichieng123` |
-| Administrator | Jiaqi Hu | `jiaqihu@gmail.com` | `jiaqihu123` |
-| Botanist | Dr Sue Han Lee | `drsuehanlee@gmail.com` | `drsuehanlee123` |
-| Botanist | Hans Jia Syn Yee | `hansjiasynyee@gmail.com` | `hansjiasynyee123` |
-| Reviewer | Dr Mei Ling Wong | `drmeilingwong@gmail.com` | `drmeilingwong123` |
-| Ranger | Edmund Guo Qian Yu | `edmundguoqianyu@gmail.com` | `edmundguoqianyu123` |
-| Ranger | Lim Yon | `limyon@gmail.com` | `limyon123` |
-| Ranger | Edward Ngie Jie Ling | `edwardngiejieling@gmail.com` | `edwardngiejieling123` |
-| Ranger | Darren Chong Yue Yang | `darrenyueyangchong@gmail.com` | `darrenyueyangchong123` |
+| Administrator | Farah Hamid | `farah.hamid@florascan.test` | `farah.hamid123` |
+| Administrator | Kevin Tan | `kevin.tan@florascan.test` | `kevin.tan123` |
+| Botanist | Dr Grace Lim | `grace.lim@florascan.test` | `grace.lim123` |
+| Botanist | Daniel Jugah | `daniel.jugah@florascan.test` | `daniel.jugah123` |
+| Reviewer | Dr Aisyah Rahman | `aisyah.rahman@florascan.test` | `aisyah.rahman123` |
+| Ranger | Ahmad Rosli | `ahmad.rosli@florascan.test` | `ahmad.rosli123` |
+| Ranger | Nurul Aini | `nurul.aini@florascan.test` | `nurul.aini123` |
+| Ranger | Jonathan Ngau | `jonathan.ngau@florascan.test` | `jonathan.ngau123` |
+| Ranger | Mary Liew | `mary.liew@florascan.test` | `mary.liew123` |
 
 What each role can do:
 
@@ -309,9 +311,10 @@ person, then **Unlock account**), and resetting the password also clears the loc
 the activity log and audit trail. The limits are `MAX_FAILED_LOGINS` and `LOCK_MINUTES` in
 `Server/api.js`.
 
-An account an administrator creates, or a password an administrator resets, starts on the
-temporary password `demo1234`. To see a deactivated account refused at sign in, deactivate
-one from **Users** in the admin dashboard.
+An account an administrator creates, or a password an administrator resets, gets a new random
+temporary password. It is shown to the administrator once, with a copy button, and must be
+changed at the next sign in. To see a deactivated account refused at sign in, deactivate one
+from **Users** in the admin dashboard.
 
 **Already have the database from before this change?** Run `npm run db:setup -- --reset` to
 load these accounts. It deletes and rebuilds your local database.
@@ -368,7 +371,7 @@ It never appears when someone arrives by scanning a QR tag. They go straight to 
    row on A4.
 10. **Photo upload.** Register a plant with a photo from your phone's camera. It is saved in
     the database and is still there after a restart.
-11. **Languages.** Click the globe in the header (or use the role switcher, or **Account** on
+11. **Languages.** Click the globe in the header (or **Account** on
     the phone) and pick **BM** or **中文**. Every screen changes, and the choice is remembered.
 
 ---
@@ -444,14 +447,13 @@ Server/
   seed-species.js   20 hand-written Bornean species
   species-data.js   Loads species.json, or the hand-written list if it's missing
   data/species.json 80 species with photos and coordinates (made by the importer)
-  images.js         Drawn SVG pictures for species with no photo
   certs.js          Creates the local HTTPS certificates
   port.js, net.js   Random port and network address detection
 FloraScan-Web-App/
   index.html
   src/
     App.jsx         Page routes and permission checks
-    components/     Layout (web + phone), role switcher, animations, shared UI
+    components/     Layout (web + phone), animations, shared UI
     screens/        Public pages; staff/ holds the staff pages
     lib/            API client, session, formatting, icons, translations
     styles/         theme.css, app.css, motion.css

@@ -332,6 +332,26 @@
      "source": "iNaturalist",
      "page": "https://www.inaturalist.org/photos/15558",
      "file": "eusideroxylon-zwageri-1.jpg"
+    },
+    {
+     "id": 37663320,
+     "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/37663320/medium.jpeg",
+     "large_url": "https://inaturalist-open-data.s3.amazonaws.com/photos/37663320/large.jpeg",
+     "attribution": "(c) sugumaran, some rights reserved (CC BY-NC)",
+     "license": "CC-BY-NC",
+     "source": "iNaturalist",
+     "page": "https://www.inaturalist.org/photos/37663320",
+     "file": "eusideroxylon-zwageri-2.jpg"
+    },
+    {
+     "id": 62414881,
+     "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/62414881/medium.jpeg",
+     "large_url": "https://inaturalist-open-data.s3.amazonaws.com/photos/62414881/large.jpeg",
+     "attribution": "(c) Melli Wulandari, some rights reserved (CC BY-NC)",
+     "license": "CC-BY-NC",
+     "source": "iNaturalist",
+     "page": "https://www.inaturalist.org/photos/62414881",
+     "file": "eusideroxylon-zwageri-3.jpg"
     }
    ],
    "curated": true
@@ -390,7 +410,18 @@
      "dataset": "Alliance of Bioversity International and the International Center for Tropical Agriculture (CIAT)"
     }
    ],
-   "photos": [],
+   "photos": [
+    {
+     "id": "File:Tengkawang 070312 0055 utk.jpg",
+     "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/af/Tengkawang_070312_0055_utk.jpg/500px-Tengkawang_070312_0055_utk.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+     "large_url": "https://upload.wikimedia.org/wikipedia/commons/a/af/Tengkawang_070312_0055_utk.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+     "attribution": "Wibowo Djatmiko (Wie146) · CC BY-SA 3.0 · Wikimedia Commons",
+     "license": "CC-BY-SA-3.0",
+     "source": "Wikimedia Commons",
+     "page": "https://commons.wikimedia.org/wiki/File:Tengkawang_070312_0055_utk.jpg",
+     "file": "shorea-macrophylla-1.jpg"
+    }
+   ],
    "curated": true
   },
   {
@@ -457,6 +488,16 @@
      "source": "iNaturalist",
      "page": "https://www.inaturalist.org/photos/1447129",
      "file": "dryobalanops-aromatica-1.jpg"
+    },
+    {
+     "id": 581712844,
+     "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/581712844/medium.jpg",
+     "large_url": "https://inaturalist-open-data.s3.amazonaws.com/photos/581712844/large.jpg",
+     "attribution": "(c) @bornok_g.lgn, some rights reserved (CC BY-NC)",
+     "license": "CC-BY-NC",
+     "source": "iNaturalist",
+     "page": "https://www.inaturalist.org/photos/581712844",
+     "file": "dryobalanops-aromatica-2.jpg"
     }
    ],
    "curated": true
@@ -525,6 +566,26 @@
      "source": "iNaturalist",
      "page": "https://www.inaturalist.org/photos/723524",
      "file": "koompassia-excelsa-1.jpg"
+    },
+    {
+     "id": 217646705,
+     "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/217646705/medium.jpeg",
+     "large_url": "https://inaturalist-open-data.s3.amazonaws.com/photos/217646705/large.jpeg",
+     "attribution": "(c) Samuel Lee, some rights reserved (CC BY)",
+     "license": "CC-BY",
+     "source": "iNaturalist",
+     "page": "https://www.inaturalist.org/photos/217646705",
+     "file": "koompassia-excelsa-2.jpg"
+    },
+    {
+     "id": 282990450,
+     "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/282990450/medium.jpeg",
+     "large_url": "https://inaturalist-open-data.s3.amazonaws.com/photos/282990450/large.jpeg",
+     "attribution": "(c) Nik Faizu Nik Hassan, some rights reserved (CC BY-NC)",
+     "license": "CC-BY-NC",
+     "source": "iNaturalist",
+     "page": "https://www.inaturalist.org/photos/282990450",
+     "file": "koompassia-excelsa-3.jpg"
     }
    ],
    "curated": true
@@ -570,6 +631,16 @@
      "source": "iNaturalist",
      "page": "https://www.inaturalist.org/photos/29802729",
      "file": "gonystylus-bancanus-2.jpg"
+    },
+    {
+     "id": 561828432,
+     "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/561828432/medium.jpg",
+     "large_url": "https://inaturalist-open-data.s3.amazonaws.com/photos/561828432/large.jpg",
+     "attribution": "(c) Hani Ristiawan, some rights reserved (CC BY-NC)",
+     "license": "CC-BY-NC",
+     "source": "iNaturalist",
+     "page": "https://www.inaturalist.org/photos/561828432",
+     "file": "gonystylus-bancanus-3.jpg"
     }
    ],
    "curated": true
@@ -710,6 +781,26 @@
      "source": "iNaturalist",
      "page": "https://www.inaturalist.org/photos/1477214",
      "file": "licuala-orbicularis-1.jpg"
+    },
+    {
+     "id": 11408493,
+     "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/11408493/medium.jpg",
+     "large_url": "https://inaturalist-open-data.s3.amazonaws.com/photos/11408493/large.jpg",
+     "attribution": "(c) Kinmatsu Lin, some rights reserved (CC BY-NC)",
+     "license": "CC-BY-NC",
+     "source": "iNaturalist",
+     "page": "https://www.inaturalist.org/photos/11408493",
+     "file": "licuala-orbicularis-2.jpg"
+    },
+    {
+     "id": 352652189,
+     "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/352652189/medium.jpg",
+     "large_url": "https://inaturalist-open-data.s3.amazonaws.com/photos/352652189/large.jpg",
+     "attribution": "(c) Ryan E. Gray, some rights reserved (CC BY-NC)",
+     "license": "CC-BY-NC",
+     "source": "iNaturalist",
+     "page": "https://www.inaturalist.org/photos/352652189",
+     "file": "licuala-orbicularis-3.jpg"
     }
    ],
    "curated": true
@@ -778,6 +869,26 @@
      "source": "iNaturalist",
      "page": "https://www.inaturalist.org/photos/1445265",
      "file": "artocarpus-odoratissimus-1.jpg"
+    },
+    {
+     "id": 733436422,
+     "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/733436422/medium.jpg",
+     "large_url": "https://inaturalist-open-data.s3.amazonaws.com/photos/733436422/large.jpg",
+     "attribution": "(c) Romnick T. Taladro, LPT, some rights reserved (CC BY-NC)",
+     "license": "CC-BY-NC",
+     "source": "iNaturalist",
+     "page": "https://www.inaturalist.org/photos/733436422",
+     "file": "artocarpus-odoratissimus-2.jpg"
+    },
+    {
+     "id": 651007081,
+     "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/651007081/medium.jpg",
+     "large_url": "https://inaturalist-open-data.s3.amazonaws.com/photos/651007081/large.jpg",
+     "attribution": "(c) Hervé GALLIFFET, some rights reserved (CC BY-NC)",
+     "license": "CC-BY-NC",
+     "source": "iNaturalist",
+     "page": "https://www.inaturalist.org/photos/651007081",
+     "file": "artocarpus-odoratissimus-3.jpg"
     }
    ],
    "curated": true
@@ -2262,6 +2373,16 @@
      "source": "iNaturalist",
      "page": "https://www.inaturalist.org/photos/105962325",
      "file": "amorphophallus-hewittii-2.jpg"
+    },
+    {
+     "id": 53573242,
+     "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/53573242/medium.jpeg",
+     "large_url": "https://inaturalist-open-data.s3.amazonaws.com/photos/53573242/large.jpeg",
+     "attribution": "(c) borneoflower, some rights reserved (CC BY-NC)",
+     "license": "CC-BY-NC",
+     "source": "iNaturalist",
+     "page": "https://www.inaturalist.org/photos/53573242",
+     "file": "amorphophallus-hewittii-3.jpg"
     }
    ],
    "curated": false
@@ -2702,6 +2823,16 @@
      "source": "iNaturalist",
      "page": "https://www.inaturalist.org/photos/345318058",
      "file": "platycerium-coronarium-2.jpg"
+    },
+    {
+     "id": 37117066,
+     "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/37117066/medium.jpeg",
+     "large_url": "https://inaturalist-open-data.s3.amazonaws.com/photos/37117066/large.jpeg",
+     "attribution": "(c) tansh91, some rights reserved (CC BY-NC)",
+     "license": "CC-BY-NC",
+     "source": "iNaturalist",
+     "page": "https://www.inaturalist.org/photos/37117066",
+     "file": "platycerium-coronarium-3.jpg"
     }
    ],
    "curated": false
@@ -3852,6 +3983,26 @@
      "source": "iNaturalist",
      "page": "https://www.inaturalist.org/photos/60244574",
      "file": "rhaphidophora-foraminifera-1.jpg"
+    },
+    {
+     "id": 185391875,
+     "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/185391875/medium.jpeg",
+     "large_url": "https://inaturalist-open-data.s3.amazonaws.com/photos/185391875/large.jpeg",
+     "attribution": "(c) Katarina Stenman, some rights reserved (CC BY-NC)",
+     "license": "CC-BY-NC",
+     "source": "iNaturalist",
+     "page": "https://www.inaturalist.org/photos/185391875",
+     "file": "rhaphidophora-foraminifera-2.jpg"
+    },
+    {
+     "id": 528464138,
+     "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/528464138/medium.jpg",
+     "large_url": "https://inaturalist-open-data.s3.amazonaws.com/photos/528464138/large.jpg",
+     "attribution": "(c) Kinmatsu Lin, some rights reserved (CC BY-NC)",
+     "license": "CC-BY-NC",
+     "source": "iNaturalist",
+     "page": "https://www.inaturalist.org/photos/528464138",
+     "file": "rhaphidophora-foraminifera-3.jpg"
     }
    ],
    "curated": false
@@ -3922,6 +4073,26 @@
      "source": "iNaturalist",
      "page": "https://www.inaturalist.org/photos/7270257",
      "file": "rhizanthes-lowii-1.jpg"
+    },
+    {
+     "id": 31302081,
+     "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/31302081/medium.jpg",
+     "large_url": "https://inaturalist-open-data.s3.amazonaws.com/photos/31302081/large.jpg",
+     "attribution": "(c) Kinmatsu Lin, some rights reserved (CC BY-NC)",
+     "license": "CC-BY-NC",
+     "source": "iNaturalist",
+     "page": "https://www.inaturalist.org/photos/31302081",
+     "file": "rhizanthes-lowii-2.jpg"
+    },
+    {
+     "id": 46542872,
+     "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/46542872/medium.jpeg",
+     "large_url": "https://inaturalist-open-data.s3.amazonaws.com/photos/46542872/large.jpeg",
+     "attribution": "(c) Jackie T, some rights reserved (CC BY)",
+     "license": "CC-BY",
+     "source": "iNaturalist",
+     "page": "https://www.inaturalist.org/photos/46542872",
+     "file": "rhizanthes-lowii-3.jpg"
     }
    ],
    "curated": false
@@ -4272,6 +4443,16 @@
      "source": "iNaturalist",
      "page": "https://www.inaturalist.org/photos/584007174",
      "file": "pachycentria-glauca-2.jpg"
+    },
+    {
+     "id": 505371272,
+     "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/505371272/medium.jpg",
+     "large_url": "https://inaturalist-open-data.s3.amazonaws.com/photos/505371272/large.jpg",
+     "attribution": "(c) 羅元甫, some rights reserved (CC BY-NC)",
+     "license": "CC-BY-NC",
+     "source": "iNaturalist",
+     "page": "https://www.inaturalist.org/photos/505371272",
+     "file": "pachycentria-glauca-3.jpg"
     }
    ],
    "curated": false
@@ -4442,6 +4623,16 @@
      "source": "iNaturalist",
      "page": "https://www.inaturalist.org/photos/4939645",
      "file": "etlingera-coccinea-2.jpg"
+    },
+    {
+     "id": 603840700,
+     "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/603840700/medium.jpg",
+     "large_url": "https://inaturalist-open-data.s3.amazonaws.com/photos/603840700/large.jpg",
+     "attribution": "(c) Zahra Afriani Afif Susanto, some rights reserved (CC BY-NC)",
+     "license": "CC-BY-NC",
+     "source": "iNaturalist",
+     "page": "https://www.inaturalist.org/photos/603840700",
+     "file": "etlingera-coccinea-3.jpg"
     }
    ],
    "curated": false
@@ -4512,6 +4703,16 @@
      "source": "iNaturalist",
      "page": "https://www.inaturalist.org/photos/1448354",
      "file": "hydnophytum-formicarum-1.jpg"
+    },
+    {
+     "id": 389336347,
+     "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/389336347/medium.jpeg",
+     "large_url": "https://inaturalist-open-data.s3.amazonaws.com/photos/389336347/large.jpeg",
+     "attribution": "(c) Hua Wan, some rights reserved (CC BY-NC)",
+     "license": "CC-BY-NC",
+     "source": "iNaturalist",
+     "page": "https://www.inaturalist.org/photos/389336347",
+     "file": "hydnophytum-formicarum-2.jpg"
     }
    ],
    "curated": false
@@ -4762,6 +4963,26 @@
      "source": "iNaturalist",
      "page": "https://www.inaturalist.org/photos/25510393",
      "file": "monophyllaea-pendula-1.jpg"
+    },
+    {
+     "id": 572210742,
+     "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/572210742/medium.jpg",
+     "large_url": "https://inaturalist-open-data.s3.amazonaws.com/photos/572210742/large.jpg",
+     "attribution": "(c) Phil Pemberton, some rights reserved (CC BY-NC)",
+     "license": "CC-BY-NC",
+     "source": "iNaturalist",
+     "page": "https://www.inaturalist.org/photos/572210742",
+     "file": "monophyllaea-pendula-2.jpg"
+    },
+    {
+     "id": 415401862,
+     "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/415401862/medium.jpeg",
+     "large_url": "https://inaturalist-open-data.s3.amazonaws.com/photos/415401862/large.jpeg",
+     "attribution": "(c) Frederic Griesbaum, some rights reserved (CC BY-NC)",
+     "license": "CC-BY-NC",
+     "source": "iNaturalist",
+     "page": "https://www.inaturalist.org/photos/415401862",
+     "file": "monophyllaea-pendula-3.jpg"
     }
    ],
    "curated": false
@@ -5912,6 +6133,26 @@
      "source": "iNaturalist",
      "page": "https://www.inaturalist.org/photos/460618592",
      "file": "diospyros-maingayi-1.jpg"
+    },
+    {
+     "id": 597976304,
+     "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/597976304/medium.jpg",
+     "large_url": "https://inaturalist-open-data.s3.amazonaws.com/photos/597976304/large.jpg",
+     "attribution": "(c) yephemeral, some rights reserved (CC BY-NC)",
+     "license": "CC-BY-NC",
+     "source": "iNaturalist",
+     "page": "https://www.inaturalist.org/photos/597976304",
+     "file": "diospyros-maingayi-2.jpg"
+    },
+    {
+     "id": 578682438,
+     "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/578682438/medium.jpg",
+     "large_url": "https://inaturalist-open-data.s3.amazonaws.com/photos/578682438/large.jpg",
+     "attribution": "(c) @bornok_g.lgn, some rights reserved (CC BY-NC)",
+     "license": "CC-BY-NC",
+     "source": "iNaturalist",
+     "page": "https://www.inaturalist.org/photos/578682438",
+     "file": "diospyros-maingayi-3.jpg"
     }
    ],
    "curated": false
@@ -6262,6 +6503,16 @@
      "source": "iNaturalist",
      "page": "https://www.inaturalist.org/photos/5824766",
      "file": "etlingera-nasuta-2.jpg"
+    },
+    {
+     "id": 33134888,
+     "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/33134888/medium.jpg",
+     "large_url": "https://inaturalist-open-data.s3.amazonaws.com/photos/33134888/large.jpg",
+     "attribution": "(c) Kinmatsu Lin, some rights reserved (CC BY-NC)",
+     "license": "CC-BY-NC",
+     "source": "iNaturalist",
+     "page": "https://www.inaturalist.org/photos/33134888",
+     "file": "etlingera-nasuta-3.jpg"
     }
    ],
    "curated": false
@@ -6332,6 +6583,16 @@
      "source": "iNaturalist",
      "page": "https://www.inaturalist.org/photos/487022615",
      "file": "angiopteris-smithii-1.jpg"
+    },
+    {
+     "id": 303040233,
+     "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/303040233/medium.jpg",
+     "large_url": "https://inaturalist-open-data.s3.amazonaws.com/photos/303040233/large.jpg",
+     "attribution": "(c) Isachao, some rights reserved (CC BY-NC)",
+     "license": "CC-BY-NC",
+     "source": "iNaturalist",
+     "page": "https://www.inaturalist.org/photos/303040233",
+     "file": "angiopteris-smithii-2.jpg"
     }
    ],
    "curated": false

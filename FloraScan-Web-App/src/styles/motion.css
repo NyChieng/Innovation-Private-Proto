@@ -112,12 +112,25 @@
 }
 .smart-img.is-ready img { opacity: 1; transform: none; }
 
-/* Nothing loaded and nothing to fall back to: show the tint, not a broken icon. */
-.smart-img.is-failed img { opacity: 0; }
-.smart-img.is-failed::after {
-  content: ''; position: absolute; inset: 0;
-  background: var(--tint, var(--surface-3));
+/* Nothing loaded and nothing to fall back to: a quiet leaf placeholder. */
+.smart-img.is-failed { background: var(--surface-3); }
+.photo-placeholder {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 8px; padding: 8px;
+  color: var(--text-faint);
+  background:
+    radial-gradient(120% 90% at 50% 0%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 70%),
+    linear-gradient(160deg, var(--surface-2), var(--surface-3));
 }
+.photo-placeholder svg { width: clamp(18px, 22%, 44px); height: auto; opacity: 0.75; }
+.photo-placeholder-text {
+  font-size: 0.74rem; font-weight: 600; letter-spacing: 0.04em;
+  text-transform: uppercase; opacity: 0.85;
+}
+/* Too small for words: a thumbnail shows only the leaf. */
+@container (max-width: 90px) { .photo-placeholder-text { display: none; } }
+.smart-img { container-type: inline-size; }
 
 /* --- plant card ---------------------------------------------------- */
 

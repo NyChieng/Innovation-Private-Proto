@@ -12,6 +12,7 @@ import {
 } from '../lib/format.js';
 import * as I from '../lib/icons.jsx';
 import { t } from '../lib/i18n.js';
+import { isRealPhoto } from '../lib/photo.js';
 
 /* ------------------------------------------------------------------ */
 
@@ -36,7 +37,9 @@ function Credit({ photo, className = 'credit' }) {
   );
 }
 
-function Gallery({ photos, alt }) {
+function Gallery({ photos: allPhotos, alt }) {
+  // Only real photographs: generated stand-in drawings are left out.
+  const photos = (allPhotos || []).filter((p) => isRealPhoto(p.file_path) || isRealPhoto(p.remote_url));
   const [idx, setIdx] = useState(0);
   const [zoom, setZoom] = useState(false);
 
@@ -54,8 +57,8 @@ function Gallery({ photos, alt }) {
 
   if (!count) {
     return (
-      <div className="card" style={{ aspectRatio: '4/3', display: 'grid', placeItems: 'center', background: 'var(--surface-3)' }}>
-        <I.Image style={{ width: 38, height: 38, color: 'var(--text-faint)' }} />
+      <div className="card" style={{ aspectRatio: '4/3', overflow: 'hidden', position: 'relative' }}>
+        <SmartImage src={null} alt={alt} />
       </div>
     );
   }

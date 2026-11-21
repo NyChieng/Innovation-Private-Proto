@@ -11,7 +11,7 @@
  * plant record is always labelled as such by the page that reads it.
  */
 
-const VERSION = 'florascan-v4'; // refresh cached documents with the security headers
+const VERSION = 'florascan-v5'; // drop photos cached while the photo folder held placeholders
 const SHELL = `${VERSION}-shell`;
 const RUNTIME = `${VERSION}-runtime`;
 
