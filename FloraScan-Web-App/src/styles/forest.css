@@ -57,6 +57,14 @@ body { font-family: var(--font); }
 }
 .topbar .brand-sub, .m-header .brand-sub { color: #c8c8c8; }
 .m-header h1 { color: #ffffff; font-family: var(--font-display); font-weight: 800; font-size: 1.4rem; }
+/* The wordmark, language and theme controls share one row on a phone. */
+.m-header { gap: 10px; }
+.m-header .brand-name { font-size: 1.3rem; }
+@media (max-width: 460px) {
+  .m-header .lang-switch { padding: 5px 7px; }
+  .m-header .lang-switch .lang-short { display: none; }
+  .m-header .theme-switch button { padding: 5px; }
+}
 
 .topbar .nav a {
   color: #ffffff; font-weight: 600; font-size: 0.98rem;
