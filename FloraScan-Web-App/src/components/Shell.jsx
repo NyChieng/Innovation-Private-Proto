@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, NavLink, useNavigate } from 'react-router-dom';
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useApp } from '../lib/store.jsx';
 import { Avatar } from './ui.jsx';
 import { ScrollProgress } from './motion.jsx';
@@ -93,13 +93,12 @@ const THEMES = [
 export function ThemeSwitch() {
   const { theme, setTheme } = useApp();
   return (
-    <div className="segmented theme-switch" role="radiogroup" aria-label={t('Colour theme')}>
+    <div className="segmented theme-switch" role="group" aria-label={t('Colour theme')}>
       {THEMES.map(({ v, label, icon: Icon }) => (
         <button
           key={v}
           type="button"
-          role="radio"
-          aria-checked={theme === v}
+          aria-pressed={theme === v}
           aria-label={label()}
           title={label()}
           className={theme === v ? 'active' : ''}
@@ -217,6 +216,7 @@ function OfflineBanner() {
 /* ------------------------------------------------------------------ */
 
 export function WebShell({ children, sidebar = false }) {
+  const inSpecies = useLocation().pathname.startsWith('/species');
   const { user, can, counts } = useApp();
   const groups = sidebar ? staffNav(can, counts) : [];
 
@@ -233,8 +233,7 @@ export function WebShell({ children, sidebar = false }) {
             {!sidebar && (
               <nav className="nav nav-desktop" aria-label={t('Main')}>
                 <NavLink to="/" end>{t('Home')}</NavLink>
-                <NavLink to="/browse">{t('Plants')}</NavLink>
-                <NavLink to="/species">{t('Species')}</NavLink>
+                <NavLink to="/browse" className={({ isActive }) => isActive || inSpecies ? 'active' : undefined} aria-current={inSpecies ? 'location' : 'page'}>{t('Explore')}</NavLink>
                 <NavLink to="/scan">{t('Scan a tag')}</NavLink>
               </nav>
             )}
@@ -320,10 +319,11 @@ export function WebShell({ children, sidebar = false }) {
 export function MobileShell({ children, title, back, actions, noNav }) {
   const { user, can, counts } = useApp();
   const navigate = useNavigate();
+  const inSpecies = useLocation().pathname.startsWith('/species');
 
   const items = [
     { to: '/', label: t('Home'), icon: I.Home, end: true },
-    { to: '/browse', label: t('Plants'), icon: I.Leaf },
+    { to: '/browse', label: t('Explore'), icon: I.Leaf },
     { to: '/scan', label: t('Scan'), icon: I.Scan, mid: true },
   ];
 
@@ -337,8 +337,6 @@ export function MobileShell({ children, title, back, actions, noNav }) {
       items.push({ to: '/staff/iot', label: t('Alerts'), icon: I.Sensor });
     }
     items.push({ to: '/staff/me', label: t('Account'), icon: I.User, badge: counts?.unread_notifications });
-  } else {
-    items.push({ to: '/species', label: t('Species'), icon: I.Book });
   }
 
   return (
@@ -369,7 +367,7 @@ export function MobileShell({ children, title, back, actions, noNav }) {
               key={it.to}
               to={it.to}
               end={it.end}
-              className={({ isActive }) => 'bn-item' + (isActive ? ' active' : '') + (it.mid ? ' bn-scan' : '')}
+              className={({ isActive }) => 'bn-item' + (isActive || (it.to === '/browse' && inSpecies) ? ' active' : '') + (it.mid ? ' bn-scan' : '')}
             >
               <it.icon />
               <span>{it.label}</span>

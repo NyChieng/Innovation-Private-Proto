@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { NavLink } from 'react-router-dom';
 import { SmartImage } from './motion.jsx';
 import { t } from '../lib/i18n.js';
 import * as I from '../lib/icons.jsx';
@@ -23,7 +24,7 @@ export function Fern({ className = '', style }) {
 }
 
 /**
- * Deep green band with a faded canopy photograph drifting behind it and two
+ * Deep green band with a faded canopy photograph behind it and two
  * fern fronds at the edges. `photo` is optional; without one the band is
  * plain green, never a broken image.
  */
@@ -96,5 +97,15 @@ export function BackToTop() {
     >
       <I.ChevronUp />
     </button>
+  );
+}
+
+/** The two catalogue views share an Explore entry while keeping their URLs. */
+export function ExploreLinks() {
+  return (
+    <nav className="wrap explore-links" aria-label={t('Explore')}>
+      <NavLink to="/browse" end>{t('Tagged plants')}</NavLink>
+      <NavLink to="/species" end>{t('Species guide')}</NavLink>
+    </nav>
   );
 }

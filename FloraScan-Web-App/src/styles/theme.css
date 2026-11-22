@@ -1,6 +1,6 @@
 /* ==================================================================
    FloraScan design tokens
-   Palette: deep forest greens against warm paper neutrals, with the
+   Palette: deep forest greens against soft sage surfaces, with the
    IUCN conservation ramp as the one saturated accent family.
    ================================================================== */
 
@@ -30,26 +30,35 @@
   --berry:#a8386b;
 
   /* --- surfaces (light) ------------------------------------------- */
-  --bg:            #f7f6f2;
-  --bg-sunk:       #eeece5;
-  --surface:       #ffffff;
-  --surface-2:     #faf9f6;
-  --surface-3:     #f2f1ec;
-  --surface-inset: #f7f6f2;
-  --border:        #e2e0d8;
-  --border-strong: #cfccc1;
+  --bg:            #f1f6ef;
+  --bg-sunk:       #e3eddf;
+  --surface:       #fcfdf9;
+  --surface-2:     #f5f8f1;
+  --surface-3:     #e8f0e3;
+  --surface-inset: #f1f6ef;
+  --border:        #cbd8c8;
+  --border-strong: #9fb49e;
 
-  --text:      #1b2119;
-  --text-soft: #4d5449;
-  --text-mute: #797f73;
-  --text-faint:#9aa094;
+  --text:      #1c3427;
+  --text-soft: #536b59;
+  --text-mute: #536b59;
+  --text-faint:#596b59;
   --on-accent: #ffffff;
 
-  --accent:       var(--green-600);
+  --accent:       #2f6845;
   --accent-hover: var(--green-700);
-  --accent-soft:  var(--green-50);
+  --accent-soft:  #e3eddf;
   --accent-border:var(--green-200);
   --accent-text:  var(--green-700);
+
+  --header-bg: #e3eddf;
+  --header-fg: var(--text);
+  --header-muted: var(--text-soft);
+  --header-border: var(--border-strong);
+  --header-hover: rgba(47, 104, 69, 0.08);
+  --header-active: rgba(47, 104, 69, 0.14);
+  --ink-bg: var(--accent);
+  --ink-fg: #ffffff;
 
   --focus: #2f7fd0;
 
@@ -103,7 +112,7 @@
     --text:      #e8eee7;
     --text-soft: #b3bfb2;
     --text-mute: #8b978a;
-    --text-faint:#6d786c;
+    --text-faint:#9aa798;
     --on-accent: #06120b;
 
     --accent:       var(--green-300);
@@ -112,6 +121,14 @@
     --accent-border:#2c4433;
     --accent-text:  var(--green-300);
 
+    --header-bg: #111111;
+    --header-fg: #ffffff;
+    --header-muted: #c8c8c8;
+    --header-border: #5a5a5a;
+    --header-hover: rgba(255, 255, 255, 0.08);
+    --header-active: rgba(255, 255, 255, 0.2);
+    --ink-bg: #e8eee7;
+    --ink-fg: #0e140f;
     --focus: #6fb4f5;
 
     --ok-bg: #12291a;      --ok-fg: #86ccA0;      --ok-br: #23492f;
@@ -146,7 +163,7 @@
   --text:      #e8eee7;
   --text-soft: #b3bfb2;
   --text-mute: #8b978a;
-  --text-faint:#6d786c;
+  --text-faint:#9aa798;
   --on-accent: #06120b;
 
   --accent:       var(--green-300);
@@ -155,6 +172,14 @@
   --accent-border:#2c4433;
   --accent-text:  var(--green-300);
 
+  --header-bg: #111111;
+  --header-fg: #ffffff;
+  --header-muted: #c8c8c8;
+  --header-border: #5a5a5a;
+  --header-hover: rgba(255, 255, 255, 0.08);
+  --header-active: rgba(255, 255, 255, 0.2);
+  --ink-bg: #e8eee7;
+  --ink-fg: #0e140f;
   --focus: #6fb4f5;
 
   --ok-bg: #12291a;      --ok-fg: #86cca0;      --ok-br: #23492f;

@@ -454,9 +454,7 @@ export default function PlantInfo({ byToken }) {
           </div>
         </div>
 
-        <div className="tiny faint" style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
-          {t('Photographs are contributed to iNaturalist under Creative Commons licences and credited to the photographer; where no photograph exists the page shows a placeholder. Taxonomy and Red List categories come from GBIF.')}
-        </div>
+
       </div>
 
       {reporting && <ReportDialog plant={plant} onClose={() => setReporting(false)} />}

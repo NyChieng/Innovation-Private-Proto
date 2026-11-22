@@ -4,7 +4,6 @@ import { Link } from 'react-router-dom';
 import { CONSERVATION, STATUS, fromServer, initials, relativeTime, titleCase } from '../lib/format.js';
 import { useApp } from '../lib/store.jsx';
 import { SmartImage, useCardTilt } from './motion.jsx';
-import { MarkerDot } from './forest.jsx';
 import { t } from '../lib/i18n.js';
 import * as I from '../lib/icons.jsx';
 
@@ -240,7 +239,6 @@ export function PlantCard({ plant, to, showStatus, eager = false, hideSite = fal
         {plant.conservation_code && (
           <div className="overlay-tr"><ConservationBadge code={plant.conservation_code} showLabel={false} /></div>
         )}
-        {!plant.location_protected && <MarkerDot site={plant.site_name} className="overlay-marker" />}
       </div>
       <div className="plant-card-body">
         <div className="plant-card-title">{title}</div>

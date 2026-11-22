@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api.js';
+import { createPlantResultsLoader } from '../lib/plant-results.js';
 import { ConservationBadge, Empty, LoadingBlock, SearchInput } from '../components/ui.jsx';
 import { Reveal, SmartImage } from '../components/motion.jsx';
-import { ForestBand } from '../components/forest.jsx';
+import { ExploreLinks, ForestBand } from '../components/forest.jsx';
 import { num } from '../lib/format.js';
 import * as I from '../lib/icons.jsx';
 import { t } from '../lib/i18n.js';
@@ -14,15 +15,22 @@ export function speciesPhoto(s) {
   if (typeof credits === 'string') {
     try { credits = JSON.parse(credits); } catch { credits = []; }
   }
-  const file = (credits || []).find((c) => c?.file)?.file;
-  return file ? '/api/photos/file/' + encodeURIComponent(file) : null;
+  const photo = (credits || []).find(c => c?.remote_url || c?.file);
+  const file = photo?.file;
+  return file ? '/api/photos/file/' + encodeURIComponent(file) : photo?.remote_url || null;
 }
 
 export default function SpeciesList() {
-  const [rows, setRows] = useState(null);
+  const [{ data, error }, setResults] = useState({ data: null, error: false });
+  const [retry, setRetry] = useState(0);
+  const loader = useMemo(() => createPlantResultsLoader(() => api.species(), setResults), []);
+  const rows = data?.results;
   const [q, setQ] = useState('');
 
-  useEffect(() => { api.species().then((r) => setRows(r.results)).catch(() => setRows([])); }, []);
+  useEffect(() => {
+    loader.load({});
+    return () => loader.cancel();
+  }, [loader, retry]);
 
   const filtered = useMemo(() => {
     if (!rows) return null;
@@ -44,6 +52,14 @@ export default function SpeciesList() {
     return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
   }, [filtered]);
 
+  if (error) return (
+    <div className="wrap section-pad" role="alert">
+      <Empty icon={I.Alert} title={t('Could not load species')}
+        action={<button className="btn" onClick={() => setRetry((n) => n + 1)}>{t('Try again')}</button>}>
+        {t('Check your connection and try again.')}
+      </Empty>
+    </div>
+  );
   if (!rows) return <LoadingBlock label={t('Loading the species list')} />;
 
   const families = new Set(rows.map((s) => s.family).filter(Boolean)).size;
@@ -60,6 +76,7 @@ export default function SpeciesList() {
           <SearchInput value={q} onChange={setQ} large placeholder={t('Search species, family or local name')} />
         </div>
       </ForestBand>
+      <ExploreLinks />
 
       <div className="wrap section-pad">
         {filtered.length === 0 && <Empty icon={I.Book} title={t('No species match that search')} />}
@@ -75,7 +92,7 @@ export default function SpeciesList() {
                 {list.map((s) => (
                   <Link key={s.id} className="species-card" to={'/species/' + s.id}>
                     <span className="species-thumb">
-                      <SmartImage src={speciesPhoto(s)} alt="" placeholderLabel={false} />
+                      <SmartImage src={speciesPhoto(s)} fallback={Array.isArray(s.photo_credits) ? s.photo_credits[0]?.remote_url : undefined} alt="" placeholderLabel={false} />
                     </span>
                     <span className="species-text">
                       <span className="sci strong species-sci">{s.scientific_name}</span>

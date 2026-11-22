@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api.js';
+import { createPlantResultsLoader } from '../lib/plant-results.js';
 import { useApp } from '../lib/store.jsx';
 import { PlantCard, SearchInput, Empty, LoadingBlock, ChipRow } from '../components/ui.jsx';
 import PlantMap from '../components/PlantMap.jsx';
 import { Reveal } from '../components/motion.jsx';
-import { ForestBand } from '../components/forest.jsx';
+import { ExploreLinks, ForestBand } from '../components/forest.jsx';
 import { CONSERVATION, GROWTH_FORM, num, titleCase } from '../lib/format.js';
 import * as I from '../lib/icons.jsx';
 import { msg, t } from '../lib/i18n.js';
@@ -35,9 +36,11 @@ function groupBySite(plants) {
 export default function Browse() {
   const { boot, mobile } = useApp();
   const [params, setParams] = useSearchParams();
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [more, setMore] = useState(false);
+  const [{ data, loading, more, error, moreError }, setResults] = useState({
+    data: null, loading: true, more: false, error: false, moreError: false,
+  });
+  const [retry, setRetry] = useState(0);
+  const loader = useMemo(() => createPlantResultsLoader(api.publicPlants, setResults), []);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [viewMode, setViewMode] = useState('grid');
 
@@ -58,30 +61,12 @@ export default function Browse() {
   const PAGE = 24;
 
   useEffect(() => {
-    let live = true;
-    setLoading(true);
+    setResults({ data: null, loading: true, more: false, error: false, moreError: false });
     const timer = setTimeout(() => {
-      api.publicPlants({ q, family, genus, conservation, site, growth_form, sort, limit: PAGE, offset: 0 })
-        .then((r) => { if (live) { setData(r); setLoading(false); } })
-        .catch(() => { if (live) setLoading(false); });
-    }, q ? 180 : 0); // debounce typing, but filters apply at once
-    return () => { live = false; clearTimeout(timer); };
-  }, [q, family, genus, conservation, site, growth_form, sort]);
-
-  /** Appends the next page rather than replacing, so scroll position holds. */
-  const loadMore = async () => {
-    if (!data?.has_more || more) return;
-    setMore(true);
-    try {
-      const next = await api.publicPlants({
-        q, family, genus, conservation, site, growth_form, sort,
-        limit: PAGE, offset: data.results.length,
-      });
-      setData((d) => ({ ...next, results: [...d.results, ...next.results] }));
-    } catch {
-      /* the button stays, so the visitor can try again */
-    } finally { setMore(false); }
-  };
+      loader.load({ q, family, genus, conservation, site, growth_form, sort });
+    }, q ? 180 : 0);
+    return () => { loader.cancel(); clearTimeout(timer); };
+  }, [q, family, genus, conservation, site, growth_form, sort, retry, loader]);
 
   const active = useMemo(
     () => [
@@ -97,7 +82,7 @@ export default function Browse() {
   const grouped = sort === 'place';
   const groups = useMemo(() => (data && grouped ? groupBySite(data.results) : []), [data, grouped]);
 
-  const countLine = loading ? t('Searching...') : (() => {
+  const countLine = loading ? t('Searching...') : error ? t('Could not load plants') : (() => {
     const vars = { n: <strong>{num(data?.total || 0)}</strong>, q: <>&ldquo;{q}&rdquo;</> };
     const one = data?.total === 1;
     if (q) return one ? t('{n} published record matching {q}', vars) : t('{n} published records matching {q}', vars);
@@ -120,8 +105,9 @@ export default function Browse() {
           />
         </div>
       </ForestBand>
+      <ExploreLinks />
 
-      {/* One toolbar row: plant type, then filters and view */}
+      {/* Type chips scroll independently; filter and view controls stay visible. */}
       <div className="toolbar-strip">
         <div className="wrap toolbar-in">
           <div className="toolbar-chips" role="group" aria-label={t('Plant type')}>
@@ -133,14 +119,14 @@ export default function Browse() {
             ))}
           </div>
           <div className="toolbar-right">
-            <button className="btn btn-sm" aria-expanded={filtersOpen} onClick={() => setFiltersOpen((o) => !o)}>
+            <button className="btn btn-sm" aria-expanded={filtersOpen} aria-controls="browse-filters" onClick={() => setFiltersOpen((o) => !o)}>
               <I.Filter /> {t('More filters')}{active.length ? ` (${active.length})` : ''}
             </button>
             <div className="segmented" role="group" aria-label={t('View mode')}>
-              <button type="button" className={viewMode === 'grid' ? 'active' : ''} onClick={() => setViewMode('grid')} aria-label={t('Grid view')} title={t('Grid view')}>
+              <button type="button" className={viewMode === 'grid' ? 'active' : ''} aria-pressed={viewMode === 'grid'} onClick={() => setViewMode('grid')} aria-label={t('Grid view')} title={t('Grid view')}>
                 <I.Grid style={{ width: 15, height: 15 }} />
               </button>
-              <button type="button" className={viewMode === 'map' ? 'active' : ''} onClick={() => setViewMode('map')} aria-label={t('Map view')} title={t('Map view')}>
+              <button type="button" className={viewMode === 'map' ? 'active' : ''} aria-pressed={viewMode === 'map'} onClick={() => setViewMode('map')} aria-label={t('Map view')} title={t('Map view')}>
                 <I.MapPin style={{ width: 15, height: 15 }} />
               </button>
             </div>
@@ -150,7 +136,7 @@ export default function Browse() {
 
       <div className="wrap section-pad">
         {filtersOpen && (
-          <div className="card card-pad filter-panel">
+          <div id="browse-filters" className="card card-pad filter-panel">
             <div className="field">
               <label>{t('Conservation status')}</label>
               <ChipRow
@@ -201,6 +187,15 @@ export default function Browse() {
           </div>
         )}
 
+        {error && (
+          <div role="alert">
+            <Empty icon={I.Alert} title={t('Could not load plants')}
+              action={<button className="btn" onClick={() => setRetry((n) => n + 1)}>{t('Try again')}</button>}>
+              {t('Check your connection and try again.')}
+            </Empty>
+          </div>
+        )}
+
         {loading && !data && <LoadingBlock label={t('Searching the register')} />}
 
         {data && data.results.length === 0 && (
@@ -241,9 +236,10 @@ export default function Browse() {
               </div>
             )}
 
+            {moreError && <p role="alert" className="small" style={{ textAlign: 'center', marginTop: 24 }}>{t('Could not load more plants. Try again below.')}</p>}
             <div className="row" style={{ justifyContent: 'center', marginTop: 32 }}>
               {data.has_more ? (
-                <button className="fbtn fbtn-outline" onClick={loadMore} disabled={more}>
+                <button className="fbtn fbtn-outline" onClick={() => loader.loadMore()} disabled={more}>
                   {more && <span className="spinner" />}
                   {more
                     ? t('Loading') + '…'

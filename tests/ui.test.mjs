@@ -805,12 +805,12 @@ section('13. Theme and layout switching');
   await page.evaluate(() => localStorage.removeItem('florascan.theme'));
   await go(page, '/');
 
-  const radios = await page.$$('.m-header .theme-switch [role="radio"]');
-  eq('the phone header has auto, light and dark theme buttons', radios.length, 3);
+  const buttons = await page.$$('.m-header .theme-switch button[aria-pressed]');
+  eq('the phone header has auto, light and dark theme buttons', buttons.length, 3);
   const theme = () => page.evaluate(() => ({
     attr: document.documentElement.dataset.theme || null,
     saved: localStorage.getItem('florascan.theme'),
-    checked: document.querySelector('.theme-switch [aria-checked="true"]')?.getAttribute('aria-label'),
+    checked: document.querySelector('.theme-switch [aria-pressed="true"]')?.getAttribute('aria-label'),
     meta: [...document.querySelectorAll('meta[name="theme-color"]')].map((m) => m.content),
   }));
 
