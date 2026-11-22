@@ -60,6 +60,10 @@ jobs:
       - name: Security headers and rate limits (real limits)
         run: npm run test:security
 
+      - name: Staff workflow and search regressions
+        run: npm run test:regressions
+
+
       - name: Production build
         run: npm run build
 
@@ -114,21 +118,10 @@ jobs:
 
       - name: Create the schema and seed the demo data
         run: |
-          # Server/data/photos is filled by "npm run import:species" and not in
-          # git; the upload test needs one real JPEG from it (280 KB, under
-          # XAMPP's 1 MB packet limit).
+          # The upload test uses a small fixture. Seed the catalogue with its
+          # checked-in reference photos so UI tests use the real images.
           mkdir -p Server/data/photos
           cp test-report/ai/det/det_best.jpg Server/data/photos/ci-upload-fixture.jpg
-          # The seeded plants show the cached species photographs; stand the
-          # same JPEG in for each one, rather than downloading from iNaturalist.
-          node -e "
-            const fs = require('fs');
-            const files = new Set();
-            JSON.stringify(JSON.parse(fs.readFileSync('Server/data/species.json', 'utf8')),
-              (k, v) => { if (k === 'file' && typeof v === 'string' && /^[\w.-]+\.jpg$/.test(v)) files.add(v); return v; });
-            for (const f of files) fs.copyFileSync('test-report/ai/det/det_best.jpg', 'Server/data/photos/' + f);
-            console.log('species photo stand-ins:', files.size);
-          "
           npm run db:setup
           node scripts/test-db.mjs
 

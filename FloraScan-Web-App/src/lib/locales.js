@@ -13,6 +13,8 @@
  * their official names in each language.
  */
 export default {
+  "Species photo credit": ["Kredit foto spesies", "物种照片署名"],
+  "Photo source": ["Sumber foto", "照片来源"],
   "Explore": ["Terokai", "探索"],
   "Tagged plants": ["Tumbuhan bertag", "挂牌植物"],
   "Species guide": ["Panduan spesies", "物种指南"],

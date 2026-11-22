@@ -34,11 +34,12 @@ export function reset(plant = {}) {
       verified_by: null, verified_at: null, ...plant }],
     plant_submissions: [{ id: 20, plant_id: 10, submitted_by: 3, status: 'pending' }],
     qr_codes: [], plant_photos: [], sensor_alerts: [{ id: 30, status: 'open', reading_value: '10.5' }],
-    notifications: [], audits: [],
+    notifications: [], audits: [], failQrWrite: false,
   });
 }
 export const byId = async (table, id) => structuredClone(state[table]?.find((row) => row.id === Number(id)) || null);
 export async function update(table, id, patch) {
+  if (table === 'qr_codes' && state.failQrWrite) throw new Error('Test QR write failure');
   const row = state[table]?.find((item) => item.id === Number(id));
   if (!row) throw new Error(`Missing fixture row ${table}/${id}`);
   Object.assign(row, patch);
@@ -50,7 +51,15 @@ export async function insert(table, values) {
   rows.push(row);
   return structuredClone(row);
 }
-export const tx = async (fn) => fn({ q, one, count, insert, update, byId });
+export async function tx(fn) {
+  const snapshot = structuredClone(state);
+  try {
+    return await fn({ q, one, count, insert, update, byId });
+  } catch (error) {
+    Object.assign(state, snapshot);
+    throw error;
+  }
+}
 export async function count(sql) {
   if (sql.includes('MAX(CAST')) return 10;
   throw new Error(`Unimplemented fixture count: ${sql}`);
@@ -64,6 +73,16 @@ export async function one(sql, params = []) {
 }
 export async function q(sql, params = []) {
   const compact = sql.replace(/\s+/g, ' ').trim();
+  if (compact === 'SELECT * FROM plants WHERE id = ? FOR UPDATE') {
+    const row = await byId('plants', params[0]);
+    return row ? [row] : [];
+  }
+  if (compact.startsWith('UPDATE plants SET status = ?, updated_at = ?')) {
+    return update('plants', params[2], { status: params[0], updated_at: params[1] });
+  }
+  if (compact.startsWith("UPDATE qr_codes SET status = 'active'")) {
+    return update('qr_codes', params[0], { status: 'active', deactivated_at: null, deactivation_reason: null });
+  }
   if (compact.startsWith('SELECT p.*')) {
     return structuredClone(state.plants.filter((p) => p.id === Number(params[0])).map((p) => ({ ...p, scientific_name: 'Shorea test' })));
   }

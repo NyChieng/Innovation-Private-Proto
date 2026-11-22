@@ -78,12 +78,19 @@ phpMyAdmin use the same database, so a change in one shows up in the other strai
 
 ### Photos
 
-- **Species photos** come from iNaturalist. A fresh clone does not have them saved locally
-  (`Server/data/photos/` is about 28 MB and is gitignored), so they load from the internet.
-  Run `npm run import:species` to download them locally. It takes about 10 minutes and is
-  safe to run again.
-- **Photos uploaded in the app** are saved in the database (`plant_photo_data` table) and
-  work offline. Running `db:setup -- --reset` deletes them.
+The demo includes a credited set of reference JPEGs in `Server/data/photos/`. These show
+the species, including labeled herbarium specimens where applicable. They illustrate demo
+records and do not document the individual plants at their sample trail locations. The
+catalogue stores each source link and licence, and the app shows photo credits.
+
+Photos captured by staff are stored in MySQL and belong to the specific plant record.
+For an older **local demo fixture database** named `florascan_demo` or `florascan_demo_*`,
+point `DATABASE_URL` at that database and run `node scripts/repair-reference-photos.mjs`.
+It refreshes known fixture references and credits in one transaction and keeps field uploads.
+A fresh database seeded with `npm run db:setup` already has the current references.
+
+`npm run import:species` rebuilds the catalogue from its online sources. Regenerate
+loading colours with `npm run import:tints` after changing the cached images.
 
 ---
 
@@ -97,7 +104,9 @@ phpMyAdmin use the same database, so a change in one shows up in the other strai
 | `npm run db:setup -- --reset` | Delete everything and rebuild from scratch |
 | `npm run db:reset` | Same as above |
 | `npm run db:seed` | Reload only the demo data (tables stay as they are) |
-| `npm test` | Run all three test suites. **This reseeds your database first.** |
+| `npm test` | Run security, workflow, translation, API, browser and passkey suites. **This reseeds the configured test database first.** |
+| `npm run test:regressions` | Run isolated staff workflow and Browse request checks. No MySQL needed. |
+| `npm run test:iot` | Run simulated sensor checks against a test server and broker. |
 | `npm run test:i18n` | Check translations only. No server needed. |
 | `npm run test:api` | Check the API only. No browser needed. |
 | `npm run test:ui` | Check the screens in a real browser only |
@@ -112,82 +121,15 @@ phpMyAdmin use the same database, so a change in one shows up in the other strai
 
 ### Branches
 
-The code is split into layers. Each layer has its own branch and its own folder.
-**Only work inside your own folder.** That way two people never edit the same file.
+- `main` is the mainline. Review any promotion from the demo branch separately.
+- `demo` integrates features for the demo.
+- Start new work from the branch you intend to target. For demo changes, fetch `origin/demo`,
+  create a feature branch, test against a separate fixture database, and open a PR to `demo`.
 
-| Branch | Folder | Who |
-| --- | --- | --- |
-| `main` | Everything. All work is merged here. | NY only |
-| `frontend` | `FloraScan-Web-App/` (screens, components, styles, API client) | Web app team |
-| `backend` | `Server/` (API, database code, login, QR, certificates) | Server team |
-| `database` | `plant_registry_schema.sql`, `scripts/` (schema, seed data) | Data model owner |
-
-The frontend and backend never import each other's code. They only talk over HTTP, so a
-screen change and an API change can happen at the same time without conflicts.
-
-`main` must always work. Nobody pushes to it directly.
-
-### Day-to-day
-
-Keep your layer branch. Do not delete it after a merge.
-
-```bash
-git checkout frontend
-git pull
-
-# ... make your changes inside your own folder ...
-npm test
-
-git add -A
-git commit -m "Sort the species picker by scientific name"
-git push
-```
-
-Then open a pull request into `main` on GitHub. NY checks that the layers still work
-together and the tests pass, then merges it.
-
-**After anything is merged into `main`, update your branch:**
-
-```bash
-git checkout frontend
-git merge main
-```
-
-Do this every time, not once a week. Branches that fall behind are what cause painful
-merge conflicts.
-
-### Shared files
-
-These files do not belong to any one layer, so they are the only place two branches can
-clash:
-
-```
-package.json  package-lock.json  vite.config.js
-README.md  .env.example  .gitignore  tests/
-```
-
-- **Changes to these go through NY on `main`.**
-- Need a new package? Ask NY. Don't add it to `package.json` on your branch. Two branches
-  adding packages at the same time break `package-lock.json`.
-- You can add tests in `tests/` on your branch. If two branches change the same spot,
-  NY sorts it out.
-
-### A feature that needs both frontend and backend
-
-1. **Backend first.** Build the API endpoint and its tests on `backend`, and get it merged.
-2. **Frontend second.** Merge `main` into `frontend` so the endpoint is there, then build
-   the screen.
-
-If the two parts really can't be split, make one short-lived branch from `main` for that
-feature, merge it, and tell the layer owners to pull.
-
-### Rules
-
-- **Stay in your own folder.**
-- **Run `npm test` before you push.** A broken `main` blocks everyone.
-- **Merge `main` into your branch often.** Never merge one layer branch into another.
-- **Never commit** `.env`, passwords, or anything in `.certs/`.
-- **Only NY merges into `main`.**
+Keep PRs focused. Compare the change with its target before pushing and include relevant
+test results. Keep local credentials, certificate keys, database dumps and temporary
+test artifacts outside commits. Commit reference assets alongside their catalogue metadata
+when a feature depends on them.
 
 ---
 
@@ -207,8 +149,7 @@ Phone / tablet   https://192.168.0.133:44xxx   (same Wi-Fi or hotspot)
 - Your phone and computer must be on the **same Wi-Fi or hotspot**.
 
 On a laptop the app looks like a website. On a phone it looks like an app with a tab bar
-at the bottom. You can switch between the two from the floating demo button, which is handy for
-showing the phone layout on a projector.
+at the bottom. Staff can change the layout from the phone **Account** screen.
 
 ### Why HTTPS, and the security warning
 
@@ -268,14 +209,15 @@ without a signal.
 Staff sign in at **`/login`** with their email address and password, the same way the real
 system will work. There is no longer a way to jump into an account without its password.
 
-A floating button in the bottom-right corner (**Ctrl/Cmd + K**) shows who is signed in and
-lets you:
+Use the account menu on desktop or **Account** on the phone layout to sign out and
+open staff settings. The header contains the language and theme controls.
 
-- go to **Staff sign in**, or sign out
-- change theme, language, and website/phone layout
-- replay the welcome screen (**Intro**)
+### Public navigation
 
-It is for demos only and comes out before release.
+**Explore** groups the **Tagged plants** register and **Species guide**. Tagged plants
+lists individual sample records, including plant IDs and eligible trail locations.
+The species guide explains classification and identification. **Scan a tag** opens a
+particular published specimen directly.
 
 ### Staff accounts
 
@@ -354,7 +296,7 @@ It never appears when someone arrives by scanning a QR tag. They go straight to 
    returned record has **Fix and resubmit**, and the reviewer then sees both notes.
 3. **Unknown species.** Register a plant without choosing a species. It always goes to
    review, and the reviewer can't approve it until a species is set.
-4. **Skip review.** As admin, go to **System settings** and turn off `require_approval`.
+4. **Approval setting.** In a local demo, an administrator can change `require_approval` under **System settings**.
    Now a botanist's new plant is published straight away.
 5. **Archiving.** Archive a published plant and scan its tag: it says "no longer on
    display". Restore it and the same tag works again.
@@ -496,23 +438,29 @@ API, database and permissions all carry over. Only the UI components would chang
 
 ## Tests
 
-Start the server first (`npm run dev`), then in a second terminal:
+Create a separate local fixture schema before running tests. Use the same `DATABASE_URL`
+in all test terminals and set `PORT` to an unused port. These commands show PowerShell syntax:
 
-```bash
-npm test             # all three suites
-npm run test:i18n    # translations only (no server needed)
-npm run test:api     # API only (no browser needed)
-npm run test:ui      # opens headless Chrome or Edge
+```powershell
+$env:DATABASE_URL = 'mysql://root@127.0.0.1:3306/florascan_demo_qa'
+$env:PORT = '48673'
+npm run db:setup
+npm run dev:test
 ```
 
-Things to know:
+In another terminal using the same database and port:
 
-- **Tests reset your database first**, because they create, approve and archive real records.
-- **Tests refuse to run on a database that isn't on your computer**, so they never mess up
-  a shared database.
-- The tests work with HTTPS or HTTP. They detect which one the server uses.
-- The UI tests find Chrome or Edge on their own. If yours is somewhere unusual, set
-  `CHROME_PATH`.
+```powershell
+npm test
+npm run test:iot
+```
+
+Use a dedicated MQTT broker or unique test topic prefix for simulated sensors, and leave
+SMTP credentials empty on the test server. The suite creates and updates fixture records.
+If rerunning a stateful suite on its own, run `npm run db:test` first against the test schema.
+Chrome or Edge is detected automatically. Set `CHROME_PATH` if the browser is installed
+somewhere else. Phone viewport tests run in Chromium. Verify physical camera permissions,
+passkeys and native installation prompts on real devices separately.
 
 What they cover:
 
@@ -549,7 +497,7 @@ What they cover:
 | [Wikipedia](https://en.wikipedia.org) | Species descriptions | CC BY-SA 4.0 |
 
 - Only Creative Commons photos are used. They are never edited, and every photo shows its
-  credit.
+  credit. Herbarium specimen photos are labeled in the catalogue.
 - **The species are real. The individual plant records are made up** for the demo (plant
   IDs, trail locations, who registered them). Real GBIF locations are kept on the species
   record only, not passed off as the location of a demo plant.
@@ -574,9 +522,7 @@ This happens **on the server**, so the hidden data is never sent to the browser 
   `npm run import:tints`; without it, a colour is picked from the file name).
 - Each photo's space is reserved in advance so the page doesn't jump.
 - The first row of photos loads straight away; the rest load as you scroll.
-- If a species has no Creative Commons photo, a drawn SVG picture is shown instead, labelled
-  *Illustrative placeholder*. It only shows parts the plant actually has (for example, no
-  flower for a conifer).
+- When no suitable photo is available, the app shows a plain **No photo yet** placeholder.
 
 ---
 

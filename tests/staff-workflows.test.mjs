@@ -1,18 +1,13 @@
 import test, { before, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { registerHooks } from 'node:module';
+import { register } from 'node:module';
 import { once } from 'node:events';
 import express from 'express';
 import { reset, state } from './helpers/staff-memory-db.mjs';
 
 // Replace only the persistence boundary; exercise the real API and middleware.
 // Fail closed if anything attempts to load the real SQL adapter.
-const hooks = registerHooks({ resolve(specifier, context, nextResolve) {
-  const resolved = nextResolve(specifier, context);
-  if (resolved.url.endsWith('/Server/db.js')) return { ...resolved, url: new URL('./helpers/staff-memory-db.mjs', import.meta.url).href };
-  if (resolved.url.endsWith('/Server/sql.js')) throw new Error('Live database access is forbidden in staff workflow tests');
-  return resolved;
-} });
+register('./helpers/staff-db-loader.mjs', import.meta.url);
 const { createApi } = await import('../Server/api.js');
 let server, origin;
 before(async () => {
@@ -22,7 +17,7 @@ before(async () => {
   await once(server, 'listening');
   origin = `http://127.0.0.1:${server.address().port}/api`;
 });
-after(async () => { await new Promise((resolve) => server.close(resolve)); hooks.deregister(); });
+after(async () => { if (server) await new Promise((resolve) => server.close(resolve)); });
 beforeEach(() => reset());
 async function call(path, { role = 3, method = 'POST', body = {} } = {}) {
   const response = await fetch(origin + path, { method, headers: { authorization: `Bearer staff-${role}`, 'content-type': 'application/json' }, body: JSON.stringify(body) });
@@ -52,6 +47,15 @@ test('restoring a verified archive reuses its tag', async () => {
   assert.equal(state.qr_codes.length, 1);
   assert.equal(state.qr_codes[0].status, 'active');
   assert.equal(state.qr_codes[0].qr_token, 'printed-token');
+});
+test('restore keeps the plant archived if QR reactivation fails', async () => {
+  reset({ status: 'archived', verified_at: '2026-11-01T00:00:00Z', verified_by: 4 });
+  state.qr_codes.push({ id: 40, plant_id: 10, status: 'inactive', qr_token: 'printed-token' });
+  state.failQrWrite = true;
+  const result = await call('/plants/10/restore');
+  assert.equal(result.status, 500);
+  assert.equal(state.plants[0].status, 'archived');
+  assert.equal(state.qr_codes[0].status, 'inactive');
 });
 test('editing requires a nonempty site', async () => {
   const result = await call('/plants/10', { method: 'PATCH', body: { site_name: '  ' } });

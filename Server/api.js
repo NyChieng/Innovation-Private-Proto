@@ -1743,17 +1743,19 @@ export function createApi() {
    * so this must reactivate rather than insert a second. A printed tag stays
    * valid across archive and restore because its token never changes.
    */
-  async function issueQr(plantId, userId) {
-    const active = await one("SELECT * FROM qr_codes WHERE plant_id = ? AND status = 'active' LIMIT 1", [plantId]);
+  async function issueQr(plantId, userId, db = { q, one, insert }) {
+    const active = await db.one("SELECT * FROM qr_codes WHERE plant_id = ? AND status = 'active' LIMIT 1", [plantId]);
     if (active) return active;
 
-    const old = await one("SELECT * FROM qr_codes WHERE plant_id = ? AND status = 'inactive' LIMIT 1", [plantId]);
+    const old = await db.one("SELECT * FROM qr_codes WHERE plant_id = ? AND status = 'inactive' LIMIT 1", [plantId]);
     if (old) {
-      return await update('qr_codes', old.id, {
-        status: 'active', deactivated_at: null, deactivation_reason: null,
-      });
+      await db.q(
+        "UPDATE qr_codes SET status = 'active', deactivated_at = NULL, deactivation_reason = NULL WHERE id = ?",
+        [old.id],
+      );
+      return { ...old, status: 'active', deactivated_at: null, deactivation_reason: null };
     }
-    return await insert('qr_codes', {
+    return await db.insert('qr_codes', {
       plant_id: plantId, qr_token: crypto.randomUUID(),
       image_path: null, target_url: null, version: 1, status: 'active',
       generated_by: userId ?? null, generated_at: nowIso(),
@@ -1933,16 +1935,21 @@ export function createApi() {
   }));
 
   api.post('/plants/:id/restore', need('plant.archive'), route(async (req, res) => {
-    const before = await byId('plants', req.params.id);
-    if (!before || before.deleted_at) return res.status(404).json({ error: 'Not found' });
-    if (before.status !== 'archived') {
-      return res.status(409).json({ error: 'Only an archived record can be restored.' });
-    }
-    // Archive permission is not approval permission. A withdrawn submission
-    // returns to corrections so it still goes through a review before publication.
-    const status = before.verified_at && before.species_id ? 'approved' : 'rejected';
-    const after = await update('plants', before.id, { status, updated_at: nowIso() });
-    if (status === 'approved') await issueQr(before.id, req.user.id);
+    const result = await tx(async (db) => {
+      const before = await db.one('SELECT * FROM plants WHERE id = ? FOR UPDATE', [req.params.id]);
+      if (!before || before.deleted_at) return { code: 404, error: 'Not found' };
+      if (before.status !== 'archived') return { code: 409, error: 'Only an archived record can be restored.' };
+
+      // A previously unverified archive still needs review. For a published
+      // record, commit restoration together with reactivation of its printed tag.
+      const status = before.verified_at && before.species_id ? 'approved' : 'rejected';
+      const updated_at = nowIso();
+      await db.q('UPDATE plants SET status = ?, updated_at = ? WHERE id = ?', [status, updated_at, before.id]);
+      if (status === 'approved') await issueQr(before.id, req.user.id, db);
+      return { before, after: { ...before, status, updated_at }, status };
+    });
+    if (result.error) return res.status(result.code).json({ error: result.error });
+    const { before, after, status } = result;
     await recordRevisions(before.id, req.user.id, before, after,
       status === 'approved' ? 'Restored to public view' : 'Restored for corrections before review');
     audit({ user_id: req.user.id, action: 'update', entity_type: 'plants', entity_id: before.id, old_values: { status: 'archived' }, new_values: { status } });

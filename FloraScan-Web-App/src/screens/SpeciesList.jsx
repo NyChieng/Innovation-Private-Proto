@@ -5,17 +5,14 @@ import { createPlantResultsLoader } from '../lib/plant-results.js';
 import { ConservationBadge, Empty, LoadingBlock, SearchInput } from '../components/ui.jsx';
 import { Reveal, SmartImage } from '../components/motion.jsx';
 import { ExploreLinks, ForestBand } from '../components/forest.jsx';
+import { speciesReferencePhoto } from '../lib/photo.js';
 import { num } from '../lib/format.js';
 import * as I from '../lib/icons.jsx';
 import { t } from '../lib/i18n.js';
 
 /** The first credited photograph of a species, as a served path. */
 export function speciesPhoto(s) {
-  let credits = s?.photo_credits;
-  if (typeof credits === 'string') {
-    try { credits = JSON.parse(credits); } catch { credits = []; }
-  }
-  const photo = (credits || []).find(c => c?.remote_url || c?.file);
+  const photo = speciesReferencePhoto(s);
   const file = photo?.file;
   return file ? '/api/photos/file/' + encodeURIComponent(file) : photo?.remote_url || null;
 }
@@ -92,7 +89,7 @@ export default function SpeciesList() {
                 {list.map((s) => (
                   <Link key={s.id} className="species-card" to={'/species/' + s.id}>
                     <span className="species-thumb">
-                      <SmartImage src={speciesPhoto(s)} fallback={Array.isArray(s.photo_credits) ? s.photo_credits[0]?.remote_url : undefined} alt="" placeholderLabel={false} />
+                      <SmartImage src={speciesPhoto(s)} fallback={speciesReferencePhoto(s)?.remote_url} alt="" placeholderLabel={false} />
                     </span>
                     <span className="species-text">
                       <span className="sci strong species-sci">{s.scientific_name}</span>
