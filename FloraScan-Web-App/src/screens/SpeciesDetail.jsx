@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { api } from '../lib/api.js';
 import { ConservationBadge, Empty, LoadingBlock, PageHead, PlantCard } from '../components/ui.jsx';
 import { Reveal } from '../components/motion.jsx';
+import { speciesReferencePhoto } from '../lib/photo.js';
 import { GROWTH_FORM, titleCase } from '../lib/format.js';
 import * as I from '../lib/icons.jsx';
 import { t } from '../lib/i18n.js';
@@ -27,6 +28,7 @@ export default function SpeciesDetail() {
   if (!data) return <LoadingBlock label={t('Loading species')} />;
 
   const s = data.species;
+  const photo = speciesReferencePhoto(s);
   const sections = [
     [t('Description'), s.description],
     [t('Distinguishing characteristics'), s.characteristics],
@@ -47,6 +49,14 @@ export default function SpeciesDetail() {
         >
           <ConservationBadge code={s.conservation_code} />
         </PageHead>
+
+        {photo?.credit && (
+          <p className="small mute">
+            {t('Species photo credit')}{' · '}{photo.credit}
+            {photo.license && <> · {photo.license}</>}
+            {photo.url && <> · <a href={photo.url} target="_blank" rel="noreferrer">{photo.source || t('Photo source')}</a></>}
+          </p>
+        )}
 
         <div style={{ display: 'grid', gap: 22, gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))', alignItems: 'start' }}>
           <Reveal index={0}>

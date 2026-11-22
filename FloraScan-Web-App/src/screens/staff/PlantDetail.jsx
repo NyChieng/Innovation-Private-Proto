@@ -210,7 +210,7 @@ export default function PlantDetail() {
 
   const act = async (fn, msg) => {
     setBusy(true);
-    try { await fn(); await load(); await refreshCounts(); toast(msg); }
+    try { const result = await fn(); await load(); await refreshCounts(); toast(typeof msg === 'function' ? msg(result) : msg); }
     catch (e) { toast(e.message, 'err'); }
     finally { setBusy(false); }
   };
@@ -270,8 +270,10 @@ export default function PlantDetail() {
             />
           )}
           {can('plant.archive') && plant.status === 'archived' && (
-            <button className="btn btn-sm btn-primary" disabled={busy} onClick={() => act(() => api.restore(plant.id), t('{code} restored to public view.', { code: plant.plant_code }))}>
-              <I.Refresh /> {t('Restore to public view')}
+            <button className="btn btn-sm btn-primary" disabled={busy} onClick={() => act(() => api.restore(plant.id), (result) => result.plant.status === 'approved'
+              ? t('{code} restored to public view.', { code: plant.plant_code })
+              : t('{code} restored for corrections. Resubmit it when ready.', { code: plant.plant_code }))}>
+              <I.Refresh /> {plant.verified_at && plant.species_id ? t('Restore to public view') : t('Restore for corrections')}
             </button>
           )}
         </div>

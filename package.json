@@ -18,7 +18,8 @@
     "port": "node Server/port.js",
     "import:species": "node scripts/import-species.mjs",
     "import:tints": "node scripts/photo-tints.mjs",
-    "test": "node --test tests/security.test.mjs && node tests/i18n.test.mjs && node tests/api.test.mjs && node tests/ui.test.mjs && node tests/passkey.test.mjs",
+    "test": "node --test tests/security.test.mjs tests/staff-workflows.test.mjs tests/plant-results.test.mjs && node tests/i18n.test.mjs && node tests/api.test.mjs && node tests/ui.test.mjs && node tests/passkey.test.mjs",
+    "test:regressions": "node --test tests/staff-workflows.test.mjs tests/plant-results.test.mjs",
     "test:security": "node --test tests/security.test.mjs",
     "demo:security": "node scripts/demo-security.mjs",
     "test:api": "node tests/api.test.mjs",
@@ -33,6 +34,8 @@
     "db:test": "node scripts/test-db.mjs"
   },
   "dependencies": {
+    "@fontsource/barlow-condensed": "^5.2.6",
+    "@fontsource/public-sans": "^5.2.6",
     "@simplewebauthn/browser": "^14.0.0",
     "@simplewebauthn/server": "^14.0.3",
     "bcryptjs": "^3.0.3",

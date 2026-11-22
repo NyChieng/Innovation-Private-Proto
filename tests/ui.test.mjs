@@ -805,12 +805,12 @@ section('13. Theme and layout switching');
   await page.evaluate(() => localStorage.removeItem('florascan.theme'));
   await go(page, '/');
 
-  const radios = await page.$$('.m-header .theme-switch [role="radio"]');
-  eq('the phone header has auto, light and dark theme buttons', radios.length, 3);
+  const buttons = await page.$$('.m-header .theme-switch button[aria-pressed]');
+  eq('the phone header has auto, light and dark theme buttons', buttons.length, 3);
   const theme = () => page.evaluate(() => ({
     attr: document.documentElement.dataset.theme || null,
     saved: localStorage.getItem('florascan.theme'),
-    checked: document.querySelector('.theme-switch [aria-checked="true"]')?.getAttribute('aria-label'),
+    checked: document.querySelector('.theme-switch [aria-pressed="true"]')?.getAttribute('aria-label'),
     meta: [...document.querySelectorAll('meta[name="theme-color"]')].map((m) => m.content),
   }));
 
@@ -1062,9 +1062,10 @@ section('19. Photographs and their credits');
   const page = await newPage();
   await go(page, '/');
 
-  const heroImg = await page.evaluate(() => !!document.querySelector('.hero-photo img'));
+  const heroImg = await page.evaluate(() => !!document.querySelector('.home-photo img'));
   check('the home page leads with a photograph', heroImg);
 
+  await go(page, '/browse');
   const cards = await page.evaluate(() => document.querySelectorAll('.plant-card .smart-img img').length);
   check('plant cards use the fading image component', cards > 0, cards + ' found');
 
@@ -1165,7 +1166,7 @@ section('22. Motion respects prefers-reduced-motion');
   check('nothing stays invisible when motion is reduced', hidden === 0, hidden + ' still hidden');
 
   const drifting = await page.evaluate(() => {
-    const img = document.querySelector('.hero-photo img');
+    const img = document.querySelector('.home-photo img');
     return img ? getComputedStyle(img).animationName : 'none';
   });
   check('the hero photograph does not drift', drifting === 'none', drifting);
@@ -1476,8 +1477,8 @@ section('28b. English, Malay and Chinese (#5)');
   // so every language is checked for sideways scroll on a narrow phone, not
   // just for having changed.
   const SAMPLES = {
-    ms: { home: /Setiap tumbuhan di denai/, nav: /Layari tumbuhan|Imbas/, review: /Baris gilir semakan/, html: 'ms' },
-    zh: { home: /步道上的每一株植物/, nav: /浏览植物|扫描/, review: /审核队列/, html: 'zh-Hans' },
+    ms: { home: /Apakah yang tumbuh di sebelah anda/, nav: /Tumbuhan|Imbas/, review: /Baris gilir semakan/, html: 'ms' },
+    zh: { home: /你身边长着什么/, nav: /植物|扫描/, review: /审核队列/, html: 'zh-Hans' },
   };
   const revToken = await tokenFor(ACCOUNTS.reviewer);
   const botToken = await tokenFor(ACCOUNTS.botanist);
@@ -1518,10 +1519,10 @@ section('28b. English, Malay and Chinese (#5)');
   await go(page, '/');
   await page.select('.lang-switch select', 'zh');
   await sleep(300);
-  check('choosing 中文 in the header switches at once', /步道上的每一株植物/.test(await bodyText(page)));
+  check('choosing 中文 in the header switches at once', /你身边长着什么/.test(await bodyText(page)));
   await page.select('.lang-switch select', 'en');
   await sleep(300);
-  check('...and English comes back', /Every plant on the trail/.test(await bodyText(page)));
+  check('...and English comes back', /What is growing beside you/.test(await bodyText(page)));
   await expectNoErrors(page, 'no console errors while switching language');
   await page.close();
 }

@@ -1335,6 +1335,17 @@ export function createApi() {
       name: (a, b) => (a.scientific_name || '').localeCompare(b.scientific_name || ''),
       code: (a, b) => a.plant_code.localeCompare(b.plant_code),
       popular: (a, b) => b.view_count - a.view_count,
+      // By trail and marker, so a list can be grouped by where plants stand.
+      // Withheld locations go last and in name order: sorting them by their
+      // real site would let the order give the location away.
+      place: (a, b) => {
+        const pa = !req.user && isLocationProtected(a.conservation_code);
+        const pb = !req.user && isLocationProtected(b.conservation_code);
+        if (pa !== pb) return pa ? 1 : -1;
+        if (pa) return (a.scientific_name || '').localeCompare(b.scientific_name || '');
+        return (a.site_name || '').localeCompare(b.site_name || '', 'en', { numeric: true })
+          || (a.scientific_name || '').localeCompare(b.scientific_name || '');
+      },
     };
     rows.sort(sorters[sort] || sorters.recent);
 
@@ -1426,7 +1437,8 @@ export function createApi() {
     // Plant counts for the whole list in one query rather than one each.
     const counts = new Map((await q(
       `SELECT species_id, COUNT(*) n FROM plants
-        WHERE deleted_at IS NULL AND species_id IS NOT NULL GROUP BY species_id`,
+        WHERE deleted_at IS NULL AND species_id IS NOT NULL
+          ${req.can('plant.view_all') ? '' : "AND status = 'approved'"} GROUP BY species_id`,
     )).map((r) => [r.species_id, Number(r.n)]));
     const statuses = new Map((await q('SELECT * FROM conservation_statuses')).map((c) => [c.id, c]));
 
@@ -1452,7 +1464,7 @@ export function createApi() {
       : "p.species_id = ? AND p.deleted_at IS NULL AND p.status = 'approved'";
     const rows = await plantsWhere(where, [s.id]);
     res.json({
-      species: await shapeSpecies(s),
+      species: { ...await shapeSpecies(s), plant_count: rows.length },
       plants: await shapeMany(rows, { viewer: req.user }),
     });
   }));
@@ -1683,14 +1695,27 @@ export function createApi() {
   api.patch('/plants/:id', need('plant.edit'), route(async (req, res) => {
     const before = await byId('plants', req.params.id);
     if (!before || before.deleted_at) return res.status(404).json({ error: 'Not found' });
-    const invalid = validatePlant(req.body || {});
-    if (invalid) return res.status(400).json({ error: invalid });
-
     const allowed = ['species_id', 'proposed_species_name', 'site_name', 'location_notes',
       'latitude', 'longitude', 'altitude_m', 'height_m', 'trunk_diameter_cm',
       'health_status', 'life_stage', 'morphology_notes', 'notes'];
     const patch = {};
     allowed.forEach((k) => { if (k in (req.body || {})) patch[k] = req.body[k]; });
+
+    // PATCH describes only changes; paired fields and required values must
+    // be checked against the complete record that would actually be saved.
+    const candidate = { ...before, ...patch };
+    const invalid = validatePlant(candidate);
+    if (invalid) return res.status(400).json({ error: invalid });
+    if (typeof candidate.site_name !== 'string' || !candidate.site_name.trim()) {
+      return res.status(400).json({ error: 'A location or site name is required.' });
+    }
+    if (!candidate.species_id && (typeof candidate.proposed_species_name !== 'string' || !candidate.proposed_species_name.trim())) {
+      return res.status(400).json({ error: 'Choose a species, or type a name under "species not listed".' });
+    }
+    if (before.status === 'approved' && !candidate.species_id) {
+      return res.status(400).json({ error: 'A published record must have a confirmed species.' });
+    }
+    if ('site_name' in patch) patch.site_name = patch.site_name.trim();
 
     const speciesId = 'species_id' in patch ? patch.species_id : before.species_id;
     if (speciesId && !await byId('species', speciesId)) {
@@ -1718,17 +1743,19 @@ export function createApi() {
    * so this must reactivate rather than insert a second. A printed tag stays
    * valid across archive and restore because its token never changes.
    */
-  async function issueQr(plantId, userId) {
-    const active = await one("SELECT * FROM qr_codes WHERE plant_id = ? AND status = 'active' LIMIT 1", [plantId]);
+  async function issueQr(plantId, userId, db = { q, one, insert }) {
+    const active = await db.one("SELECT * FROM qr_codes WHERE plant_id = ? AND status = 'active' LIMIT 1", [plantId]);
     if (active) return active;
 
-    const old = await one("SELECT * FROM qr_codes WHERE plant_id = ? AND status = 'inactive' LIMIT 1", [plantId]);
+    const old = await db.one("SELECT * FROM qr_codes WHERE plant_id = ? AND status = 'inactive' LIMIT 1", [plantId]);
     if (old) {
-      return await update('qr_codes', old.id, {
-        status: 'active', deactivated_at: null, deactivation_reason: null,
-      });
+      await db.q(
+        "UPDATE qr_codes SET status = 'active', deactivated_at = NULL, deactivation_reason = NULL WHERE id = ?",
+        [old.id],
+      );
+      return { ...old, status: 'active', deactivated_at: null, deactivation_reason: null };
     }
-    return await insert('qr_codes', {
+    return await db.insert('qr_codes', {
       plant_id: plantId, qr_token: crypto.randomUUID(),
       image_path: null, target_url: null, version: 1, status: 'active',
       generated_by: userId ?? null, generated_at: nowIso(),
@@ -1908,12 +1935,24 @@ export function createApi() {
   }));
 
   api.post('/plants/:id/restore', need('plant.archive'), route(async (req, res) => {
-    const before = await byId('plants', req.params.id);
-    if (!before) return res.status(404).json({ error: 'Not found' });
-    const after = await update('plants', before.id, { status: 'approved', updated_at: nowIso() });
-    await issueQr(before.id, req.user.id);
-    await recordRevisions(before.id, req.user.id, before, after, 'Restored to public view');
-    audit({ user_id: req.user.id, action: 'update', entity_type: 'plants', entity_id: before.id, old_values: { status: 'archived' }, new_values: { status: 'approved' } });
+    const result = await tx(async (db) => {
+      const before = await db.one('SELECT * FROM plants WHERE id = ? FOR UPDATE', [req.params.id]);
+      if (!before || before.deleted_at) return { code: 404, error: 'Not found' };
+      if (before.status !== 'archived') return { code: 409, error: 'Only an archived record can be restored.' };
+
+      // A previously unverified archive still needs review. For a published
+      // record, commit restoration together with reactivation of its printed tag.
+      const status = before.verified_at && before.species_id ? 'approved' : 'rejected';
+      const updated_at = nowIso();
+      await db.q('UPDATE plants SET status = ?, updated_at = ? WHERE id = ?', [status, updated_at, before.id]);
+      if (status === 'approved') await issueQr(before.id, req.user.id, db);
+      return { before, after: { ...before, status, updated_at }, status };
+    });
+    if (result.error) return res.status(result.code).json({ error: result.error });
+    const { before, after, status } = result;
+    await recordRevisions(before.id, req.user.id, before, after,
+      status === 'approved' ? 'Restored to public view' : 'Restored for corrections before review');
+    audit({ user_id: req.user.id, action: 'update', entity_type: 'plants', entity_id: before.id, old_values: { status: 'archived' }, new_values: { status } });
     const joined = (await plantsWhere('p.id = ?', [before.id]))[0];
     res.json({ plant: await shapeOne(joined, { full: true, viewer: req.user }) });
   }));
@@ -2148,9 +2187,16 @@ export function createApi() {
 
     if ('role_id' in body) {
       if (!req.can('user.assign_role')) return res.status(403).json({ error: 'Not permitted to change roles.' });
+      if (!roleById(body.role_id)) return res.status(400).json({ error: 'Choose a role.' });
       patch.role_id = Number(body.role_id);
     }
     ['full_name', 'title', 'phone'].forEach((k) => { if (k in body) patch[k] = body[k]; });
+    if ('full_name' in patch) {
+      if (typeof patch.full_name !== 'string' || !patch.full_name.trim()) {
+        return res.status(400).json({ error: 'Full name is required.' });
+      }
+      patch.full_name = patch.full_name.trim();
+    }
     if ('is_active' in body) patch.is_active = body.is_active ? 1 : 0;
     patch.updated_at = nowIso();
 

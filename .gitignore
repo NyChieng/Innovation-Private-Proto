@@ -3,5 +3,16 @@ dist/
 proto.config.json
 .certs/
 *.log
-Server/data/photos/
+Server/data/photos/*
+!Server/data/photos/inat-*.jpg
+!Server/data/photos/shorea-macrophylla-1.jpg
+!Server/data/photos/shorea-macrophylla-2.jpg
+!Server/data/photos/shorea-macrophylla-3.jpg
+!Server/data/photos/calamus-caesius-1.jpg
+!Server/data/photos/calamus-caesius-2.jpg
+!Server/data/photos/begonia-chlorosticta-1.jpg
+!Server/data/photos/begonia-chlorosticta-2.jpg
+!Server/data/photos/vatica-venulosa-1.jpg
+!Server/data/photos/vatica-venulosa-2.jpg
+!Server/data/photos/vatica-venulosa-3.jpg
 .env

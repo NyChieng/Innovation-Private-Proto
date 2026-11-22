@@ -1,3 +1,4 @@
+import { referencesForPlants } from './reference-photos.js';
 import crypto from 'node:crypto';
 // The fixture store, not the database: this file generates the demo dataset,
 // and scripts/seed-mysql.mjs writes it into MySQL.
@@ -175,8 +176,8 @@ export function seed() {
     // in Niah, so these are kept on the species as evidence of where the
     // species has actually been recorded in Sarawak - not as specimen coords.
     occurrence_points: s.occurrence_points || [],
-    photo_credits: (s.photos || []).filter((ph) => photoExists(ph.file)).map((ph) => ({
-      file: ph.file, credit: ph.attribution, license: ph.license, source: ph.source, url: ph.page,
+    photo_credits: (s.photos || []).map((ph) => ({
+      file: ph.file, remote_url: ph.url, credit: ph.attribution, license: ph.license, source: ph.source, url: ph.page,
     })),
     created_by: botanists[i % botanists.length].id,
     created_at: daysAgo(170 - i * 2),
@@ -362,14 +363,13 @@ export function seed() {
   /* ---------------------------------------------------------------- */
   // A species with no photograph gets none: the app shows a placeholder
   // rather than a generated drawing that could pass for the wrong plant.
-  db.plants.forEach((p) => {
-    const sp = db.species.find((s) => s.id === p.species_id);
-    const source = sp ? SPECIES.find((x) => x.scientific_name === sp.scientific_name) : null;
-    // Use a photograph whenever we have one. A locally cached copy is
-    // preferred (it works with no internet); otherwise point straight at the
-    // iNaturalist CDN, and the client falls back between the two.
-    const real = (source?.photos || []).filter((ph) => ph.url || photoExists(ph.file));
-
+  const records = db.plants.map(p => ({
+    id: p.id, scientific_name: db.species.find(s => s.id === p.species_id)?.scientific_name,
+  }));
+  const references = referencesForPlants(records, SPECIES);
+  records.forEach(({ scientific_name, id }) => {
+    const p = db.plants.find(plant => plant.id === id);
+    const real = references.get(id);
     if (real.length) {
       // Real photographs from iNaturalist, under Creative Commons. The
       // photographer is credited on the plant page; we never alter the image.
@@ -383,7 +383,7 @@ export function seed() {
         mime_type: 'image/jpeg',
         size_bytes: 0,
         width_px: null, height_px: null,
-        caption: i === 0 ? 'Photographed in the field.' : null,
+        caption: ph.caption || 'Species reference: ' + scientific_name,
         credit: ph.attribution || null,
         license: ph.license || null,
         source_name: ph.source || null,

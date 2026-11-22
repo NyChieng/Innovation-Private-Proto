@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Link, NavLink, useNavigate } from 'react-router-dom';
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useApp } from '../lib/store.jsx';
 import { Avatar } from './ui.jsx';
-import { Reveal, ScrollProgress } from './motion.jsx';
+import { ScrollProgress } from './motion.jsx';
+import { BackToTop, Fern } from './forest.jsx';
 import { homeFor, roleLabel } from '../lib/format.js';
 import { LANGUAGES, t } from '../lib/i18n.js';
 import * as I from '../lib/icons.jsx';
@@ -92,13 +93,12 @@ const THEMES = [
 export function ThemeSwitch() {
   const { theme, setTheme } = useApp();
   return (
-    <div className="segmented theme-switch" role="radiogroup" aria-label={t('Colour theme')}>
+    <div className="segmented theme-switch" role="group" aria-label={t('Colour theme')}>
       {THEMES.map(({ v, label, icon: Icon }) => (
         <button
           key={v}
           type="button"
-          role="radio"
-          aria-checked={theme === v}
+          aria-pressed={theme === v}
           aria-label={label()}
           title={label()}
           className={theme === v ? 'active' : ''}
@@ -216,6 +216,7 @@ function OfflineBanner() {
 /* ------------------------------------------------------------------ */
 
 export function WebShell({ children, sidebar = false }) {
+  const inSpecies = useLocation().pathname.startsWith('/species');
   const { user, can, counts } = useApp();
   const groups = sidebar ? staffNav(can, counts) : [];
 
@@ -227,19 +228,14 @@ export function WebShell({ children, sidebar = false }) {
           <div className="topbar-in">
             <Brand sub={sidebar ? t('Staff workspace') : t('Niah National Park')} />
 
-            {!sidebar && (
-              <nav className="nav nav-desktop">
-                <NavLink to="/" end>{t('Home')}</NavLink>
-                <NavLink to="/browse">{t('Browse plants')}</NavLink>
-                <NavLink to="/species">{t('Species')}</NavLink>
-                <NavLink to="/connect">{t('Open on phone')}</NavLink>
-              </nav>
-            )}
-
             <div className="spacer" />
 
             {!sidebar && (
-              <Link to="/browse" className="btn btn-ghost btn-icon" aria-label={t('Search plants')}><I.Search /></Link>
+              <nav className="nav nav-desktop" aria-label={t('Main')}>
+                <NavLink to="/" end>{t('Home')}</NavLink>
+                <NavLink to="/browse" className={({ isActive }) => isActive || inSpecies ? 'active' : undefined} aria-current={inSpecies ? 'location' : 'page'}>{t('Explore')}</NavLink>
+                <NavLink to="/scan">{t('Scan a tag')}</NavLink>
+              </nav>
             )}
 
             <LanguageSwitch />
@@ -293,25 +289,25 @@ export function WebShell({ children, sidebar = false }) {
 
       {!sidebar && (
         <footer className="site-foot no-print">
-          <div className="wrap row row-wrap row-between" style={{ gap: 14 }}>
-            <div className="tiny mute">
-              <strong style={{ color: 'var(--text-soft)' }}>FloraScan</strong> &middot; {t('Built for NeuonAI and Sarawak Forestry Corporation')}
-              <br />{t('COS30049 Computing Technology Innovation Project')} &middot; {t('Swinburne University of Technology Sarawak')}
+          <Fern className="foot-fern" />
+          <div className="wrap site-foot-in">
+            <div className="site-foot-brand">
+              <span className="wordmark">FLORASCAN</span>
+              <span>{t('Niah National Park, Sarawak')}</span>
+              <span className="site-foot-small">
+                {t('Built for NeuonAI and Sarawak Forestry Corporation')} &middot; {t('Photos under Creative Commons, credited on each plant')}
+              </span>
             </div>
-            <div className="row" style={{ gap: 14 }}>
-              <Link to="/browse" className="tiny">{t('Browse')}</Link>
-              <Link to="/species" className="tiny">{t('Species')}</Link>
-              <Link to="/connect" className="tiny">{t('Open on phone')}</Link>
-              <Link to="/login" className="tiny">{t('Staff sign in')}</Link>
-            </div>
-          </div>
-          <div className="wrap">
-            <Reveal className="foot-wordmark" aria-hidden="true">
-              <span className="foot-wordmark-text">FloraScan</span>
-            </Reveal>
+            <nav className="site-foot-links" aria-label={t('Footer')}>
+              <Link to="/browse">{t('Plants')}</Link>
+              <Link to="/species">{t('Species')}</Link>
+              <Link to="/connect">{t('Open on phone')}</Link>
+              <Link to="/login">{t('Staff sign in')}</Link>
+            </nav>
           </div>
         </footer>
       )}
+      <BackToTop />
     </div>
   );
 }
@@ -323,10 +319,11 @@ export function WebShell({ children, sidebar = false }) {
 export function MobileShell({ children, title, back, actions, noNav }) {
   const { user, can, counts } = useApp();
   const navigate = useNavigate();
+  const inSpecies = useLocation().pathname.startsWith('/species');
 
   const items = [
     { to: '/', label: t('Home'), icon: I.Home, end: true },
-    { to: '/browse', label: t('Search'), icon: I.Search },
+    { to: '/browse', label: t('Explore'), icon: I.Leaf },
     { to: '/scan', label: t('Scan'), icon: I.Scan, mid: true },
   ];
 
@@ -340,9 +337,6 @@ export function MobileShell({ children, title, back, actions, noNav }) {
       items.push({ to: '/staff/iot', label: t('Alerts'), icon: I.Sensor });
     }
     items.push({ to: '/staff/me', label: t('Account'), icon: I.User, badge: counts?.unread_notifications });
-  } else {
-    items.push({ to: '/connect', label: t('Connect'), icon: I.Phone });
-    items.push({ to: '/login', label: t('Sign in'), icon: I.User });
   }
 
   return (
@@ -373,7 +367,7 @@ export function MobileShell({ children, title, back, actions, noNav }) {
               key={it.to}
               to={it.to}
               end={it.end}
-              className={({ isActive }) => 'bn-item' + (isActive ? ' active' : '') + (it.mid ? ' bn-scan' : '')}
+              className={({ isActive }) => 'bn-item' + (isActive || (it.to === '/browse' && inSpecies) ? ' active' : '') + (it.mid ? ' bn-scan' : '')}
             >
               <it.icon />
               <span>{it.label}</span>
@@ -382,6 +376,7 @@ export function MobileShell({ children, title, back, actions, noNav }) {
           ))}
         </nav>
       )}
+      <BackToTop />
     </div>
   );
 }

@@ -23,3 +23,12 @@ export const realPhoto = (src) => (isRealPhoto(src) ? src : null);
 
 /** The best real photo for a plant record, or null. */
 export const plantPhoto = (p) => realPhoto(p?.photo) || realPhoto(p?.photo_remote);
+
+/** Reference photograph displayed for the species catalogue entry. */
+export function speciesReferencePhoto(species) {
+  let credits = species?.photo_credits;
+  if (typeof credits === 'string') {
+    try { credits = JSON.parse(credits); } catch { return null; }
+  }
+  return Array.isArray(credits) ? credits.find(photo => photo?.file || photo?.remote_url) ?? null : null;
+}

@@ -47,16 +47,6 @@ const ENTITY_LABEL = {
 const actionLabel = (a) => (ACTION_LABEL[a] ? t(ACTION_LABEL[a]) : titleCase(a));
 const entityLabel = (e) => (ENTITY_LABEL[e] ? t(ENTITY_LABEL[e]) : titleCase(e));
 
-/** The questions an administrator actually comes here to answer, each one a filter. */
-const QUESTIONS = [
-  { label: msg('Who approved a plant?'), entity: 'plants', action: 'approve' },
-  { label: msg('Who returned a plant?'), entity: 'plants', action: 'reject' },
-  { label: msg('Who edited a plant?'), entity: 'plants', action: 'update' },
-  { label: msg('Who archived a plant?'), entity: 'plants', action: 'archive' },
-  { label: msg("Who changed a staff member's role?"), entity: 'users', action: 'role_change' },
-  { label: msg('Who changed a system setting?'), entity: 'settings', action: 'update' },
-];
-
 /** Only plain objects have fields; anything else is shown as one value. */
 const asFields = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : (v == null ? {} : { value: v }));
 
@@ -139,8 +129,6 @@ export default function Audit() {
 
   if (!data) return <LoadingBlock label={t('Loading the audit trail')} />;
 
-  const ask = (q) => { setEntity(q.entity); setAction(q.action); };
-
   return (
     <div className="page">
       <div className="wrap" style={{ maxWidth: 1060 }}>
@@ -155,7 +143,8 @@ export default function Audit() {
           )}
         </PageHead>
 
-        <div style={{ marginBottom: 18 }}>
+        <details className="audit-help">
+          <summary>{t('Audit trail help')}</summary>
           <Notice kind="plain" title={t('Use this page to:')}>
             <ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>
               <li>{t('Check who approved a plant before it went public.')}</li>
@@ -166,25 +155,7 @@ export default function Audit() {
               {t('Entries are added automatically. Nobody can edit or delete them.')}
             </div>
           </Notice>
-        </div>
-
-        <div className="small strong" style={{ marginBottom: 8 }}>{t('Quick questions')}</div>
-        <div className="row row-wrap" style={{ gap: 8, marginBottom: 16 }}>
-          <button type="button" className="chip" aria-pressed={!entity && !action} onClick={() => ask({ entity: '', action: '' })}>
-            {t('Show everything')}
-          </button>
-          {QUESTIONS.map((q) => (
-            <button
-              key={q.label}
-              type="button"
-              className="chip"
-              aria-pressed={entity === q.entity && action === q.action}
-              onClick={() => ask(q)}
-            >
-              {t(q.label)}
-            </button>
-          ))}
-        </div>
+        </details>
 
         <div className="row row-wrap" style={{ gap: 10, marginBottom: 16 }}>
           <select className="select" style={{ width: 'auto' }} value={entity} onChange={(e) => setEntity(e.target.value)} aria-label={t('Filter by record type')}>

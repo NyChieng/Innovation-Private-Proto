@@ -23,6 +23,8 @@ import { msg, t } from './i18n.js';
   msg('You cannot review a record you submitted yourself. Another reviewer must check it.'),
   msg('A note is required when returning a record, so the botanist knows what to change.'),
   msg('Only the person who registered this record can resubmit it.'),
+  msg('Only an archived record can be restored.'),
+  msg('A published record must have a confirmed species.'),
   msg('No QR code has been issued for this record yet.'),
   msg('Your current password is not correct.'),
   msg('The new password must be at least 8 characters.'),
