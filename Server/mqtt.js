@@ -278,11 +278,21 @@ async function raiseAlerts(device, reading, readingId) {
 }
 
 export function startMqttSubscriber() {
+  // The broker login lives only in .env. The team broker refuses anyone
+  // without it, every 5 seconds, so when it is missing (and MQTT_URL does not
+  // point at a broker of your own) say so once and leave sensor readings off.
+  const username = process.env.MQTT_USERNAME || undefined;
+  const password = process.env.MQTT_PASSWORD || undefined;
+  if (!process.env.MQTT_URL && !(username && password)) {
+    console.log('[MQTT] Not connected: set MQTT_USERNAME and MQTT_PASSWORD in .env to receive sensor readings (see .env.example)');
+    return null;
+  }
+
   const client = mqtt.connect(MQTT_URL, {
     reconnectPeriod: 5000, // retry every 5 s if the broker drops us
     connectTimeout: 10000,
-    username: process.env.MQTT_USERNAME || 'backend_service',
-    password: process.env.MQTT_PASSWORD || 'BackendTesting1234',
+    username,
+    password,
   });
 
   client.on('connect', () => {

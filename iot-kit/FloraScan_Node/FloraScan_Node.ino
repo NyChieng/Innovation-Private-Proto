@@ -24,14 +24,16 @@
   Each reading includes the HC-SR04 distance as distance_cm (null when no
   echo comes back). There is no light sensor on the kit, so no light value.
 
-  MQTT, on the public EMQX broker (TLS port 8883):
+  MQTT, on the team's EMQX broker (TLS port 8883, with a login):
     publishes   florascan-swinburne-demo/SN-001/readings   -> backend
 
   Arduino IDE setup:
     Board:   DOIT ESP32 DEVKIT V1 (Tools > Board > esp32)
     Library: PubSubClient by Nick O'Leary (Sketch > Include Library > Manage Libraries)
     Serial Monitor: 115200 baud
-  Before uploading, fill in WIFI_SSID and WIFI_PASSWORD below.
+  Before uploading, copy secrets.example.h to secrets.h in this folder and
+  fill it in: Wi-Fi, the node's broker login and its device key. secrets.h
+  is gitignored; never commit the real values.
 */
 
 #include <WiFi.h>
@@ -44,9 +46,14 @@
 // before the first function, and readDHT's declaration needs this type to exist by then.
 enum DhtResult { DHT_OK, DHT_NO_RESPONSE, DHT_BITS_TIMEOUT, DHT_BAD_CHECKSUM };
 
-// ===== 1. Wi-Fi =========================================================
-const char *WIFI_SSID = "YOUR-WIFI-NAME";          // 2.4 GHz only, e.g. a phone hotspot
-const char *WIFI_PASSWORD = "YOUR-WIFI-PASSWORD";  // don't share or commit your real password
+// ===== 1. Secrets: Wi-Fi, broker login, device key ======================
+// WIFI_SSID, WIFI_PASSWORD, MQTT_USER, MQTT_PASS and DEVICE_KEY come from
+// secrets.h, which is gitignored. Copy secrets.example.h to start one.
+#if __has_include("secrets.h")
+#include "secrets.h"
+#else
+#error "Copy secrets.example.h to secrets.h in this folder and fill it in before uploading."
+#endif
 
 // How often a full reading is sent. 20 s suits a demo; use 5UL * 60 * 1000
 // (every 5 minutes) for a long trial.
@@ -54,9 +61,7 @@ const unsigned long REPORT_INTERVAL_MS = 20UL * 1000;
 
 // ===== 2. MQTT and the FloraScan backend ===============================
 const char *MQTT_HOST = "l11c8d1d.ala.asia-southeast1.emqxsl.com";
-const uint16_t MQTT_PORT = 8883;
-const char *MQTT_USER = "iot_service";
-const char *MQTT_PASS = "IotTesting1234";
+const uint16_t MQTT_PORT = 8883;  // MQTT_USER and MQTT_PASS are in secrets.h
 const char* EMQX_CA_CERT = R"EOF(-----BEGIN CERTIFICATE-----
 MIIDjjCCAnagAwIBAgIQAzrx5qcRqaC7KGSxHQn65TANBgkqhkiG9w0BAQsFADBh
 MQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYDVQQLExB3
@@ -80,8 +85,7 @@ pLiaWN0bfVKfjllDiIGknibVb63dDcY3fe0Dkhvld1927jyNxF1WW6LZZm6zNTfl
 MrY=
 -----END CERTIFICATE-----)EOF";
 const char *TOPIC_PREFIX = "florascan-swinburne-demo";  // the backend listens on <prefix>/+/readings
-const char *DEVICE_CODE = "SN-001";             // sensor_devices.device_code
-const char *DEVICE_KEY = "demo-key-change-me";  // the database keeps SHA2(key, 256)
+const char *DEVICE_CODE = "SN-001";  // sensor_devices.device_code; DEVICE_KEY is in secrets.h
 
 // The JSON field that carries DEVICE_KEY. It must be the name Server/mqtt.js reads.
 const char *KEY_FIELD = "device_key";

@@ -139,8 +139,9 @@ CREATE TABLE IF NOT EXISTS plant_photo_data (
 -- ---------------------------------------------------------------------
 -- After the client consultation the roles were redrawn:
 --
---   ranger    in charge only when an IoT sensor raises an alert. No longer
---             registers, edits or tags plants.
+--   ranger    sets up the IoT sensors and is in charge when one raises an
+--             alert. No longer registers, edits or tags plants. Sensor setup
+--             has no screen yet, so for now it is done in the database.
 --   botanist  owns the ground-truthing: registers, edits and archives plant
 --             and species records and prints tags. No longer approves, so a
 --             botanist cannot publish their own record.
@@ -160,9 +161,9 @@ INSERT INTO roles (id, name, label, description) VALUES
    'Double-checks every plant a botanist registers, then approves it for publication or returns it with a note')
 ON DUPLICATE KEY UPDATE label = VALUES(label), description = VALUES(description);
 
-UPDATE roles SET description = 'Responds to IoT sensor alerts in the field. Does not register or edit plant records'
+UPDATE roles SET description = 'Sets up the IoT sensors and responds to their alerts in the field. Does not register or edit plant records'
  WHERE name = 'ranger';
-UPDATE roles SET description = 'Ground-truths plants: registers, edits and archives plant and species records, prints QR tags; sets up sensors'
+UPDATE roles SET description = 'Ground-truths plants: registers, edits and archives plant and species records, prints QR tags'
  WHERE name = 'botanist';
 
 DELETE rp FROM role_permissions rp
@@ -173,11 +174,11 @@ INSERT INTO role_permissions (role_id, permission_id)
 SELECT r.id, p.id
   FROM roles r
   JOIN permissions p
- WHERE (r.name = 'ranger'   AND p.code IN ('sensor.view', 'alert.resolve'))
+ WHERE (r.name = 'ranger'   AND p.code IN ('sensor.view', 'alert.resolve', 'sensor.manage'))
     OR (r.name = 'botanist' AND p.code IN (
           'plant.view_all', 'plant.create', 'plant.edit', 'plant.archive', 'plant.history',
           'species.manage', 'qr.print', 'qr.manage', 'report.view', 'report.resolve',
-          'sensor.view', 'sensor.manage'))
+          'sensor.view'))
     OR (r.name = 'reviewer' AND p.code IN (
           'plant.view_all', 'plant.edit', 'plant.approve', 'plant.history'));
 

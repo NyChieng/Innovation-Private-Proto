@@ -16,3 +16,4 @@ Server/data/photos/*
 !Server/data/photos/vatica-venulosa-2.jpg
 !Server/data/photos/vatica-venulosa-3.jpg
 .env
+iot-kit/FloraScan_Node/secrets.h

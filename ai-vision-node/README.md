@@ -12,8 +12,10 @@ warns when a person gets too close or touches it.
 It runs on a normal laptop CPU with no GPU (OpenVINO, about 10 frames per second), and uses an
 NVIDIA GPU if there is one.
 
-> The sensor node (soil, rain, motion, sound) is a separate part, in `iot-node/` on the
-> `IotTesting` branch. This node does not send its alerts to the FloraScan server yet.
+> Each ALERT and AFTER-HOURS event, with its snapshot, can also be sent to the FloraScan web app,
+> which notifies the rangers. This is off until you point the node at a server (see
+> [Sending alerts to FloraScan](#sending-alerts-to-florascan)). The sensor node (soil, rain,
+> motion, sound) is a separate part, in `iot-kit/`.
 
 ---
 
@@ -38,8 +40,8 @@ flowchart LR
     PIPE --> SNAP[("Alert snapshots<br/>events/*.jpg")]
     APP <--> CFG[("Plant zone + settings<br/>app/config.json")]
 
-    PIPE -. "not connected yet" .-> SERVER["FloraScan server<br/>IoT dashboard"]
-    SENSOR["Sensor node<br/>iot-node/ (IotTesting branch)"] --> SERVER
+    PIPE -. "ALERT / AFTER-HOURS + snapshot<br/>(app/notifier.py, when set up)" .-> SERVER["FloraScan server<br/>rangers notified, IoT page"]
+    SENSOR["Sensor node<br/>iot-kit/"] -- "MQTT readings" --> SERVER
 ```
 
 - The **web app** reads the camera, shows the live picture, and lists warnings and alerts.
@@ -129,6 +131,7 @@ light don't count as a touch.
 
 - The same person gets the same warning at most once every **10 seconds**.
 - Only **ALERT** and **AFTER-HOURS** (someone there outside opening hours, if switched on) save a snapshot to `events/`.
+  When a FloraScan server is set up, those two are also sent to it with the snapshot; warnings stay on the camera.
 - All numbers above are defaults in `app/pipeline.py` (`DEFAULTS`). Most can be changed in the app under **Thresholds**.
 
 ### 4. Plant zone and buffer zone
@@ -245,6 +248,27 @@ Settings you can change in the app:
 The plant zone and settings you save are stored in `app/config.json` (not committed, since every
 camera is different). Alert snapshots go to `events/`.
 
+### Sending alerts to FloraScan
+
+Each ALERT and AFTER-HOURS event, with its snapshot, can be posted to the FloraScan web app
+(`POST /api/camera/alerts`). The server notifies every ranger in the app, and by email with the
+picture attached when SMTP is set up. The picture is shown only to staff with `sensor.view`, and
+the alert is resolved on the IoT page. Warnings carry no picture and stay on the camera.
+
+It is off until all three of these are set, in `app/config.json` or as environment variables
+(the variables win):
+
+| Setting | Variable | What it is |
+| --- | --- | --- |
+| `server_url` | `FLORAGUARD_SERVER_URL` | The FloraScan server, e.g. `https://localhost:42791` |
+| `camera_code` | `FLORAGUARD_CAMERA_CODE` | The camera's row in `camera_devices`, e.g. `CAM-001` |
+| `camera_key` | `FLORAGUARD_CAMERA_KEY` | That camera's key |
+
+The node trusts the FloraScan server's own certificate (`../.certs/ca.pem`) automatically; set
+`server_ca` / `FLORAGUARD_SERVER_CA` to use another CA. Sending runs on a background thread, so a
+slow or unreachable server never holds up the camera; a failed send is retried a few times, then
+logged. See `app/notifier.py` and `docs/demo-branch.md`.
+
 ### If something goes wrong
 
 | Problem | Fix |
@@ -265,6 +289,7 @@ app/
   engine.py           Runs the models on OpenVINO, ONNX Runtime or CUDA
   tracker.py          Keeps the same ID on a person from frame to frame
   touchcrop.py        Cuts the hand crop the touch model looks at
+  notifier.py         Sends ALERT / AFTER-HOURS snapshots to the FloraScan server (off until set up)
 models/
   export/             det.onnx, pose.onnx, touch.onnx + models.json   <- what the app runs
   yolo26*.pt          Base Ultralytics weights we started training from
