@@ -45,8 +45,8 @@ export function seed() {
   /* ---------------------------------------------------------------- */
   const roles = [
     { id: 1, name: 'admin', label: 'Administrator', description: 'Manages staff accounts and roles, resets passwords, reviews the activity log' },
-    { id: 2, name: 'ranger', label: 'Ranger', description: 'Responds to IoT sensor alerts in the field. Does not register or edit plant records' },
-    { id: 3, name: 'botanist', label: 'Botanist / Officer', description: 'Ground-truths plants: registers, edits and archives plant and species records, prints QR tags; sets up sensors' },
+    { id: 2, name: 'ranger', label: 'Ranger', description: 'Sets up the IoT sensors and responds to their alerts in the field. Does not register or edit plant records' },
+    { id: 3, name: 'botanist', label: 'Botanist / Officer', description: 'Ground-truths plants: registers, edits and archives plant and species records, prints QR tags' },
     { id: 4, name: 'reviewer', label: 'Reviewer', description: 'Double-checks every plant a botanist registers, then approves it for publication or returns it with a note' },
   ];
   roles.forEach((r) => db.roles.push({ ...r, created_at: nowIso() }));
@@ -84,14 +84,16 @@ export function seed() {
   // The prototype lets an admin flip the require_approval switch, so admin
   // also holds system.settings here (the SQL file defers it to a superuser).
   grant(1, ['user.view', 'user.manage', 'user.assign_role', 'system.audit', 'system.settings']);
-  // Rangers are in charge of the plants only when a sensor raises an alert.
+  // Rangers look after the sensors: they set them up and respond when one
+  // raises an alert. Sensor setup has no screen yet, so for now it is done in
+  // the database; sensor.manage is the permission that screen will check.
   // Botanists own the ground-truthing, and nothing they register publishes
   // until a reviewer - a second person - has checked it. Keep this in step
   // with section 6 of Server/schema-extensions.sql.
-  grant(2, ['sensor.view', 'alert.resolve']);
+  grant(2, ['sensor.view', 'alert.resolve', 'sensor.manage']);
   grant(3, ['plant.view_all', 'plant.create', 'plant.edit', 'plant.archive',
     'plant.history', 'species.manage', 'qr.print', 'qr.manage', 'report.view', 'report.resolve',
-    'sensor.view', 'sensor.manage']);
+    'sensor.view']);
   grant(4, ['plant.view_all', 'plant.edit', 'plant.approve', 'plant.history']);
 
   /* ---------------------------------------------------------------- */
@@ -469,12 +471,15 @@ export function seed() {
   /* ---------------------------------------------------------------- */
   // The real kit in iot-kit/FloraScan_Node. Seeded so "npm run db:reset" and
   // "npm test" (which reseeds) keep it: without this row Server/mqtt.js
-  // ignores every reading as coming from an unknown device. DEVICE_CODE and
-  // DEVICE_KEY in the sketch must match. The safe ranges are the ones the
-  // sketch prints in the Serial Monitor.
+  // ignores every reading as coming from an unknown device. DEVICE_CODE in the
+  // sketch must match, and DEVICE_KEY in its secrets.h must equal IOT_DEVICE_KEY
+  // in .env. Without IOT_DEVICE_KEY the node gets a random key, so no value in
+  // the code can sign readings. The safe ranges are the ones the sketch prints
+  // in the Serial Monitor.
+  const deviceKey = process.env.IOT_DEVICE_KEY || crypto.randomBytes(16).toString('hex');
   insert('sensor_devices', {
     device_code: 'SN-001',
-    device_key_hash: crypto.createHash('sha256').update('demo-key-change-me').digest('hex'),
+    device_key_hash: crypto.createHash('sha256').update(deviceKey).digest('hex'),
     plant_id: null, label: 'Real kit', is_simulated: 0, is_active: 1,
     soil_moisture_min: 30, soil_moisture_max: 80,
     temperature_min: 18, temperature_max: 35,

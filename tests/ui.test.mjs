@@ -370,6 +370,10 @@ section('5. Staff routes under every role');
     let blocked = 0;
     for (const r of ROUTES) {
       await go(page, r);
+      // Screens load lazily: on a slow runner one can still be mounting 350 ms
+      // after the network goes quiet, so wait for it before calling it empty.
+      await page.waitForFunction(() => document.getElementById('root')?.children.length > 0, { timeout: 5000 })
+        .catch(() => { /* still empty: the check below reports it */ });
       const info = await page.evaluate(() => ({
         empty: document.getElementById('root').children.length === 0,
         denied: /cannot open this page/i.test(document.body.innerText),

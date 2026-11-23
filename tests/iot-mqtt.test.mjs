@@ -18,12 +18,16 @@
  *
  * Options (environment variables):
  *   MQTT_URL, MQTT_TOPIC_PREFIX   must match the server (defaults: as Server/mqtt.js)
- *   MQTT_DEVICE_USERNAME / _PASSWORD   the node's broker login (default: as the sketch)
+ *   MQTT_DEVICE_USERNAME / _PASSWORD   the node's broker login, as in the sketch's
+ *                                  secrets.h (a local broker without logins needs none)
+ *   IOT_DEVICE_KEY                 SN-001's key, as seeded (left blank, this test
+ *                                  gives SN-001 a key of its own)
  *   IOT_RESULTS=path.json          also write every check and the timings as JSON
  *   IOT_SCREENSHOT=path.png        also screenshot /staff/iot as the ranger
  *
  * Like the other suites it reseeds nothing, but it adds readings, alerts and
- * one inactive test device, and refuses a database that is not on this machine.
+ * one inactive test device (and, without IOT_DEVICE_KEY, sets SN-001's key),
+ * and refuses a database that is not on this machine.
  */
 
 import fs from 'node:fs';
@@ -41,10 +45,10 @@ if (fs.existsSync(envFile)) process.loadEnvFile(envFile);
 
 const MQTT_URL = process.env.MQTT_URL || 'mqtts://l11c8d1d.ala.asia-southeast1.emqxsl.com';
 const PREFIX = process.env.MQTT_TOPIC_PREFIX || 'florascan-swinburne-demo';
-const DEVICE_USER = process.env.MQTT_DEVICE_USERNAME || 'iot_service';
-const DEVICE_PASS = process.env.MQTT_DEVICE_PASSWORD || 'IotTesting1234';
+const DEVICE_USER = process.env.MQTT_DEVICE_USERNAME || undefined;
+const DEVICE_PASS = process.env.MQTT_DEVICE_PASSWORD || undefined;
 const DEVICE = 'SN-001';
-const KEY = 'demo-key-change-me';
+let KEY = process.env.IOT_DEVICE_KEY;
 const TOPIC = `${PREFIX}/${DEVICE}/readings`;
 
 /* ------------------------------------------------------------------ */
@@ -123,6 +127,12 @@ async function waitFor(fn, timeout = 15000, every = 100) {
 
 const bootId = () => randomBytes(8).toString('hex').toUpperCase();
 const [{ id: deviceId }] = await rows('SELECT id FROM sensor_devices WHERE device_code = ?', [DEVICE]);
+// Without IOT_DEVICE_KEY the seed gave SN-001 a random key that nobody knows,
+// so no real kit can be using it: give it a key for this run.
+if (!KEY) {
+  KEY = randomBytes(16).toString('hex');
+  await rows('UPDATE sensor_devices SET device_key_hash = SHA2(?, 256) WHERE id = ?', [KEY, deviceId]);
+}
 const readingsFor = (boot) => rows('SELECT * FROM sensor_readings WHERE device_id = ? AND boot_id = ? ORDER BY id', [deviceId, boot]);
 const deviceRows = async () => (await rows('SELECT COUNT(*) n FROM sensor_readings WHERE device_id = ?', [deviceId]))[0].n;
 
@@ -187,7 +197,11 @@ section('1. The node connects to the broker like the ESP32');
   });
   results.timings.connect_ms = Math.round(performance.now() - t0);
   check(`connects with the device login (${new URL(MQTT_URL).protocol.replace(':', '')}, ${results.timings.connect_ms} ms)`, ok);
-  if (!ok) { console.log('\nCannot reach the broker; stopping.'); await db.end(); process.exit(1); }
+  if (!ok) {
+    console.log('\nCannot reach the broker; stopping.' +
+      (DEVICE_USER ? '' : ' The team broker needs MQTT_DEVICE_USERNAME and MQTT_DEVICE_PASSWORD in .env.'));
+    await db.end(); process.exit(1);
+  }
   const bad = mqtt.connect(MQTT_URL, { username: DEVICE_USER, password: 'wrong-password', connectTimeout: 10000, reconnectPeriod: 0 });
   const refused = await new Promise((resolve) => {
     bad.once('connect', () => resolve(false));
