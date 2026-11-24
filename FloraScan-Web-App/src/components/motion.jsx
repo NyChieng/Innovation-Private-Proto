@@ -577,7 +577,11 @@ export function PhotoSlideshow({
       {layers.map((layer) => (
         <div
           key={layer.uid}
-          className={`slideshow-layer${layer.visible ? ' is-visible' : ''}`}
+          // Alternate the drift direction by the layer's own id, not by its
+          // position: a layer is the 2nd child while it fades in and the 1st
+          // once the old one is removed, and a position-based direction then
+          // flipped mid-animation and the photo jumped 6% in one frame.
+          className={`slideshow-layer${layer.uid % 2 ? '' : ' is-alt'}${layer.visible ? ' is-visible' : ''}`}
         >
           <img src={layer.url} alt="" decoding="async" />
         </div>

@@ -270,6 +270,7 @@ body { font-family: var(--font); }
 .home-lede { font-size: 1.2rem; color: var(--text-soft); margin: 0; }
 .home-actions { display: flex; flex-wrap: wrap; gap: 12px; }
 
+.home-photo-slot { min-width: 0; }
 .home-photo {
   position: relative; display: block; height: 440px; border-radius: 8px; overflow: hidden;
   color: var(--text); text-decoration: none; background: var(--surface-3);
