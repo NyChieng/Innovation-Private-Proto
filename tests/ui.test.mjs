@@ -419,8 +419,8 @@ section('6. Registration form - input validation');
   await page.type('input[placeholder*="Hoya"]', 'Testus uiensis (browser test)');
   await sleep(250);
   text = await bodyText(page);
-  check('an unidentified record is flagged as needing a reviewer',
-    /always goes to a reviewer|review queue/i.test(text), text.slice(0, 300));
+  check('an unidentified record is flagged as needing a senior botanist',
+    /always goes to a senior botanist|review queue/i.test(text), text.slice(0, 300));
 
   // Fill the location and submit.
   await page.type('#site', 'UI test plot, marker 9');
@@ -591,10 +591,22 @@ section('8. Review queue - approve and return');
 /* ------------------------------------------------------------------ */
 section('9. Plant record - tabs, QR tag and history');
 {
-  const token = await tokenFor(ACCOUNTS.botanist);
   const list = await (await fetch(BASE + '/api/public/plants')).json();
   // Same reason as section 2: pick a seeded record with photographs.
   const plant = list.results.find((x) => x.photo) || list.results[0];
+
+  // A botanist only registers plant records: a published one opens read-only.
+  {
+    const botPage = await newPage({ token: await tokenFor(ACCOUNTS.botanist) });
+    await go(botPage, '/staff/plants/' + plant.id);
+    const actions = await botPage.evaluate(() => [...document.querySelectorAll('button')].map((b) => b.textContent.trim()));
+    check('a botanist sees no Edit or Archive on a published record',
+      !actions.some((a) => /^(Edit|Archive)$/i.test(a)), actions.join(' | '));
+    await botPage.close();
+  }
+
+  // The senior botanist edits the register.
+  const token = await tokenFor(ACCOUNTS.reviewer);
 
   const page = await newPage({ token });
   await go(page, '/staff/plants/' + plant.id);
@@ -1614,7 +1626,7 @@ section('29. Tidying up after the run');
 {
   // The form tests register real plants. Archive them so the register is
   // demo-ready immediately after a test run, without restarting the server.
-  const token = await tokenFor(ACCOUNTS.botanist);
+  const token = await tokenFor(ACCOUNTS.reviewer);
   const headers = { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token };
 
   const all = await (await fetch(BASE + '/api/plants', { headers })).json();

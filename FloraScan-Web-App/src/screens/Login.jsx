@@ -149,7 +149,7 @@ export default function Login() {
             <ul className="signin-roles">
               <li><span>{t('Administrator')}</span>{t('Staff accounts and settings')}</li>
               <li><span>{t('Botanist')}</span>{t('Registers and identifies plants')}</li>
-              <li><span>{t('Reviewer')}</span>{t('Checks every record before it is published')}</li>
+              <li><span>{t('Senior Botanist')}</span>{t('Checks every record before it is published')}</li>
               <li><span>{t('Ranger')}</span>{t('Responds to sensor alerts in the field')}</li>
             </ul>
           </div>

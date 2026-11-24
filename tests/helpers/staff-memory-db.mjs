@@ -9,8 +9,10 @@ export const state = {};
 const grants = {
   1: ['user.view', 'user.manage', 'user.assign_role', 'system.audit', 'system.settings'],
   2: ['sensor.view', 'alert.resolve'],
-  3: ['plant.view_all', 'plant.create', 'plant.edit', 'plant.archive', 'plant.history', 'sensor.view'],
-  4: ['plant.view_all', 'plant.edit', 'plant.approve', 'plant.history'],
+  // 3 botanist: registers only (for plant records). 4 senior botanist: reviews,
+  // edits, approves and archives. Mirrors the grant() calls in Server/seed.js.
+  3: ['plant.create', 'qr.print', 'sensor.view'],
+  4: ['plant.view_all', 'plant.edit', 'plant.approve', 'plant.history', 'plant.archive'],
 };
 export const permissionsForRole = (id) => grants[id] || [];
 export const userCan = (user, code) => !!user && permissionsForRole(user.role_id).includes(code);

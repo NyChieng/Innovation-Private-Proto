@@ -98,7 +98,7 @@ export default function Welcome() {
             <I.Shield />
             <div>
               <strong>{t('Checked twice')}</strong>
-              <span>{t('Botanists record what they find; nothing is published until a reviewer has checked it.')}</span>
+              <span>{t('Botanists record what they find; nothing is published until a senior botanist has checked it.')}</span>
             </div>
           </li>
           <li>

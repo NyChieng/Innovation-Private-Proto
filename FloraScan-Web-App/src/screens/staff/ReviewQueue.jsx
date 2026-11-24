@@ -210,7 +210,7 @@ function SubmissionCard({ sub, onChanged }) {
         <Link className="btn btn-sm" to={'/staff/plants/' + p.id}><I.Eye /> {t('Open full record')}</Link>
         <span className="spacer" />
         {waiting && own && (
-          <span className="tiny mute">{t('You submitted this, so another reviewer must decide on it.')}</span>
+          <span className="tiny mute">{t('You submitted this, so another senior botanist must decide on it.')}</span>
         )}
         {waiting && !own && (
           <>
@@ -273,7 +273,7 @@ export default function ReviewQueue() {
       <div className="wrap" style={{ maxWidth: 1060 }}>
         <PageHead
           title={t('Review queue')}
-          sub={t('Every plant a botanist registers waits here until a reviewer checks it. Correct what is wrong, then approve it - which issues the QR tag - or return it with a note.')}
+          sub={t('Every plant a botanist registers waits here until a senior botanist checks it. Correct what is wrong, then approve it - which issues the QR tag - or return it with a note.')}
         />
 
         <div className="row row-wrap" style={{ gap: 12, marginBottom: 18 }}>

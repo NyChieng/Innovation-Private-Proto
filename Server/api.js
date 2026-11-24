@@ -1529,8 +1529,11 @@ export function createApi() {
 
     const where = ['p.deleted_at IS NULL'];
     const params = [];
-    // Someone who can register but not see everything sees only their own.
-    if (!req.can('plant.view_all') || mine === '1') {
+    // Someone who can register but not see everything sees only their own -
+    // except that whoever prints QR tags may list every published plant, since
+    // published records are public anyway (the tag sheet asks for these).
+    const tagPrinting = req.can('qr.print') && status === 'approved';
+    if ((!req.can('plant.view_all') && !tagPrinting) || mine === '1') {
       where.push('p.registered_by = ?');
       params.push(req.user.id);
     }
@@ -1692,9 +1695,17 @@ export function createApi() {
     res.status(201).json({ plant: await shapeOne(joined, { full: true, viewer: req.user }) });
   }));
 
-  api.patch('/plants/:id', need('plant.edit'), route(async (req, res) => {
+  api.patch('/plants/:id', route(async (req, res) => {
+    if (!req.user) return res.status(401).json({ error: 'Sign in required' });
+    const denied = () => res.status(403).json({ error: 'Your role does not have permission: plant.edit' });
+    if (!req.can('plant.edit') && !req.can('plant.create')) return denied();
     const before = await byId('plants', req.params.id);
     if (!before || before.deleted_at) return res.status(404).json({ error: 'Not found' });
+    // A botanist registers plants but does not edit the register. The one
+    // exception is their own record after a senior botanist returned it:
+    // correcting it is exactly what "returned with a note" asks them to do.
+    const ownReturned = before.registered_by === req.user.id && before.status === 'rejected';
+    if (!req.can('plant.edit') && !ownReturned) return denied();
     const allowed = ['species_id', 'proposed_species_name', 'site_name', 'location_notes',
       'latitude', 'longitude', 'altitude_m', 'height_m', 'trunk_diameter_cm',
       'health_status', 'life_stage', 'morphology_notes', 'notes'];
@@ -1786,7 +1797,7 @@ export function createApi() {
       return null;
     }
     if (sub.submitted_by === req.user.id || plant.registered_by === req.user.id) {
-      res.status(403).json({ error: 'You cannot review a record you submitted yourself. Another reviewer must check it.' });
+      res.status(403).json({ error: 'You cannot review a record you submitted yourself. Another senior botanist must check it.' });
       return null;
     }
     return { before: plant, sub };
@@ -2024,7 +2035,8 @@ export function createApi() {
     const plant = rows[0];
     if (!plant) return res.status(404).json({ error: 'Not found' });
     const own = plant.registered_by === req.user.id;
-    if (!req.can('plant.view_all') && !(req.can('plant.create') && own)) {
+    const tagPrinting = req.can('qr.print') && plant.status === 'approved';
+    if (!req.can('plant.view_all') && !(req.can('plant.create') && own) && !tagPrinting) {
       return res.status(403).json({ error: 'Not permitted' });
     }
     const qr = await one(

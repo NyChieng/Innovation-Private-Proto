@@ -363,7 +363,7 @@ export default function Users() {
 
         <div style={{ marginTop: 18 }}>
           <Notice kind="plain" title={t('Roles are permission sets, not hard-coded names')}>
-            {t('The API checks permission codes such as {code}, never the role name. That is how the Reviewer role was added: one more set of permissions, with no new tables and no change to the API.', { code: <span className="mono">plant.approve</span> })}
+            {t('The API checks permission codes such as {code}, never the role name. That is how the Senior Botanist role was added: one more set of permissions, with no new tables and no change to the API.', { code: <span className="mono">plant.approve</span> })}
           </Notice>
         </div>
       </div>

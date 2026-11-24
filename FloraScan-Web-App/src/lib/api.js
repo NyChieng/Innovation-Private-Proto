@@ -20,7 +20,7 @@ import { msg, t } from './i18n.js';
   msg('A location or site name is required.'),
   msg('Choose a species, or type a name under "species not listed".'),
   msg('This record has no confirmed species. Set the species first, then approve it.'),
-  msg('You cannot review a record you submitted yourself. Another reviewer must check it.'),
+  msg('You cannot review a record you submitted yourself. Another senior botanist must check it.'),
   msg('A note is required when returning a record, so the botanist knows what to change.'),
   msg('Only the person who registered this record can resubmit it.'),
   msg('Only an archived record can be restored.'),

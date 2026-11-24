@@ -222,9 +222,13 @@ section('4. Access control - a botanist registers but cannot publish, or do an a
   const me = (await get('/auth/me', botT)).body.user;
   check('a botanist holds plant.create', me.permissions.includes('plant.create'));
   check('...but not plant.approve, so nothing they register publishes itself', !me.permissions.includes('plant.approve'));
-  const pending = (await get('/plants?status=pending', botT)).body.results[0];
+  check('...and for plant records only registers: no view-all, edit, archive or history',
+    ['plant.view_all', 'plant.edit', 'plant.archive', 'plant.history'].every((c) => !me.permissions.includes(c)));
+  const pending = (await get('/plants?status=pending', revT)).body.results[0];
   eq('a botanist cannot approve a record', (await post(`/plants/${pending.id}/approve`, {}, botT)).status, 403);
   eq('...or return one', (await post(`/plants/${pending.id}/reject`, { note: 'n' }, botT)).status, 403);
+  eq('...or edit one waiting for review', (await patch(`/plants/${pending.id}`, { notes: 'not allowed' }, botT)).status, 403);
+  eq('...or archive one', (await post(`/plants/${pending.id}/archive`, { reason: 'not allowed' }, botT)).status, 403);
 
   const cases = [
     ['GET', '/users'], ['GET', '/activity'], ['GET', '/audit'], ['GET', '/settings'],
@@ -255,13 +259,15 @@ section('5. Access control - admin may not do botanical work');
 }
 
 /* ------------------------------------------------------------------ */
-section('5b. Access control - the reviewer checks records, and nothing else (#8)');
+section('5b. Access control - the senior botanist reviews records, and nothing else (#8)');
 {
   const me = (await get('/auth/me', revT)).body.user;
-  eq('the reviewer role exists', me.role, 'reviewer');
-  check('a reviewer holds plant.approve', me.permissions.includes('plant.approve'));
+  eq('the senior botanist role exists (it replaced the reviewer)', me.role, 'senior_botanist');
+  eq('...labelled Senior Botanist', me.role_label, 'Senior Botanist');
+  check('a senior botanist holds plant.approve', me.permissions.includes('plant.approve'));
+  check('...and plant.archive', me.permissions.includes('plant.archive'));
   check('...but cannot register a plant', !me.permissions.includes('plant.create'));
-  eq('a reviewer POST /plants is refused',
+  eq('a senior botanist POST /plants is refused',
     (await post('/plants', { site_name: 'x', proposed_species_name: 'y' }, revT)).status, 403);
   for (const [m, p, b] of [
     ['POST', '/species', { scientific_name: 'Testus reviewerus' }],
@@ -283,10 +289,10 @@ section('6. Data scoping');
   const revList = (await get('/plants', revT)).body.results;
   const botList = (await get('/plants', botT)).body.results;
   const mine = (await get('/plants?mine=1', botT)).body.results;
-  check('a botanist sees the whole register', botList.length > mine.length && mine.length > 0,
-    `all ${botList.length} vs own ${mine.length}`);
-  check('...and mine=1 narrows it to their own', mine.every((p) => p.registered_by_name === 'Dr Grace Lim'));
-  eq('a reviewer sees the same register', revList.length, botList.length);
+  check('a botanist sees only their own records', botList.length > 0 && botList.length === mine.length
+    && botList.every((p) => p.registered_by_name === 'Dr Grace Lim'), `${botList.length} listed, ${mine.length} own`);
+  check('a senior botanist sees the whole register', revList.length > botList.length,
+    `senior ${revList.length} vs botanist ${botList.length}`);
 }
 
 /* ------------------------------------------------------------------ */
@@ -297,7 +303,7 @@ section('7. Publication control - nothing unapproved is public');
   check('every public record has a confirmed species', pub.results.every((p) => p.species_id));
   check('no public record is still awaiting identification', pub.results.every((p) => !p.species_not_listed));
 
-  const all = (await get('/plants', botT)).body.results;
+  const all = (await get('/plants', revT)).body.results;
   for (const status of ['pending', 'rejected', 'archived']) {
     const row = all.find((p) => p.status === status);
     if (!row) continue;
@@ -485,21 +491,25 @@ section('11. The verification workflow end to end');
   check('the botanist was told it was published',
     botNotes.some((n) => n.type === 'submission.approved' && (n.body || '').includes('approved')));
 
+  // A botanist cannot change a published record; the senior botanist can.
+  eq('the botanist cannot edit it once published',
+    (await patch(`/plants/${id}`, { site_name: 'Workflow test, botanist edit' }, botT)).status, 403);
   // Editing must not invalidate a printed tag.
-  await patch(`/plants/${id}`, { site_name: 'Workflow test, marker 2 (moved)' }, botT);
+  await patch(`/plants/${id}`, { site_name: 'Workflow test, marker 2 (moved)' }, revT);
   const afterEdit = await get('/public/plants/token/' + token);
   eq('the tag still works after an edit', afterEdit.status, 200);
   eq('...and shows the edited value', afterEdit.body.plant.site_name, 'Workflow test, marker 2 (moved)');
 
   // Archive withdraws it; restore brings the same token back.
-  await post(`/plants/${id}/archive`, { reason: 'test' }, botT);
+  await post(`/plants/${id}/archive`, { reason: 'test' }, revT);
   const reApprove = await post(`/plants/${id}/approve`, {}, revT);
   eq('approving an archived record does not republish it', reApprove.status, 409);
   const archivedScan = await get('/public/plants/token/' + token);
   eq('an archived record is withdrawn from the public site', archivedScan.status, 404);
   eq('...with the archived reason', archivedScan.body.reason, 'archived');
 
-  await post(`/plants/${id}/restore`, {}, botT);
+  eq('the botanist cannot restore it', (await post(`/plants/${id}/restore`, {}, botT)).status, 403);
+  await post(`/plants/${id}/restore`, {}, revT);
   const restored = await get('/public/plants/token/' + token);
   eq('restoring makes the same printed tag valid again', restored.status, 200);
 }
@@ -631,16 +641,17 @@ section('16. Audit completeness');
   const created = await post('/plants', { species_id: species.id, site_name: 'Audit test plot' }, botT);
   const id = created.body.plant.id;
 
-  await patch(`/plants/${id}`, { site_name: 'Audit test plot (renamed)', height_m: 12.5 }, botT);
+  // The senior botanist corrects it during review.
+  await patch(`/plants/${id}`, { site_name: 'Audit test plot (renamed)', height_m: 12.5 }, revT);
 
   const hist = await get(`/plants/${id}/history`, botT);
-  eq('the history is readable', hist.status, 200);
+  eq('the botanist can read the history of their own record', hist.status, 200);
 
   const rev = hist.body.revisions.find((r) => r.field_name === 'site_name');
   check('the field change was recorded', !!rev);
   eq('...with the old value', rev?.old_value, 'Audit test plot');
   eq('...with the new value', rev?.new_value, 'Audit test plot (renamed)');
-  check('...with the actor', rev?.changed_by_name === 'Dr Grace Lim');
+  check('...with the actor', rev?.changed_by_name === 'Dr Aisyah Rahman', rev?.changed_by_name);
   check('...with a timestamp', !!rev?.created_at);
 
   const audits = await get('/audit', adminT);
@@ -983,6 +994,18 @@ section('18. QR codes');
 
   const again = await get(`/qr/${plant.id}`, botT);
   eq('the token is stable across requests', again.body.qr_token, qr.body.qr_token);
+
+  // A botanist only registers plant records, but still prints tags: the tag
+  // sheet lists every published plant, and nothing unpublished of others.
+  const sheetBot = (await get('/plants?status=approved', botT)).body.results;
+  const sheetAll = (await get('/plants?status=approved', revT)).body.results;
+  eq('the tag sheet lists every published plant for a botanist', sheetBot.length, sheetAll.length);
+  const othersPending = (await get('/plants?status=pending', revT)).body.results
+    .find((p) => p.registered_by_name !== 'Dr Grace Lim');
+  if (othersPending) {
+    eq("...but a botanist cannot fetch the tag of someone else's unpublished record",
+      (await get(`/qr/${othersPending.id}`, botT)).status, 403);
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -1451,8 +1474,9 @@ section('31. Archiving a record that was still awaiting review');
   const queued = await get('/submissions?status=pending', revT);
   check('it shows in the review queue', queued.body.results.some((s) => s.plant.id === id));
 
-  const arch = await post(`/plants/${id}/archive`, { reason: 'Withdrawn, wrong tree' }, botT);
-  eq('a botanist archives it before reviewing', arch.status, 200);
+  eq('the botanist cannot archive it', (await post(`/plants/${id}/archive`, { reason: 'Withdrawn, wrong tree' }, botT)).status, 403);
+  const arch = await post(`/plants/${id}/archive`, { reason: 'Withdrawn, wrong tree' }, revT);
+  eq('the senior botanist archives it before reviewing', arch.status, 200);
 
   const after = await get('/submissions?status=pending', revT);
   check('it no longer sits in the queue', !after.body.results.some((s) => s.plant.id === id),
@@ -1606,9 +1630,9 @@ section('34. Tidying up after the run');
 {
   // These suites create records to exercise the workflow. Left behind, they
   // sit at the top of the public register and make a demo look broken, so
-  // archive them: the same soft-delete a botanist would use, which keeps the
+  // archive them: the same soft-delete a senior botanist would use, which keeps the
   // audit trail intact rather than pretending they never happened.
-  const all = (await get('/plants', botT)).body.results;
+  const all = (await get('/plants', revT)).body.results;
   // Section 10's awkward payload hides its markers in the species name and the
   // notes rather than the site, so match across every field a suite writes to -
   // otherwise that record sits in the review queue for the next demo.
@@ -1619,7 +1643,7 @@ section('34. Tidying up after the run');
 
   let archived = 0;
   for (const p of litter) {
-    const r = await post(`/plants/${p.id}/archive`, { reason: 'Created by the automated test suite' }, botT);
+    const r = await post(`/plants/${p.id}/archive`, { reason: 'Created by the automated test suite' }, revT);
     if (r.status === 200) archived++;
   }
   check(`archived ${archived} of ${litter.length} test records`, archived === litter.length,

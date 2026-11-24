@@ -1,7 +1,7 @@
 # FloraScan
 
 FloraScan is a biodiversity registry prototype for Niah National Park
-(COS30049). Botanists register plants, reviewers verify the records, and
+(COS30049). Botanists register plants, senior botanists verify the records, and
 visitors scan QR tags to see published specimens. Rangers monitor sensor and
 camera alerts. The web app supports English, Bahasa Melayu and Chinese.
 
@@ -52,7 +52,7 @@ database. Keep `.env` and certificate keys out of Git.
 
 ```mermaid
 flowchart LR
-    Draft["Botanist registers plant"] --> Review["Reviewer checks record"]
+    Draft["Botanist registers plant"] --> Review["Senior botanist checks record"]
     Review -->|Return with note| Correct["Botanist corrects and resubmits"]
     Correct --> Review
     Review -->|Approve| Publish["Publish record and issue QR tag"]
@@ -65,8 +65,8 @@ is the part of the email before `@`, followed by `123`.
 
 | Role | Demo email | Try this |
 | --- | --- | --- |
-| Botanist | `grace.lim@florascan.test` | Register plants and print QR tags |
-| Reviewer | `aisyah.rahman@florascan.test` | Approve or return records |
+| Botanist | `grace.lim@florascan.test` | Register plants (and correct returned ones), print QR tags |
+| Senior Botanist | `aisyah.rahman@florascan.test` | Review, correct, approve or return records; archive |
 | Ranger | `ahmad.rosli@florascan.test` | View and resolve alerts |
 | Administrator | `farah.hamid@florascan.test` | Manage staff and audit logs |
 
