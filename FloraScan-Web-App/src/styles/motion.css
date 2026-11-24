@@ -280,7 +280,10 @@
   animation: slideshowDrift 30s ease-in-out infinite alternate;
   will-change: transform;
 }
-.slideshow-layer:nth-child(even) img {
+/* Set per layer (PhotoSlideshow), never by :nth-child: the layer's position
+   changes when the layer below it is removed, which flipped the direction
+   mid-animation and made the photo jump in size. */
+.slideshow-layer.is-alt img {
   animation-direction: alternate-reverse;
 }
 @keyframes slideshowDrift {

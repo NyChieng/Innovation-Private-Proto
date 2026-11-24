@@ -17,7 +17,8 @@ export default function Home() {
   const navigate = useNavigate();
   const [code, setCode] = useState('');
   const [stats, setStats] = useState(null);
-  const [featured, setFeatured] = useState(null);
+  // undefined while loading (the photo's place is held), null when there is none.
+  const [featured, setFeatured] = useState(undefined);
   const [tiles, setTiles] = useState([]);
 
   useEffect(() => {
@@ -28,7 +29,7 @@ export default function Home() {
         setFeatured(withPhoto[0] || null);
         setTiles(withPhoto.slice(1, 3).map(plantPhoto));
       })
-      .catch(() => {});
+      .catch(() => setFeatured(null));
   }, []);
 
   const open = (e) => {
@@ -63,23 +64,34 @@ export default function Home() {
           </div>
         </div>
 
-        {featured && (
-          <Link to={'/plant/' + featured.id} className="home-photo rise rise-2">
-            <SmartImage
-              src={plantPhoto(featured)}
-              fallback={realPhoto(featured.photo) ? realPhoto(featured.photo_remote) : undefined}
-              tint={featured.photo_tint}
-              alt={featuredName || ''}
-              eager
-            />
-            <span className="home-photo-tag">
-              <MarkerDot site={featured.site_name} />
-              <span className="col" style={{ gap: 0 }}>
-                <strong>{featuredName}</strong>
-                <span className="small mute">{featured.site_name}</span>
-              </span>
-            </span>
-          </Link>
+        {/* The photo's column is there from the first paint. Rendering it only
+            once the plants arrived made the hero start as one column and then
+            split: the text jumped and the photo popped in on the right. The
+            entrance animation sits on the slot, so it plays once, not again
+            when the placeholder is swapped for the photo. */}
+        {featured !== null && (
+          <div className="home-photo-slot rise rise-2">
+            {featured ? (
+              <Link to={'/plant/' + featured.id} className="home-photo">
+                <SmartImage
+                  src={plantPhoto(featured)}
+                  fallback={realPhoto(featured.photo) ? realPhoto(featured.photo_remote) : undefined}
+                  tint={featured.photo_tint}
+                  alt={featuredName || ''}
+                  eager
+                />
+                <span className="home-photo-tag">
+                  <MarkerDot site={featured.site_name} />
+                  <span className="col" style={{ gap: 0 }}>
+                    <strong>{featuredName}</strong>
+                    <span className="small mute">{featured.site_name}</span>
+                  </span>
+                </span>
+              </Link>
+            ) : (
+              <div className="home-photo" aria-hidden="true"><span className="smart-img" /></div>
+            )}
+          </div>
         )}
       </section>
 
