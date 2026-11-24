@@ -1270,6 +1270,13 @@ export function createApi() {
   };
   const PASSKEY_NO_ADDRESS = 'Face ID and fingerprint sign-in need the named address, not a number.';
   const PASSKEY_FAILED = 'Face ID or fingerprint sign-in could not be confirmed. Try again, or use your password.';
+  const PASSKEY_EXPIRED = 'That took too long. Tap again to use Face ID or your fingerprint.';
+  const PASSKEY_EXTERNAL = "Use this device's own Face ID or fingerprint. Another phone, a QR code or a security key is not accepted.";
+  // A code the page acts on: only PASSKEY_UNKNOWN means "forget this device".
+  const passkeyFailure = (err) => (
+    err instanceof passkeys.ChallengeExpiredError ? { error: PASSKEY_EXPIRED, code: 'PASSKEY_EXPIRED' }
+      : err instanceof passkeys.ExternalAuthenticatorError ? { error: PASSKEY_EXTERNAL, code: 'PASSKEY_EXTERNAL' }
+        : { error: PASSKEY_FAILED, code: 'PASSKEY_FAILED' });
 
   api.get('/auth/passkeys', route(async (req, res) => {
     if (!req.user) return res.status(401).json({ error: 'Sign in required' });
@@ -1294,8 +1301,8 @@ export function createApi() {
     let row;
     try {
       row = await passkeys.verifyRegistration(req.user, req.body?.response);
-    } catch {
-      return res.status(400).json({ error: PASSKEY_FAILED });
+    } catch (err) {
+      return res.status(400).json(passkeyFailure(err));
     }
     const label = passkeys.deviceLabel(req.get('user-agent'), row.transports);
     const saved = await insert('passkeys', { ...row, user_id: req.user.id, device_label: label, created_at: nowIso() });
@@ -1318,7 +1325,14 @@ export function createApi() {
   api.post('/auth/passkeys/login/options', route(async (req, res) => {
     const rp = passkeys.relyingParty(req);
     if (!rp) return res.status(400).json({ error: PASSKEY_NO_ADDRESS, named_url: passkeyHome(req) });
-    res.json(await passkeys.authenticationOptions(rp));
+    const email = String(req.body?.email || '').toLowerCase().trim();
+    if (!EMAIL_RE.test(email)) return res.status(400).json({ error: 'Enter your email address first.', code: 'EMAIL_REQUIRED' });
+    // A closed account is treated like no account: same answer, nothing to unlock.
+    const owner = await one('SELECT id FROM users WHERE LOWER(email) = ? AND is_active = 1 AND deleted_at IS NULL LIMIT 1', [email]);
+    const rows = owner
+      ? await q('SELECT credential_id, transports FROM passkeys WHERE user_id = ? AND rp_id = ?', [owner.id, rp.rpID])
+      : [];
+    res.json(await passkeys.authenticationOptions(rp, { email, owner: owner?.id ?? null, rows }));
   }));
 
   api.post('/auth/passkeys/login/verify', route(async (req, res) => {
@@ -1328,7 +1342,10 @@ export function createApi() {
       : null;
     if (!row) {
       activity({ user_id: null, action: 'login_failed', detail: 'Unknown passkey' });
-      return res.status(400).json({ error: 'This device has no FloraScan passkey any more. Sign in with your password.' });
+      return res.status(400).json({
+        error: 'Face ID / fingerprint sign-in is no longer set up for this device. Sign in with your password.',
+        code: 'PASSKEY_UNKNOWN',
+      });
     }
     const user = await byId('users', row.user_id);
     if (!user || !user.is_active || user.deleted_at) {
@@ -1341,9 +1358,12 @@ export function createApi() {
     let counter;
     try {
       counter = await passkeys.verifyAuthentication(flow, response, row);
-    } catch {
-      activity({ user_id: user.id, action: 'login_failed', detail: 'Passkey not confirmed' });
-      return res.status(400).json({ error: PASSKEY_FAILED });
+    } catch (err) {
+      const failure = passkeyFailure(err);
+      if (failure.code !== 'PASSKEY_EXPIRED') {
+        activity({ user_id: user.id, action: 'login_failed', detail: `Passkey not confirmed (${failure.code})` });
+      }
+      return res.status(400).json(failure);
     }
     await q('UPDATE passkeys SET counter = ?, last_used_at = ? WHERE id = ?', [counter, nowIso(), row.id]);
     const after = await update('users', user.id, { last_login_at: nowIso(), failed_login_count: 0, locked_until: null });

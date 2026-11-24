@@ -47,7 +47,6 @@ import { msg, t } from './i18n.js';
   msg('Too many wrong codes, so the request has been refused. They can ask again.'),
   msg('Face ID and fingerprint sign-in need the named address, not a number.'),
   msg('Face ID or fingerprint sign-in could not be confirmed. Try again, or use your password.'),
-  msg('This device has no FloraScan passkey any more. Sign in with your password.'),
   msg('Too many failed sign-ins from this network. Try again later, or ask an administrator.'),
   msg('Too many failed sign-ins from this device. Try again later, or ask an administrator.'),
   msg('Enter a whole number from 3 to 20.'),
@@ -64,6 +63,10 @@ import { msg, t } from './i18n.js';
   msg('Security events - passwords, two-step verification, Face ID / fingerprint, locks - cannot be restored.'),
   msg('This kind of entry cannot be restored.'),
   msg('This entry has no earlier values to put back.'),
+  msg('Face ID / fingerprint sign-in is no longer set up for this device. Sign in with your password.'),
+  msg('That took too long. Tap again to use Face ID or your fingerprint.'),
+  msg('Enter your email address first.'),
+  msg("Use this device's own Face ID or fingerprint. Another phone, a QR code or a security key is not accepted."),
 ];
 
 const TOKEN_KEY = 'florascan.token';
@@ -181,7 +184,7 @@ export const api = {
   passkeyRegisterOptions: () => request('POST', '/auth/passkeys/register/options', {}),
   passkeyRegister: (response) => request('POST', '/auth/passkeys/register/verify', { response }),
   passkeyRemove: (id) => request('DELETE', '/auth/passkeys/' + id),
-  passkeyLoginOptions: () => request('POST', '/auth/passkeys/login/options', {}),
+  passkeyLoginOptions: (email) => request('POST', '/auth/passkeys/login/options', { email }),
   passkeyLogin: (flow, response) => request('POST', '/auth/passkeys/login/verify', { flow, response }),
 
   publicPlants: (params) => request('GET', '/public/plants' + qs(params)),

@@ -61,6 +61,14 @@ console.log('\x1b[1mServer refuses what it should\x1b[0m');
 check('signed-out users cannot add a passkey', (await api('POST', '/auth/passkeys/register/options')).status === 401);
 check('a made-up passkey cannot sign in', (await api('POST', '/auth/passkeys/login/verify', { flow: 'x', response: { id: 'nope' } })).status === 400);
 
+// Email first: Face ID / fingerprint is asked only for that account's passkey.
+const otherEmail = 'farah.hamid@florascan.test';
+check('sign-in options need an email', (await api('POST', '/auth/passkeys/login/options', {})).status === 400);
+const shape = (r) => JSON.stringify({ s: r.status, keys: Object.keys(r.body || {}).sort(), n: r.body?.options?.allowCredentials?.length });
+const known = await api('POST', '/auth/passkeys/login/options', { email: otherEmail });
+const unknown = await api('POST', '/auth/passkeys/login/options', { email: `nobody.${Date.now()}@example.com` });
+check('an unknown email gets the same answer as a real one', shape(known) === shape(unknown), `${shape(known)} vs ${shape(unknown)}`);
+
 const browser = await puppeteer.launch({
   executablePath: CHROME,
   headless: 'new',
@@ -104,30 +112,34 @@ try {
   check('...and the device holds the private key', credentials.length === 1 && credentials[0].isResidentCredential);
 
   /*
-   * Opens the sign-in page signed out and signs in with the passkey. The
-   * virtual authenticator approves at once, so the email box's autofill often
-   * completes before the button can be pressed - in a real browser it waits
-   * for the person to pick the suggestion. Either is a real way in.
+   * Email first: opens the sign-in page signed out, types the email, then
+   * taps Face ID / fingerprint. Returns 'button' when signed in, 'error' when
+   * refused, 'disabled' when the button never became usable.
    */
-  async function passkeyFromLoginPage() {
+  const faceButton = () => [...document.querySelectorAll('button')].find((x) => /Sign in with Face ID or fingerprint/.test(x.textContent));
+  async function passkeyFromLoginPage(asEmail) {
     await page.evaluate(() => localStorage.removeItem('florascan.token'));
-    await page.goto(BASE + '/login', { waitUntil: 'domcontentloaded' });
-    const first = await page.waitForFunction(() => {
-      if (location.pathname.startsWith('/staff')) return 'autofill';
-      if (document.querySelector('.signin-error')) return 'error';
-      const b = [...document.querySelectorAll('button')].find((x) => /Sign in with Face ID or fingerprint/.test(x.textContent));
-      return b && !b.disabled ? 'button' : false;
-    }, { timeout: 10000 }).then((h) => h.jsonValue()).catch(() => null);
-    if (first !== 'button') return first;
-    await page.evaluate(() => [...document.querySelectorAll('button')]
-      .find((x) => /Sign in with Face ID or fingerprint/.test(x.textContent)).click());
+    await page.goto(BASE + '/login', { waitUntil: 'networkidle0' });
+    if (asEmail) await page.type('input[type=email]', asEmail);
+    const usable = await page.waitForFunction(
+      new Function('const b = (' + faceButton + ')(); return !!b && !b.disabled;'),
+      { timeout: 5000 },
+    ).then(() => true).catch(() => false);
+    if (!usable) return 'disabled';
+    await page.evaluate(new Function('(' + faceButton + ')().click();'));
     await page.waitForFunction(() => location.pathname.startsWith('/staff') || document.querySelector('.signin-error'), { timeout: 10000 }).catch(() => null);
     return (await page.evaluate(() => location.pathname)).startsWith('/staff') ? 'button' : 'error';
   }
 
-  console.log('\n\x1b[1mSigning in with it\x1b[0m');
-  const how = await passkeyFromLoginPage();
-  check('signed in from the sign-in page without typing anything', how === 'autofill' || how === 'button', 'got ' + how);
+  console.log('\n\x1b[1mSigning in with it - email first\x1b[0m');
+  check('the email box no longer offers a list of saved passkeys',
+    !(await page.evaluate(() => localStorage.removeItem('florascan.token')), await page.goto(BASE + '/login', { waitUntil: 'networkidle0' }),
+      await page.$eval('input[type=email]', (el) => el.autocomplete)).includes('webauthn'));
+  check('Face ID / fingerprint cannot be used before an email is typed', (await passkeyFromLoginPage(null)) === 'disabled');
+  check("someone else's email does not get in with this fingerprint", (await passkeyFromLoginPage(otherEmail)) === 'error'
+    && !(await page.evaluate(() => localStorage.getItem('florascan.token'))));
+  const how = await passkeyFromLoginPage(email);
+  check('the email, then Face ID / fingerprint, signs in', how === 'button', 'got ' + how);
 
   const newToken = await page.evaluate(() => localStorage.getItem('florascan.token'));
   check('Face ID / fingerprint signs the user in', !!newToken);
@@ -143,7 +155,7 @@ try {
   check('the owner can', (await api('DELETE', `/auth/passkeys/${id}`, null, newToken)).status === 200);
 
   // The device still holds the key; only the server has forgotten it.
-  const afterRemoval = await passkeyFromLoginPage();
+  const afterRemoval = await passkeyFromLoginPage(email);
   check('a removed passkey no longer signs in', afterRemoval === 'error'
     && !(await page.evaluate(() => localStorage.getItem('florascan.token'))), 'got ' + afterRemoval);
 

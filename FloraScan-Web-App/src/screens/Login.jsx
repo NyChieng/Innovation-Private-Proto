@@ -212,8 +212,9 @@ export default function Login() {
                     <span className="signin-control">
                       <I.Mail />
                       <input
-                        // "webauthn" lets the browser offer a saved fingerprint / face sign-in here.
-                        ref={emailRef} type="email" inputMode="email" autoComplete="username webauthn"
+                        // No "webauthn" token: Face ID / fingerprint follows the email typed
+                        // here, rather than the browser offering a list of saved passkeys.
+                        ref={emailRef} type="email" inputMode="email" autoComplete="username"
                         value={email} onChange={(e) => setEmail(e.target.value)}
                         placeholder="name@florascan.test" required aria-invalid={!!error}
                       />
@@ -251,6 +252,7 @@ export default function Login() {
               </form>
 
               <PasskeySignIn
+                email={email}
                 onError={setError}
                 onSignedIn={(u) => { toast(t('Signed in as {name}', { name: u.full_name })); land(u); }}
               />
