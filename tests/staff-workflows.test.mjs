@@ -25,7 +25,7 @@ async function call(path, { role = 3, method = 'POST', body = {} } = {}) {
 }
 
 test('restore rejects records that are not archived without changing publication', async () => {
-  const result = await call('/plants/10/restore');
+  const result = await call('/plants/10/restore', { role: 4 });
   assert.equal(result.status, 409);
   assert.equal(state.plants[0].status, 'pending');
   assert.equal(state.qr_codes.length, 0);
@@ -33,7 +33,7 @@ test('restore rejects records that are not archived without changing publication
 test('restoring an unverified archive returns it to private corrections', async () => {
   reset({ status: 'archived' });
   state.plant_submissions[0].status = 'rejected';
-  const result = await call('/plants/10/restore');
+  const result = await call('/plants/10/restore', { role: 4 });
   assert.equal(result.status, 200);
   assert.equal(result.body.plant.status, 'rejected');
   assert.equal(state.qr_codes.length, 0);
@@ -41,7 +41,7 @@ test('restoring an unverified archive returns it to private corrections', async 
 test('restoring a verified archive reuses its tag', async () => {
   reset({ status: 'archived', verified_at: '2026-11-01T00:00:00Z', verified_by: 4 });
   state.qr_codes.push({ id: 40, plant_id: 10, status: 'inactive', qr_token: 'printed-token' });
-  const result = await call('/plants/10/restore');
+  const result = await call('/plants/10/restore', { role: 4 });
   assert.equal(result.status, 200);
   assert.equal(result.body.plant.status, 'approved');
   assert.equal(state.qr_codes.length, 1);
@@ -52,37 +52,62 @@ test('restore keeps the plant archived if QR reactivation fails', async () => {
   reset({ status: 'archived', verified_at: '2026-11-01T00:00:00Z', verified_by: 4 });
   state.qr_codes.push({ id: 40, plant_id: 10, status: 'inactive', qr_token: 'printed-token' });
   state.failQrWrite = true;
-  const result = await call('/plants/10/restore');
+  const result = await call('/plants/10/restore', { role: 4 });
   assert.equal(result.status, 500);
   assert.equal(state.plants[0].status, 'archived');
   assert.equal(state.qr_codes[0].status, 'inactive');
 });
 test('editing requires a nonempty site', async () => {
-  const result = await call('/plants/10', { method: 'PATCH', body: { site_name: '  ' } });
+  const result = await call('/plants/10', { role: 4, method: 'PATCH', body: { site_name: '  ' } });
   assert.equal(result.status, 400);
   assert.equal(state.plants[0].site_name, 'Test trail');
 });
 test('editing requires a confirmed or proposed species', async () => {
-  const result = await call('/plants/10', { method: 'PATCH', body: { species_id: null, proposed_species_name: '' } });
+  const result = await call('/plants/10', { role: 4, method: 'PATCH', body: { species_id: null, proposed_species_name: '' } });
   assert.equal(result.status, 400);
   assert.equal(state.plants[0].species_id, 1);
 });
 test('editing a published record cannot remove its confirmed species', async () => {
   reset({ status: 'approved' });
-  const result = await call('/plants/10', { method: 'PATCH', body: { species_id: null, proposed_species_name: 'Unknown tree' } });
+  const result = await call('/plants/10', { role: 4, method: 'PATCH', body: { species_id: null, proposed_species_name: 'Unknown tree' } });
   assert.equal(result.status, 400);
   assert.equal(state.plants[0].species_id, 1);
 });
 test('a single coordinate correction validates the resulting coordinate pair', async () => {
-  const result = await call('/plants/10', { method: 'PATCH', body: { latitude: 5 } });
+  const result = await call('/plants/10', { role: 4, method: 'PATCH', body: { latitude: 5 } });
   assert.equal(result.status, 200);
   assert.equal(result.body.plant.latitude, 5);
   assert.equal(result.body.plant.longitude, 113);
 });
 test('one coordinate cannot be cleared while the other remains', async () => {
-  const result = await call('/plants/10', { method: 'PATCH', body: { latitude: null } });
+  const result = await call('/plants/10', { role: 4, method: 'PATCH', body: { latitude: null } });
   assert.equal(result.status, 400);
   assert.equal(state.plants[0].latitude, 4);
+});
+
+// For plant records a botanist only registers; a senior botanist does the rest.
+test('a botanist cannot edit a record waiting for review, even their own', async () => {
+  const result = await call('/plants/10', { method: 'PATCH', body: { site_name: 'Moved trail' } });
+  assert.equal(result.status, 403);
+  assert.equal(state.plants[0].site_name, 'Test trail');
+});
+test('a botanist corrects their own record once it is returned', async () => {
+  reset({ status: 'rejected' });
+  const result = await call('/plants/10', { method: 'PATCH', body: { site_name: 'Test trail, marker 3' } });
+  assert.equal(result.status, 200);
+  assert.equal(state.plants[0].site_name, 'Test trail, marker 3');
+});
+test("a botanist cannot correct someone else's returned record", async () => {
+  reset({ status: 'rejected', registered_by: 4 });
+  const result = await call('/plants/10', { method: 'PATCH', body: { site_name: 'Other trail' } });
+  assert.equal(result.status, 403);
+  assert.equal(state.plants[0].site_name, 'Test trail');
+});
+test('a botanist cannot archive or restore records', async () => {
+  assert.equal((await call('/plants/10/archive', { body: { reason: 'Gone' } })).status, 403);
+  reset({ status: 'archived' });
+  assert.equal((await call('/plants/10/restore')).status, 403);
+  assert.equal(state.plants[0].status, 'archived');
 });
 
 test('administrator role changes reject unknown roles', async () => {
@@ -112,7 +137,7 @@ test('normal botanist submission, return, correction, resubmission and approval 
   assert.equal(state.qr_codes.filter((r) => r.plant_id === id).length, 1);
   assert.deepEqual(state.plant_submissions.filter((r) => r.plant_id === id).map((r) => r.status), ['rejected', 'approved']);
 });
-test('a reviewer cannot decide their own submission', async () => {
+test('a senior botanist cannot decide their own submission', async () => {
   reset({ registered_by: 4 });
   state.plant_submissions[0].submitted_by = 4;
   for (const action of ['approve', 'reject']) {

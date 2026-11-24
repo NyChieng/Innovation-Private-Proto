@@ -63,7 +63,7 @@ function SpeciesPicker({ value, proposed, onPick, onPropose }) {
             placeholder={t('e.g. Hoya sp. (waxy leaves, pale globe flowers)')}
           />
           <div className="hint">
-            {t('Describe what you saw as precisely as you can. A reviewer will confirm the name before it is published.')}
+            {t('Describe what you saw as precisely as you can. A senior botanist will confirm the name before it is published.')}
           </div>
           <button
             type="button" className="btn btn-ghost btn-sm" style={{ alignSelf: 'flex-start', marginLeft: -10 }}
@@ -361,8 +361,8 @@ export default function RegisterPlant() {
           <Notice kind={willPublish ? 'ok' : 'info'} title={willPublish ? t('This will publish immediately') : t('This will go to the review queue')}>
             {publishesImmediately && t('You hold {permission}, so your own entries are published as soon as they are saved.', { permission: <span className="mono">plant.approve</span> })}
             {!publishesImmediately && willPublish && t('The {setting} setting is off, so new entries publish straight away.', { setting: <span className="mono">require_approval</span> })}
-            {!willPublish && !form.species_id && form.proposed_species_name && t('A record with no confirmed species always goes to a reviewer, whatever the approval setting.')}
-            {!willPublish && (form.species_id || !form.proposed_species_name) && t('A reviewer will check it and either publish it or return it with a note.')}
+            {!willPublish && !form.species_id && form.proposed_species_name && t('A record with no confirmed species always goes to a senior botanist, whatever the approval setting.')}
+            {!willPublish && (form.species_id || !form.proposed_species_name) && t('A senior botanist will check it and either publish it or return it with a note.')}
           </Notice>
         </div>
 
@@ -486,7 +486,7 @@ export default function RegisterPlant() {
                 <textarea
                   id="notes" className="textarea" style={{ minHeight: 60 }}
                   value={form.notes} onChange={(e) => up({ notes: e.target.value })}
-                  placeholder={t('Anything the reviewer should know. Never shown to visitors.')}
+                  placeholder={t('Anything the senior botanist should know. Never shown to visitors.')}
                 />
               </div>
             </div>

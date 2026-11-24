@@ -142,33 +142,35 @@ CREATE TABLE IF NOT EXISTS plant_photo_data (
 --   ranger    sets up the IoT sensors and is in charge when one raises an
 --             alert. No longer registers, edits or tags plants. Sensor setup
 --             has no screen yet, so for now it is done in the database.
---   botanist  owns the ground-truthing: registers, edits and archives plant
---             and species records and prints tags. No longer approves, so a
---             botanist cannot publish their own record.
---   reviewer  new. Double-checks every record a botanist submits, can correct
---             it during review, and approves it or returns it with a note.
+--   botanist  for plant records, only registers: sees their own records and
+--             corrects one that was returned to them. Still looks after the
+--             species list, QR tags and visitor reports. Cannot publish.
+--   senior_botanist  (was "reviewer") reviews every record a botanist
+--             submits, can correct it during review, approves it or returns
+--             it with a note, and archives or restores records.
 --
 -- The API checks permission codes, never role names, so this is data only -
--- no code depends on the role being called "reviewer".
+-- no code depends on what the roles are called.
 --
--- Safe to re-run: the role is upserted and the three roles' grants are
+-- Safe to re-run: role 4 is upserted (an existing "reviewer" row is renamed
+-- in place, so its staff keep their accounts) and the three roles' grants are
 -- rebuilt from scratch each time. That also means a grant changed by hand
 -- for these roles is put back on the next "npm run db:setup". Keep the lists
 -- in step with the grant() calls in Server/seed.js.
 
 INSERT INTO roles (id, name, label, description) VALUES
-  (4, 'reviewer', 'Reviewer',
-   'Double-checks every plant a botanist registers, then approves it for publication or returns it with a note')
-ON DUPLICATE KEY UPDATE label = VALUES(label), description = VALUES(description);
+  (4, 'senior_botanist', 'Senior Botanist',
+   'Reviews every plant a botanist registers: corrects it, approves it for publication or returns it with a note; archives and restores records')
+ON DUPLICATE KEY UPDATE name = VALUES(name), label = VALUES(label), description = VALUES(description);
 
 UPDATE roles SET description = 'Sets up the IoT sensors and responds to their alerts in the field. Does not register or edit plant records'
  WHERE name = 'ranger';
-UPDATE roles SET description = 'Ground-truths plants: registers, edits and archives plant and species records, prints QR tags'
+UPDATE roles SET description = 'Registers plants in the field and corrects their own returned records; looks after the species list, QR tags and visitor reports'
  WHERE name = 'botanist';
 
 DELETE rp FROM role_permissions rp
   JOIN roles r ON r.id = rp.role_id
- WHERE r.name IN ('ranger', 'botanist', 'reviewer');
+ WHERE r.name IN ('ranger', 'botanist', 'senior_botanist', 'reviewer');
 
 INSERT INTO role_permissions (role_id, permission_id)
 SELECT r.id, p.id
@@ -176,14 +178,13 @@ SELECT r.id, p.id
   JOIN permissions p
  WHERE (r.name = 'ranger'   AND p.code IN ('sensor.view', 'alert.resolve', 'sensor.manage'))
     OR (r.name = 'botanist' AND p.code IN (
-          'plant.view_all', 'plant.create', 'plant.edit', 'plant.archive', 'plant.history',
-          'species.manage', 'qr.print', 'qr.manage', 'report.view', 'report.resolve',
-          'sensor.view'))
-    OR (r.name = 'reviewer' AND p.code IN (
-          'plant.view_all', 'plant.edit', 'plant.approve', 'plant.history'));
+          'plant.create', 'species.manage', 'qr.print', 'qr.manage',
+          'report.view', 'report.resolve', 'sensor.view'))
+    OR (r.name = 'senior_botanist' AND p.code IN (
+          'plant.view_all', 'plant.edit', 'plant.approve', 'plant.history', 'plant.archive'));
 
 UPDATE settings
-   SET description = 'true = botanist entries wait for a reviewer; false = they publish immediately. A "species not listed" entry always waits'
+   SET description = 'true = botanist entries wait for a senior botanist; false = they publish immediately. A "species not listed" entry always waits'
  WHERE setting_key = 'require_approval';
 
 

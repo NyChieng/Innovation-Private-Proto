@@ -46,8 +46,8 @@ export function seed() {
   const roles = [
     { id: 1, name: 'admin', label: 'Administrator', description: 'Manages staff accounts and roles, resets passwords, reviews the activity log' },
     { id: 2, name: 'ranger', label: 'Ranger', description: 'Sets up the IoT sensors and responds to their alerts in the field. Does not register or edit plant records' },
-    { id: 3, name: 'botanist', label: 'Botanist / Officer', description: 'Ground-truths plants: registers, edits and archives plant and species records, prints QR tags' },
-    { id: 4, name: 'reviewer', label: 'Reviewer', description: 'Double-checks every plant a botanist registers, then approves it for publication or returns it with a note' },
+    { id: 3, name: 'botanist', label: 'Botanist / Officer', description: 'Registers plants in the field and corrects their own returned records; looks after the species list, QR tags and visitor reports' },
+    { id: 4, name: 'senior_botanist', label: 'Senior Botanist', description: 'Reviews every plant a botanist registers: corrects it, approves it for publication or returns it with a note; archives and restores records' },
   ];
   roles.forEach((r) => db.roles.push({ ...r, created_at: nowIso() }));
 
@@ -87,14 +87,15 @@ export function seed() {
   // Rangers look after the sensors: they set them up and respond when one
   // raises an alert. Sensor setup has no screen yet, so for now it is done in
   // the database; sensor.manage is the permission that screen will check.
-  // Botanists own the ground-truthing, and nothing they register publishes
-  // until a reviewer - a second person - has checked it. Keep this in step
-  // with section 6 of Server/schema-extensions.sql.
+  // For plant records a botanist only registers: they see their own records
+  // and may correct one a senior botanist returned to them (the API allows
+  // that without plant.edit). A senior botanist - a second person - reviews,
+  // corrects and approves every record, and archives or restores them.
+  // Keep this in step with section 6 of Server/schema-extensions.sql.
   grant(2, ['sensor.view', 'alert.resolve', 'sensor.manage']);
-  grant(3, ['plant.view_all', 'plant.create', 'plant.edit', 'plant.archive',
-    'plant.history', 'species.manage', 'qr.print', 'qr.manage', 'report.view', 'report.resolve',
-    'sensor.view']);
-  grant(4, ['plant.view_all', 'plant.edit', 'plant.approve', 'plant.history']);
+  grant(3, ['plant.create', 'species.manage', 'qr.print', 'qr.manage',
+    'report.view', 'report.resolve', 'sensor.view']);
+  grant(4, ['plant.view_all', 'plant.edit', 'plant.approve', 'plant.history', 'plant.archive']);
 
   /* ---------------------------------------------------------------- */
   /* Conservation statuses                                             */
@@ -112,7 +113,7 @@ export function seed() {
   /* ---------------------------------------------------------------- */
   const USERS = [
     { role: 1, full_name: 'Farah Hamid', email: 'farah.hamid@florascan.test', password: 'farah.hamid123', title: 'System Administrator' },
-    { role: 3, full_name: 'Dr Grace Lim', email: 'grace.lim@florascan.test', password: 'grace.lim123', title: 'Senior Botanist' },
+    { role: 3, full_name: 'Dr Grace Lim', email: 'grace.lim@florascan.test', password: 'grace.lim123', title: 'Field Botanist' },
     { role: 3, full_name: 'Daniel Jugah', email: 'daniel.jugah@florascan.test', password: 'daniel.jugah123', title: 'Botanist' },
     { role: 2, full_name: 'Ahmad Rosli', email: 'ahmad.rosli@florascan.test', password: 'ahmad.rosli123', title: 'Park Ranger' },
     { role: 2, full_name: 'Nurul Aini', email: 'nurul.aini@florascan.test', password: 'nurul.aini123', title: 'Park Ranger' },
@@ -121,7 +122,7 @@ export function seed() {
     { role: 1, full_name: 'Kevin Tan', email: 'kevin.tan@florascan.test', password: 'kevin.tan123', title: 'Administrator' },
     // Appended rather than inserted, so the indexes used further down for the
     // audit history still point at the same people.
-    { role: 4, full_name: 'Dr Aisyah Rahman', email: 'aisyah.rahman@florascan.test', password: 'aisyah.rahman123', title: 'Herbarium Curator' },
+    { role: 4, full_name: 'Dr Aisyah Rahman', email: 'aisyah.rahman@florascan.test', password: 'aisyah.rahman123', title: 'Senior Botanist' },
   ];
 
   USERS.forEach((u, i) => insert('users', {
@@ -458,7 +459,7 @@ export function seed() {
     ['qr_base_url', '/p/', 'string', 'Plant page address the QR codes encode, before the token'],
     ['public_base_url', '', 'string', 'Permanent public address of the site, e.g. https://florascan.example.org. Printed QR codes encode it, so set it before printing any tag for real. Blank uses this machine network address, which suits a demo'],
     ['plant_code_prefix', 'PLT', 'string', 'Prefix for generated Plant IDs'],
-    ['require_approval', 'true', 'bool', 'true = botanist entries wait for a reviewer; false = they publish immediately. A "species not listed" entry always waits'],
+    ['require_approval', 'true', 'bool', 'true = botanist entries wait for a senior botanist; false = they publish immediately. A "species not listed" entry always waits'],
     ['max_upload_mb', '8', 'int', 'Maximum photo upload size'],
     ['allowed_image_types', '["image/jpeg","image/png","image/webp"]', 'json', 'Accepted MIME types'],
     ['sensor_offline_minutes', '15', 'int', 'A sensor with no reading for this many minutes is shown as Offline'],

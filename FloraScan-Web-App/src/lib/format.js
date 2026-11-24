@@ -53,7 +53,7 @@ export const GROWTH_FORM = translated({
 
 // Role labels come from the database. These are the ones the seed and the
 // schema write, so they can be translated; a role added later shows as named.
-msg('Administrator'); msg('Ranger'); msg('Botanist / Officer'); msg('Botanist/Officer'); msg('Reviewer');
+msg('Administrator'); msg('Ranger'); msg('Botanist / Officer'); msg('Botanist/Officer'); msg('Senior Botanist');
 
 /** A role label from the database, translated when it is one of ours. */
 export const roleLabel = (label) => (label ? t(label) : label);
@@ -127,7 +127,7 @@ export function homeFor(user) {
   if (!user) return '/';
   const has = (code) => !!user.permissions?.includes(code);
   if (has('user.manage')) return '/staff/users';
-  // A reviewer checks records rather than registering them.
+  // A senior botanist reviews records rather than registering them.
   if (has('plant.approve') && !has('plant.create')) return '/staff/review';
   if (has('plant.view_all') || has('plant.create')) return '/staff/plants';
   // A ranger: in charge when a sensor raises an alert.

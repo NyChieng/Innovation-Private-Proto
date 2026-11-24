@@ -750,7 +750,7 @@
 .avatar-admin   { background: var(--info-bg);    color: var(--info-fg);    border-color: var(--info-br); }
 .avatar-botanist{ background: var(--accent-soft);color: var(--accent-text);border-color: var(--accent-border); }
 .avatar-ranger  { background: var(--warn-bg);    color: var(--warn-fg);    border-color: var(--warn-br); }
-.avatar-reviewer{ background: var(--surface-3);  color: var(--text);       border-color: var(--border-strong, var(--border)); }
+.avatar-senior_botanist{ background: var(--surface-3);  color: var(--text);       border-color: var(--border-strong, var(--border)); }
 
 /* ==================================================================
    List picker rows (species and tag pickers)

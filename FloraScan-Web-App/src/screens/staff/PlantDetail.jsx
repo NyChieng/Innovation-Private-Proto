@@ -163,7 +163,7 @@ function ResubmitDialog({ plant, onClose, onDone }) {
     >
       <div className="stack" style={{ '--gap': '14px' }}>
         {plant.review_comment && (
-          <Notice kind="warn" title={t('The reviewer asked for')}>{plant.review_comment}</Notice>
+          <Notice kind="warn" title={t('The senior botanist asked for')}>{plant.review_comment}</Notice>
         )}
         <div className="field">
           <label htmlFor="resub-note">{t('What did you change?')} <span className="hint">({t('optional')})</span></label>
@@ -217,6 +217,9 @@ export default function PlantDetail() {
 
   const sp = plant.species || {};
   const own = plant.registered_by === user?.id;
+  // Same rule as PATCH /plants/:id: editors edit anything; a botanist only
+  // their own record once a senior botanist has returned it.
+  const canEdit = can('plant.edit') || (own && plant.status === 'rejected');
 
   return (
     <div className="page">
@@ -235,7 +238,7 @@ export default function PlantDetail() {
           {plant.status === 'approved' && plant.qr_token && (
             <Link className="btn btn-sm" to={'/p/' + plant.qr_token}><I.External /> {t('View public page')}</Link>
           )}
-          {can('plant.edit') && (
+          {canEdit && (
             <button className="btn btn-sm" onClick={() => setEditing(true)} disabled={busy}><I.Edit /> {t('Edit')}</button>
           )}
           <span className="spacer" />
@@ -280,9 +283,9 @@ export default function PlantDetail() {
 
         {plant.review_comment && (
           <div style={{ marginBottom: 18 }}>
-            <Notice kind="warn" title={t('Returned by the reviewer with this note')}>
+            <Notice kind="warn" title={t('Returned by the senior botanist with this note')}>
               {plant.review_comment}
-              {can('plant.edit') && (
+              {canEdit && (
                 <div className="tiny" style={{ marginTop: 6 }}>
                   {t('Make the changes with Edit, then resubmit it for review.')}
                 </div>
@@ -331,7 +334,7 @@ export default function PlantDetail() {
                 <div className="card-body" style={{ paddingBlock: 6 }}>
                   {plant.species_not_listed ? (
                     <Notice kind="warn" title={t('Species not confirmed')}>
-                      {t('Recorded in the field as {name}. A species must be set - with Edit, or by the reviewer - before this can be published.', {
+                      {t('Recorded in the field as {name}. A species must be set - with Edit, or by the senior botanist - before this can be published.', {
                         name: <>&ldquo;{plant.proposed_species_name}&rdquo;</>,
                       })}
                     </Notice>
