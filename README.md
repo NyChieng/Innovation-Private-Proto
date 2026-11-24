@@ -65,10 +65,10 @@ is the part of the email before `@`, followed by `123`.
 
 | Role | Demo email | Try this |
 | --- | --- | --- |
-| Botanist | `grace.lim@florascan.test` | Register plants and print QR tags |
-| Reviewer | `aisyah.rahman@florascan.test` | Approve or return records |
-| Ranger | `ahmad.rosli@florascan.test` | View and resolve alerts |
-| Administrator | `farah.hamid@florascan.test` | Manage staff and audit logs |
+| Botanist | `drsuehanlee@gmail.com` | Register plants and print QR tags |
+| Reviewer | `drmeilingwong@gmail.com` | Approve or return records |
+| Ranger | `edmundguoqianyu@gmail.com` | View and resolve alerts |
+| Administrator | `nengyichieng@gmail.com` | Manage staff and audit logs |
 
 The demo uses real species and credited reference photos with fictional
 individual plant records. The API withholds sensitive locations from visitors

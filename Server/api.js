@@ -13,6 +13,7 @@ import { lanAddresses, localHostName } from './net.js';
 import { hashPassword, verifyPassword, temporaryPassword } from './passwords.js';
 import { createApiRateLimits } from './security.js';
 import * as passkeys from './passkeys.js';
+import * as lockout from './lockout.js';
 import { sendMail, maskEmail } from './mailer.js';
 import * as totp from './totp.js';
 
@@ -96,33 +97,65 @@ async function currentUser(req) {
   return user;
 }
 
-/* Wrong-password lockout. See section 9 of Server/schema-extensions.sql. */
-const MAX_FAILED_LOGINS = 5;
-const LOCK_MINUTES = 15;
-
+/*
+ * Wrong-password lockout. What it locks - the account, the IP address, the
+ * device, or any mix - and how many guesses and for how long are settings an
+ * administrator chooses: see Server/lockout.js and section 16 of
+ * Server/schema-extensions.sql. Administrator accounts are locked like any other.
+ */
 const LOCKED_MESSAGE = 'This account is locked after too many wrong passwords.';
 
+/** The 423 body for a locked account. */
+const accountLockBody = (until) => ({
+  error: LOCKED_MESSAGE, scope: 'account', locked_until: until,
+  minutes: Math.max(1, Math.ceil((new Date(until).getTime() - Date.now()) / 60000)),
+});
+
 /**
- * Counts one wrong guess at an account - a password or a recovery code - and
- * locks it on the fifth in a row. Returns how many so far, and the lock time
- * when this attempt was the one that locked it.
+ * Whether this attempt is refused before anything is checked: this IP or
+ * device is locked, or (when there is one) the account is. The 423 body, or null.
  */
-async function recordFailedAttempt(user, what) {
-  // Incremented in SQL, so two attempts racing each other both count.
-  await q('UPDATE users SET failed_login_count = failed_login_count + 1 WHERE id = ?', [user.id]);
-  const failed = Number((await one('SELECT failed_login_count FROM users WHERE id = ?', [user.id])).failed_login_count);
-  if (failed < MAX_FAILED_LOGINS) {
-    activity({ user_id: user.id, action: 'login_failed', detail: `Wrong ${what} (${failed} of ${MAX_FAILED_LOGINS})` });
-    return { failed, until: null };
+async function lockedOut(req, user) {
+  const subject = await lockout.blocked(req);
+  if (subject) return subject;
+  if (user && isLocked(user)) return accountLockBody(user.locked_until);
+  return null;
+}
+
+/**
+ * Counts one wrong guess - a password, a recovery code, an authenticator code -
+ * against everything the administrators chose to lock: the account (when
+ * there is one), this IP address and this device. Returns `lock`, the 423 body
+ * when this guess locked something, and `left`, the guesses left before the
+ * nearest lock (null when nothing is counting).
+ */
+async function recordFailedAttempt(req, user, what) {
+  const p = lockout.policy();
+  const subjects = await lockout.recordSubjectFailure(req, what, user?.id ?? null);
+  let left = subjects.left;
+  let lock = subjects.lock;
+
+  if (user && p.account) {
+    // Incremented in SQL, so two attempts racing each other both count.
+    await q('UPDATE users SET failed_login_count = failed_login_count + 1 WHERE id = ?', [user.id]);
+    const failed = Number((await one('SELECT failed_login_count FROM users WHERE id = ?', [user.id])).failed_login_count);
+    if (failed < p.attempts) {
+      activity({ user_id: user.id, action: 'login_failed', detail: `Wrong ${what} (${failed} of ${p.attempts})` });
+      left = Math.min(left, p.attempts - failed);
+    } else {
+      const until = new Date(Date.now() + p.minutes * 60000).toISOString();
+      await update('users', user.id, { failed_login_count: 0, locked_until: until });
+      // Any session already open stays a risk while someone guesses at the account.
+      await revokeAllFor(user.id);
+      activity({ user_id: user.id, action: 'account_locked', detail: `Locked for ${p.minutes} minutes after ${p.attempts} wrong attempts` });
+      // Whoever was guessing is unknown, so the entry is filed under the account.
+      audit({ user_id: user.id, action: 'account_locked', entity_type: 'users', entity_id: user.id, new_values: { locked_until: until } });
+      lock = accountLockBody(until);
+    }
+  } else if (user) {
+    activity({ user_id: user.id, action: 'login_failed', detail: `Wrong ${what}` });
   }
-  const until = new Date(Date.now() + LOCK_MINUTES * 60000).toISOString();
-  await update('users', user.id, { failed_login_count: 0, locked_until: until });
-  // Any session already open stays a risk while someone guesses at the account.
-  await revokeAllFor(user.id);
-  activity({ user_id: user.id, action: 'account_locked', detail: `Locked for ${LOCK_MINUTES} minutes after ${MAX_FAILED_LOGINS} wrong attempts` });
-  // Whoever was guessing is unknown, so the entry is filed under the account.
-  audit({ user_id: user.id, action: 'account_locked', entity_type: 'users', entity_id: user.id, new_values: { locked_until: until } });
-  return { failed, until };
+  return { lock, left: Number.isFinite(left) ? left : null };
 }
 
 /* Password rules, shared by changing a password and recovering one. */
@@ -767,6 +800,19 @@ export function createApi() {
     next();
   };
 
+  /*
+   * The audit trail is for administrators only - by role, not just by
+   * permission - so granting system.audit to another role later still does
+   * not open it up.
+   */
+  const adminOnly = (req, res, next) => {
+    if (!req.user) return res.status(401).json({ error: 'Sign in required' });
+    if (roleById(req.user.role_id)?.name !== 'admin') {
+      return res.status(403).json({ error: 'Only an administrator can open the audit trail.' });
+    }
+    next();
+  };
+
   /* ================================================================ */
   /* Bootstrap                                                        */
   /* ================================================================ */
@@ -806,24 +852,28 @@ export function createApi() {
 
   api.post('/auth/login', route(async (req, res) => {
     const { email, password } = req.body || {};
+    // A locked IP or device is refused before the email is even looked up.
+    const early = await lockedOut(req, null);
+    if (early) return res.status(423).json(early);
     const user = await one('SELECT * FROM users WHERE LOWER(email) = ? LIMIT 1',
       [String(email || '').toLowerCase().trim()]);
     if (!user) {
       activity({ user_id: null, action: 'login_failed', detail: 'Unknown email: ' + email });
+      // Guessing at addresses counts against the IP and device too.
+      const { lock } = await recordFailedAttempt(req, null, 'email');
+      if (lock) return res.status(423).json(lock);
       return res.status(401).json({ error: 'No account with that email address.' });
     }
     // A locked account is refused before the password is even checked, so
     // guessing on stops being worth anything until the lock runs out.
     if (isLocked(user)) {
       activity({ user_id: user.id, action: 'login_failed', detail: 'Account locked' });
-      return res.status(423).json({
-        error: LOCKED_MESSAGE, locked_until: user.locked_until, minutes: minutesLeft(user),
-      });
+      return res.status(423).json(accountLockBody(user.locked_until));
     }
     if (!await verifyPassword(password, user.password_hash)) {
-      const { failed, until } = await recordFailedAttempt(user, 'password');
-      if (until) return res.status(423).json({ error: LOCKED_MESSAGE, locked_until: until, minutes: LOCK_MINUTES });
-      return res.status(401).json({ error: 'Incorrect password.', attempts_left: MAX_FAILED_LOGINS - failed });
+      const { lock, left } = await recordFailedAttempt(req, user, 'password');
+      if (lock) return res.status(423).json(lock);
+      return res.status(401).json({ error: 'Incorrect password.', attempts_left: left });
     }
     if (!user.is_active) {
       activity({ user_id: user.id, action: 'login_failed', detail: 'Account deactivated' });
@@ -852,20 +902,21 @@ export function createApi() {
       tickets.delete(ticket);
       return res.status(400).json({ error: 'Sign-in timed out. Enter your password again.' });
     }
-    if (isLocked(user)) {
+    const refused = await lockedOut(req, user);
+    if (refused) {
       tickets.delete(ticket);
-      return res.status(423).json({ error: LOCKED_MESSAGE, locked_until: user.locked_until, minutes: minutesLeft(user) });
+      return res.status(423).json(refused);
     }
     const secret = totp.openSecret(user.totp_secret);
     const step = secret ? totp.verifyCode(secret, code, user.totp_last_step) : null;
     if (step === null) {
-      // Shares the lockout with passwords: five wrong in a row locks the account.
-      const { failed, until } = await recordFailedAttempt(user, 'authenticator code');
-      if (until) {
+      // Shares the lockout with passwords.
+      const { lock, left } = await recordFailedAttempt(req, user, 'authenticator code');
+      if (lock) {
         tickets.delete(ticket);
-        return res.status(423).json({ error: LOCKED_MESSAGE, locked_until: until, minutes: LOCK_MINUTES });
+        return res.status(423).json(lock);
       }
-      return res.status(400).json({ error: 'That code is not right.', attempts_left: MAX_FAILED_LOGINS - failed });
+      return res.status(400).json({ error: 'That code is not right.', attempts_left: left });
     }
     tickets.delete(ticket);
     const after = await update('users', user.id, {
@@ -973,18 +1024,20 @@ export function createApi() {
   api.post('/auth/recover', route(async (req, res) => {
     const { email, recovery_code: code, new_password: next } = req.body || {};
     const NO_MATCH = 'That email address and recovery code do not match.';
+    const early = await lockedOut(req, null);
+    if (early) return res.status(423).json(early);
     const user = await one('SELECT * FROM users WHERE LOWER(email) = ? LIMIT 1',
       [String(email || '').toLowerCase().trim()]);
     if (!user || !user.is_active || user.deleted_at) {
       activity({ user_id: user?.id ?? null, action: 'recovery_failed', detail: 'No usable account for ' + email });
+      const { lock } = await recordFailedAttempt(req, null, 'recovery code');
+      if (lock) return res.status(423).json(lock);
       return res.status(400).json({ error: NO_MATCH });
     }
-    if (isLocked(user)) {
-      return res.status(423).json({ error: LOCKED_MESSAGE, locked_until: user.locked_until, minutes: minutesLeft(user) });
-    }
+    if (isLocked(user)) return res.status(423).json(accountLockBody(user.locked_until));
     if (!recoveryCodeMatches(code, user.recovery_code_hash)) {
-      const { until } = await recordFailedAttempt(user, 'recovery code');
-      if (until) return res.status(423).json({ error: LOCKED_MESSAGE, locked_until: until, minutes: LOCK_MINUTES });
+      const { lock } = await recordFailedAttempt(req, user, 'recovery code');
+      if (lock) return res.status(423).json(lock);
       return res.status(400).json({ error: NO_MATCH });
     }
     // Checked after the code, so the rules are not a free hint to a stranger.
@@ -1120,19 +1173,23 @@ export function createApi() {
   api.post('/auth/email-reset/complete', route(async (req, res) => {
     const { email, code, new_password: next } = req.body || {};
     const NO_MATCH = 'That email address and code do not match.';
+    const early = await lockedOut(req, null);
+    if (early) return res.status(423).json(early);
     const user = await one('SELECT * FROM users WHERE LOWER(email) = ? LIMIT 1', [String(email || '').toLowerCase().trim()]);
-    if (!user || !user.is_active || user.deleted_at || !isAdmin(user)) return res.status(400).json({ error: NO_MATCH });
-    if (isLocked(user)) {
-      return res.status(423).json({ error: LOCKED_MESSAGE, locked_until: user.locked_until, minutes: minutesLeft(user) });
+    if (!user || !user.is_active || user.deleted_at || !isAdmin(user)) {
+      const { lock } = await recordFailedAttempt(req, null, 'emailed code');
+      if (lock) return res.status(423).json(lock);
+      return res.status(400).json({ error: NO_MATCH });
     }
+    if (isLocked(user)) return res.status(423).json(accountLockBody(user.locked_until));
     // Checked before the code is spent, so a weak password does not waste it.
     const problem = newPasswordProblem(next, null);
     if (problem) return res.status(400).json({ error: problem });
     const { ok } = await checkEmailCode(user.id, 'reset', code);
     if (!ok) {
       // Shares the lockout with passwords, so the code cannot be guessed faster.
-      const { until } = await recordFailedAttempt(user, 'emailed code');
-      if (until) return res.status(423).json({ error: LOCKED_MESSAGE, locked_until: until, minutes: LOCK_MINUTES });
+      const { lock } = await recordFailedAttempt(req, user, 'emailed code');
+      if (lock) return res.status(423).json(lock);
       return res.status(400).json({ error: NO_MATCH });
     }
 
@@ -1934,9 +1991,13 @@ export function createApi() {
     res.json({ plant: await shapeOne(joined, { full: true, viewer: req.user }) });
   }));
 
-  api.post('/plants/:id/restore', need('plant.archive'), route(async (req, res) => {
+  /**
+   * Bring an archived plant back. Shared by the Restore button and the audit
+   * trail. Returns { status } on success, or { error, status: http code }.
+   */
+  async function restoreArchivedPlant(plantId, user, reason = null) {
     const result = await tx(async (db) => {
-      const before = await db.one('SELECT * FROM plants WHERE id = ? FOR UPDATE', [req.params.id]);
+      const before = await db.one('SELECT * FROM plants WHERE id = ? FOR UPDATE', [plantId]);
       if (!before || before.deleted_at) return { code: 404, error: 'Not found' };
       if (before.status !== 'archived') return { code: 409, error: 'Only an archived record can be restored.' };
 
@@ -1945,15 +2006,21 @@ export function createApi() {
       const status = before.verified_at && before.species_id ? 'approved' : 'rejected';
       const updated_at = nowIso();
       await db.q('UPDATE plants SET status = ?, updated_at = ? WHERE id = ?', [status, updated_at, before.id]);
-      if (status === 'approved') await issueQr(before.id, req.user.id, db);
+      if (status === 'approved') await issueQr(before.id, user.id, db);
       return { before, after: { ...before, status, updated_at }, status };
     });
-    if (result.error) return res.status(result.code).json({ error: result.error });
+    if (result.error) return { error: result.error, status: result.code };
     const { before, after, status } = result;
-    await recordRevisions(before.id, req.user.id, before, after,
-      status === 'approved' ? 'Restored to public view' : 'Restored for corrections before review');
-    audit({ user_id: req.user.id, action: 'update', entity_type: 'plants', entity_id: before.id, old_values: { status: 'archived' }, new_values: { status } });
-    const joined = (await plantsWhere('p.id = ?', [before.id]))[0];
+    await recordRevisions(before.id, user.id, before, after,
+      reason || (status === 'approved' ? 'Restored to public view' : 'Restored for corrections before review'));
+    return { status };
+  }
+
+  api.post('/plants/:id/restore', need('plant.archive'), route(async (req, res) => {
+    const r = await restoreArchivedPlant(req.params.id, req.user);
+    if (r.error) return res.status(r.status).json({ error: r.error });
+    audit({ user_id: req.user.id, action: 'update', entity_type: 'plants', entity_id: Number(req.params.id), old_values: { status: 'archived' }, new_values: { status: r.status } });
+    const joined = (await plantsWhere('p.id = ?', [req.params.id]))[0];
     res.json({ plant: await shapeOne(joined, { full: true, viewer: req.user }) });
   }));
 
@@ -2302,12 +2369,12 @@ export function createApi() {
     const rows = await q(
       `SELECT a.*, COALESCE(u.full_name, 'Unknown') AS user_name, u.email AS user_email
          FROM user_activity_logs a LEFT JOIN users u ON u.id = a.user_id
-        ORDER BY a.created_at DESC LIMIT 300`,
+        ORDER BY a.created_at DESC, a.id DESC LIMIT 300`,
     );
     res.json({ results: rows });
   }));
 
-  api.get('/audit', need('system.audit'), route(async (req, res) => {
+  api.get('/audit', need('system.audit'), adminOnly, route(async (req, res) => {
     const { entity_type = '', action = '' } = req.query;
     const where = [];
     const params = [];
@@ -2318,17 +2385,199 @@ export function createApi() {
     const [rows, total, types, actions] = await Promise.all([
       q(`SELECT a.*, COALESCE(u.full_name, 'System') AS user_name
            FROM audit_logs a LEFT JOIN users u ON u.id = a.user_id
-           ${clause} ORDER BY a.created_at DESC LIMIT 300`, params),
+           ${clause} ORDER BY a.created_at DESC, a.id DESC LIMIT 300`, params),
       count(`SELECT COUNT(*) FROM audit_logs a ${clause}`, params),
       q('SELECT DISTINCT entity_type FROM audit_logs'),
       q('SELECT DISTINCT action FROM audit_logs'),
     ]);
+    // Which of these entries a later restore has already undone.
+    const ids = rows.map((r) => r.id);
+    const undone = new Set(ids.length
+      ? (await q(
+        `SELECT CAST(JSON_UNQUOTE(JSON_EXTRACT(new_values, '$.restored_from')) AS UNSIGNED) AS id
+           FROM audit_logs WHERE action = 'restore'
+            AND CAST(JSON_UNQUOTE(JSON_EXTRACT(new_values, '$.restored_from')) AS UNSIGNED) IN (${ids.map(() => '?').join(',')})`,
+        ids,
+      )).map((r) => Number(r.id))
+      : []);
     res.json({
       total,
       entity_types: types.map((r) => r.entity_type),
       actions: actions.map((r) => r.action),
-      results: rows.map(auditRow),
+      results: rows.map((r) => {
+        const entry = auditRow(r);
+        const plan = restorePlan(entry);
+        return { ...entry, restorable: !!plan.ok, restore_note: plan.ok ? null : plan.why, restored: undone.has(Number(r.id)) };
+      }),
     });
+  }));
+
+  /* -------- restoring from the audit trail -------- */
+
+  // The fields a restore may write back, per record type: the ones staff can
+  // edit, never ids, codes, hashes or workflow status.
+  const RESTORE_FIELDS = {
+    plants: ['species_id', 'proposed_species_name', 'site_name', 'location_notes', 'latitude', 'longitude',
+      'altitude_m', 'height_m', 'trunk_diameter_cm', 'health_status', 'life_stage', 'morphology_notes', 'notes'],
+    species: ['scientific_name', 'common_name', 'local_name', 'family', 'genus', 'species_epithet', 'description',
+      'characteristics', 'growth_form', 'leaf_description', 'flower_description', 'fruit_description',
+      'habitat', 'distribution', 'conservation_status_id'],
+    users: ['role_id', 'is_active', 'full_name'],
+  };
+  const NOT_RESTORABLE = {
+    create: 'A record being added is not undone here. Archive or deactivate it instead.',
+    approve: 'A review decision is not undone here. Archive the plant or edit it instead.',
+    reject: 'A review decision is not undone here.',
+    security: 'Security events - passwords, two-step verification, Face ID / fingerprint, locks - cannot be restored.',
+    other: 'This kind of entry cannot be restored.',
+    nothing: 'This entry has no earlier values to put back.',
+  };
+
+  /** One comparable form for a value, whether it came from MySQL or from stored JSON. */
+  const norm = (v) => {
+    if (v === null || v === undefined || v === '') return '';
+    if (v === true) return '1';
+    if (v === false) return '0';
+    if (v instanceof Date) return v.toISOString();
+    if (typeof v === 'number') return String(v);
+    if (typeof v === 'string' && /^-?\d+(\.\d+)?$/.test(v)) return String(Number(v));
+    if (typeof v === 'string' && /^\d{4}-\d\d-\d\dT/.test(v)) {
+      const d = new Date(v);
+      if (!Number.isNaN(d.getTime())) return d.toISOString();
+    }
+    return typeof v === 'object' ? JSON.stringify(v) : String(v);
+  };
+
+  /** The editable fields an entry changed, with their earlier and later values. */
+  function changedFields(entry, allowed) {
+    const before = entry.old_values && typeof entry.old_values === 'object' ? entry.old_values : {};
+    const after = entry.new_values && typeof entry.new_values === 'object' ? entry.new_values : {};
+    return allowed.filter((k) => k in before && norm(before[k]) !== norm(after[k]));
+  }
+
+  /**
+   * Writes the earlier values back. Stops with `conflict` when the record has
+   * moved on since the entry, unless forced.
+   */
+  async function revertFields(table, entry, fields, { force, check, afterWrite, user }) {
+    const current = await byId(table, entry.entity_id);
+    if (!current || current.deleted_at) return { error: 'This record no longer exists.', status: 404 };
+    const conflict = fields.filter((k) => norm(current[k]) !== norm(entry.new_values[k]));
+    if (conflict.length && !force) return { conflict };
+    const patch = Object.fromEntries(fields.map((k) => [k, entry.old_values[k] ?? null]));
+    const problem = check ? await check({ ...current, ...patch }, current, user) : null;
+    if (problem) return { error: problem };
+    if ('updated_at' in current) patch.updated_at = nowIso();
+    const saved = await update(table, current.id, patch);
+    if (afterWrite) await afterWrite(current, saved);
+    const pick = (o) => Object.fromEntries(fields.map((k) => [k, o[k] ?? null]));
+    return { before: pick(current), after: pick(saved) };
+  }
+
+  /** What restoring this entry would do, or why it cannot be done. */
+  function restorePlan(entry) {
+    const { entity_type: type, action } = entry;
+    if (['create', 'approve', 'reject'].includes(action)) return { ok: false, why: NOT_RESTORABLE[action] };
+    if (/password|two_factor|passkey|locked|unlocked|recovery|reset/.test(action) || type === 'login_lockouts') {
+      return { ok: false, why: NOT_RESTORABLE.security };
+    }
+
+    // An archived plant brought back - by the same rules as the Restore button.
+    if (type === 'plants' && action === 'archive') {
+      return {
+        ok: true,
+        run: async (user) => {
+          const r = await restoreArchivedPlant(entry.entity_id, user, 'Restored from the audit trail');
+          return r.error ? r : { before: { status: 'archived' }, after: { status: r.status } };
+        },
+      };
+    }
+
+    if (type === 'settings' && ['update', 'restore'].includes(action)) {
+      const key = Object.keys(entry.old_values || {}).find((k) => k !== 'restored_from');
+      if (!key || !allSettings().some((s) => s.setting_key === key)) return { ok: false, why: NOT_RESTORABLE.nothing };
+      return {
+        ok: true,
+        run: async (user, { force }) => {
+          const current = allSettings().find((s) => s.setting_key === key);
+          if (norm(current.setting_value) !== norm(entry.new_values?.[key]) && !force) return { conflict: [key] };
+          const saved = await setSetting(key, entry.old_values[key], user.id);
+          return { before: { [key]: current.setting_value }, after: { [key]: saved.setting_value } };
+        },
+      };
+    }
+
+    const allowed = RESTORE_FIELDS[type];
+    if (!allowed || !['update', 'role_change', 'restore'].includes(action)) return { ok: false, why: NOT_RESTORABLE.other };
+    const fields = changedFields(entry, allowed);
+    if (!fields.length) return { ok: false, why: NOT_RESTORABLE.nothing };
+
+    if (type === 'plants') {
+      return {
+        ok: true,
+        run: (user, { force }) => revertFields('plants', entry, fields, {
+          force, user,
+          check: async (candidate, current) => {
+            const invalid = validatePlant(candidate);
+            if (invalid) return invalid;
+            if (candidate.species_id && !await byId('species', candidate.species_id)) return 'The earlier species no longer exists.';
+            if (current.status === 'approved' && !candidate.species_id) return 'A published record must have a confirmed species.';
+            return null;
+          },
+          afterWrite: (before, after) => recordRevisions(before.id, user.id, before, after, 'Restored from the audit trail'),
+        }),
+      };
+    }
+    if (type === 'species') {
+      return { ok: true, run: (user, { force }) => revertFields('species', entry, fields, { force, user }) };
+    }
+    // users
+    return {
+      ok: true,
+      run: (user, { force }) => revertFields('users', entry, fields, {
+        force, user,
+        check: async (candidate, current) => {
+          if (current.id === user.id && (norm(candidate.role_id) !== norm(current.role_id) || norm(candidate.is_active) !== norm(current.is_active))) {
+            return 'You cannot change your own role or deactivate yourself.';
+          }
+          if (!roleById(candidate.role_id)) return 'The earlier role no longer exists.';
+          return null;
+        },
+        // Deactivated again: their open sessions end at once, as with the Deactivate button.
+        afterWrite: async (before, after) => { if (Number(after.is_active) === 0) await revokeAllFor(after.id); },
+      }),
+    };
+  }
+
+  /**
+   * Put a record back the way it was before an audit entry: an edit undone, an
+   * archived plant brought back, a deactivated account reactivated, a setting
+   * changed back. Administrators only.
+   *
+   * If the record has been changed again since, the restore stops and says
+   * so (409) rather than silently throwing the later change away; sending
+   * { force: true } restores anyway. The restore is itself an audit entry,
+   * pointing back at the one it undid, so it can be undone in turn.
+   */
+  api.post('/audit/:id/restore', need('system.audit'), adminOnly, route(async (req, res) => {
+    const row = await one('SELECT * FROM audit_logs WHERE id = ?', [req.params.id]);
+    if (!row) return res.status(404).json({ error: 'Not found' });
+    const entry = auditRow(row);
+    const plan = restorePlan(entry);
+    if (!plan.ok) return res.status(400).json({ error: plan.why });
+
+    const result = await plan.run(req.user, { force: req.body?.force === true });
+    if (result.conflict) {
+      return res.status(409).json({ error: 'This record has been changed again since. Restoring would undo those later changes too.', code: 'CHANGED_SINCE', fields: result.conflict });
+    }
+    if (result.error) return res.status(result.status || 400).json({ error: result.error });
+
+    audit({
+      user_id: req.user.id, action: 'restore', entity_type: entry.entity_type, entity_id: entry.entity_id,
+      old_values: result.before, new_values: { ...result.after, restored_from: entry.id },
+    });
+    activity({ user_id: req.user.id, action: 'restore', detail: `Restored ${entry.entity_type} #${entry.entity_id ?? ''} to before audit entry ${entry.id}` });
+    res.json({ ok: true });
   }));
 
   api.get('/admin/stats', need('user.view'), route(async (req, res) => {
@@ -2361,13 +2610,42 @@ export function createApi() {
   api.patch('/settings/:key', need('system.settings'), route(async (req, res) => {
     const existing = allSettings().find((s) => s.setting_key === req.params.key);
     if (!existing) return res.status(404).json({ error: 'Unknown setting' });
+    let value = req.body?.value;
+    // The lockout limits have a sensible range; outside it, say so rather than store it.
+    const range = { lockout_max_attempts: lockout.LIMITS.attempts, lockout_minutes: lockout.LIMITS.minutes }[req.params.key];
+    if (range) {
+      const n = Number(value);
+      if (!Number.isInteger(n) || n < range.min || n > range.max) {
+        return res.status(400).json({ error: `Enter a whole number from ${range.min} to ${range.max}.` });
+      }
+      value = n;
+    }
+    if (existing.value_type === 'bool') value = value === true || value === 'true';
     const before = existing.setting_value;
-    const row = await setSetting(req.params.key, req.body?.value, req.user.id);
+    const row = await setSetting(req.params.key, value, req.user.id);
     audit({
       user_id: req.user.id, action: 'update', entity_type: 'settings', entity_id: null,
       old_values: { [req.params.key]: before }, new_values: { [req.params.key]: row.setting_value },
     });
     res.json({ setting: row });
+  }));
+
+  /* -------- brute-force locks on an IP address or a device -------- */
+  // Account locks are lifted from Staff accounts; these have no account to sit on.
+
+  api.get('/security/lockouts', need('user.manage'), route(async (req, res) => {
+    res.json({ results: await lockout.activeLocks(), policy: lockout.policy() });
+  }));
+
+  api.delete('/security/lockouts/:id', need('user.manage'), route(async (req, res) => {
+    const row = await lockout.unlock(Number(req.params.id));
+    if (!row) return res.status(404).json({ error: 'Not found' });
+    audit({
+      user_id: req.user.id, action: `${row.scope}_unlocked`, entity_type: 'login_lockouts', entity_id: row.id,
+      old_values: { label: row.label, locked_until: row.locked_until }, new_values: { locked_until: null },
+    });
+    activity({ user_id: req.user.id, action: `${row.scope}_unlocked`, detail: `Lifted the lock on ${row.scope === 'ip' ? 'network' : 'device'} ${row.label}` });
+    res.json({ ok: true });
   }));
 
   /* ================================================================ */

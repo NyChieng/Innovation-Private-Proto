@@ -48,6 +48,22 @@ import { msg, t } from './i18n.js';
   msg('Face ID and fingerprint sign-in need the named address, not a number.'),
   msg('Face ID or fingerprint sign-in could not be confirmed. Try again, or use your password.'),
   msg('This device has no FloraScan passkey any more. Sign in with your password.'),
+  msg('Too many failed sign-ins from this network. Try again later, or ask an administrator.'),
+  msg('Too many failed sign-ins from this device. Try again later, or ask an administrator.'),
+  msg('Enter a whole number from 3 to 20.'),
+  msg('Enter a whole number from 1 to 1440.'),
+  msg('Only an administrator can open the audit trail.'),
+  msg('This record has been changed again since. Restoring would undo those later changes too.'),
+  msg('This record no longer exists.'),
+  msg('The earlier species no longer exists.'),
+  msg('The earlier role no longer exists.'),
+  msg('You cannot change your own role or deactivate yourself.'),
+  msg('A record being added is not undone here. Archive or deactivate it instead.'),
+  msg('A review decision is not undone here. Archive the plant or edit it instead.'),
+  msg('A review decision is not undone here.'),
+  msg('Security events - passwords, two-step verification, Face ID / fingerprint, locks - cannot be restored.'),
+  msg('This kind of entry cannot be restored.'),
+  msg('This entry has no earlier values to put back.'),
 ];
 
 const TOKEN_KEY = 'florascan.token';
@@ -63,8 +79,26 @@ export class ApiError extends Error {
   }
 }
 
+/*
+ * A random id for this browser, so an administrator can choose to lock a
+ * device after too many wrong passwords (Server/lockout.js). It identifies
+ * nothing about the person - it is made up here and kept only in this browser.
+ */
+const DEVICE_KEY = 'florascan.device-id';
+let deviceId = null;
+function getDeviceId() {
+  if (deviceId) return deviceId;
+  try { deviceId = localStorage.getItem(DEVICE_KEY); } catch { /* private mode */ }
+  if (!/^[a-f0-9]{32}$/.test(deviceId || '')) {
+    const bytes = crypto.getRandomValues(new Uint8Array(16));
+    deviceId = [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
+    try { localStorage.setItem(DEVICE_KEY, deviceId); } catch { /* kept for this visit only */ }
+  }
+  return deviceId;
+}
+
 async function request(method, path, body) {
-  const headers = {};
+  const headers = { 'X-Device-Id': getDeviceId() };
   const token = getToken();
   if (token) headers.Authorization = 'Bearer ' + token;
   if (body !== undefined) headers['Content-Type'] = 'application/json';
@@ -188,10 +222,13 @@ export const api = {
 
   activity: () => request('GET', '/activity'),
   audit: (params) => request('GET', '/audit' + qs(params)),
+  restoreAudit: (id, force = false) => request('POST', `/audit/${id}/restore`, { force }),
   adminStats: () => request('GET', '/admin/stats'),
 
   settings: () => request('GET', '/settings'),
   updateSetting: (key, value) => request('PATCH', '/settings/' + key, { value }),
+  lockouts: () => request('GET', '/security/lockouts'),
+  liftLockout: (id) => request('DELETE', '/security/lockouts/' + id),
 
   sensors: () => request('GET', '/sensors'),
   connect: () => request('GET', '/connect'),

@@ -48,7 +48,7 @@ function ScrollToTop() {
 }
 
 /** Staff route guard. Shows a clear reason rather than a blank redirect. */
-function Guard({ need, needAny, children }) {
+function Guard({ need, needAny, adminOnly, children }) {
   const { user, can, ready } = useApp();
   const loc = useLocation();
   if (!ready) return <LoadingBlock />;
@@ -56,6 +56,14 @@ function Guard({ need, needAny, children }) {
   // A password an administrator handed out is replaced before any staff work.
   if (user.must_change_password && loc.pathname !== '/staff/password') {
     return <Navigate to="/staff/password" replace />;
+  }
+  // By role, not only by permission: the API refuses everyone else too.
+  if (adminOnly && user.role !== 'admin') {
+    return (
+      <div className="page"><div className="wrap wrap-narrow">
+        <Empty icon={I.Shield} title={t('Only an administrator can open this page')} />
+      </div></div>
+    );
   }
   const missing = (need && !can(need)) || (needAny && !needAny.some((c) => can(c)));
   if (missing) {
@@ -152,7 +160,7 @@ export default function App() {
             <Route path="/staff/iot" element={<Guard need="sensor.view"><IoT /></Guard>} />
             <Route path="/staff/users" element={<Guard need="user.view"><Users /></Guard>} />
             <Route path="/staff/activity" element={<Guard need="system.audit"><ActivityLog /></Guard>} />
-            <Route path="/staff/audit" element={<Guard need="system.audit"><Audit /></Guard>} />
+            <Route path="/staff/audit" element={<Guard need="system.audit" adminOnly><Audit /></Guard>} />
             <Route path="/staff/settings" element={<Guard need="system.settings"><SettingsScreen /></Guard>} />
             <Route path="/staff/notifications" element={<Guard><Notifications /></Guard>} />
             <Route path="/staff/me" element={<Guard><Me /></Guard>} />

@@ -49,7 +49,7 @@ async function api(method, path, body, token) {
 console.log(`Passkey tests against ${BASE}\n`);
 
 /* A throwaway account that has chosen its own password. */
-const admin = (await api('POST', '/auth/login', { email: 'farah.hamid@florascan.test', password: 'farah.hamid123' })).body.token;
+const admin = (await api('POST', '/auth/login', { email: 'nengyichieng@gmail.com', password: 'nengyichieng123' })).body.token;
 const email = `test.passkey.${Date.now()}@niah.sarawak.gov.my`;
 const made = await api('POST', '/users', { full_name: 'Passkey Test User', email, role_id: 2 }, admin);
 // Temporary passwords are random: use the one the API issued.

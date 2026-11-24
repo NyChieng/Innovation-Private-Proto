@@ -103,18 +103,18 @@ const patch = (p, body, t) => call('PATCH', p, { token: t, body });
 
 // Seeded accounts use the email's local part + 123 (Server/seed.js); an
 // account an admin creates or resets uses the temporary password it was issued.
-const passwordFor = (email) => (email.endsWith('@florascan.test') ? email.split('@')[0] + '123' : TEMP.get(email.toLowerCase()));
+const passwordFor = (email) => (email.endsWith('@gmail.com') ? email.split('@')[0] + '123' : TEMP.get(email.toLowerCase()));
 
 async function login(email, password = passwordFor(email)) {
   const r = await post('/auth/login', { email, password });
   return r.body?.token;
 }
 
-const ADMIN = 'farah.hamid@florascan.test';
-const BOTANIST = 'grace.lim@florascan.test';
-const BOTANIST_2 = 'daniel.jugah@florascan.test';
-const RANGER = 'ahmad.rosli@florascan.test';
-const REVIEWER = 'aisyah.rahman@florascan.test';
+const ADMIN = 'nengyichieng@gmail.com';
+const BOTANIST = 'drsuehanlee@gmail.com';
+const BOTANIST_2 = 'hansjiasynyee@gmail.com';
+const RANGER = 'edmundguoqianyu@gmail.com';
+const REVIEWER = 'drmeilingwong@gmail.com';
 
 /* ================================================================== */
 
@@ -272,7 +272,7 @@ section('5b. Access control - the reviewer checks records, and nothing else (#8)
   const queue = await get('/submissions', revT);
   eq('the reviewer reads the whole queue', queue.status, 200);
   check('...which holds the seeded botanist submissions', queue.body.results.length >= 6, 'got ' + queue.body.results.length);
-  check('...all from botanists', queue.body.results.every((x) => ['Dr Grace Lim', 'Daniel Jugah'].includes(x.submitted_by_name)));
+  check('...all from botanists', queue.body.results.every((x) => ['Dr Sue Han Lee', 'Hans Jia Syn Yee'].includes(x.submitted_by_name)));
   const notes = (await get('/notifications', revT)).body.results;
   check('the reviewer was notified of the waiting submissions', notes.some((n) => n.type === 'submission.new'));
 }
@@ -285,7 +285,7 @@ section('6. Data scoping');
   const mine = (await get('/plants?mine=1', botT)).body.results;
   check('a botanist sees the whole register', botList.length > mine.length && mine.length > 0,
     `all ${botList.length} vs own ${mine.length}`);
-  check('...and mine=1 narrows it to their own', mine.every((p) => p.registered_by_name === 'Dr Grace Lim'));
+  check('...and mine=1 narrows it to their own', mine.every((p) => p.registered_by_name === 'Dr Sue Han Lee'));
   eq('a reviewer sees the same register', revList.length, botList.length);
 }
 
@@ -468,7 +468,7 @@ section('11. The verification workflow end to end');
   eq('approval succeeds', approved.status, 200);
   eq('...the status becomes approved', approved.body.plant.status, 'approved');
   check('...a QR tag is issued automatically', !!approved.body.plant.qr_token);
-  check('...the verifier is recorded', approved.body.plant.verified_by_name === 'Dr Aisyah Rahman',
+  check('...the verifier is recorded', approved.body.plant.verified_by_name === 'Dr Mei Ling Wong',
     approved.body.plant.verified_by_name);
 
   const again = await post(`/plants/${id}/approve`, {}, revT);
@@ -640,7 +640,7 @@ section('16. Audit completeness');
   check('the field change was recorded', !!rev);
   eq('...with the old value', rev?.old_value, 'Audit test plot');
   eq('...with the new value', rev?.new_value, 'Audit test plot (renamed)');
-  check('...with the actor', rev?.changed_by_name === 'Dr Grace Lim');
+  check('...with the actor', rev?.changed_by_name === 'Dr Sue Han Lee');
   check('...with a timestamp', !!rev?.created_at);
 
   const audits = await get('/audit', adminT);

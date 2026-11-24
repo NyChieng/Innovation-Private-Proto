@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../lib/api.js';
-import { Avatar, Empty, LoadingBlock, Notice, PageHead } from '../../components/ui.jsx';
+import { Avatar, Empty, LoadingBlock, Modal, Notice, PageHead } from '../../components/ui.jsx';
 import { formatDateTime, relativeTime, roleLabel, titleCase } from '../../lib/format.js';
 import { useApp } from '../../lib/store.jsx';
 import * as I from '../../lib/icons.jsx';
@@ -15,6 +15,7 @@ const ACTION_STYLE = {
   password_recovered: 'badge-warn', reset_approved: 'badge-ok', reset_denied: 'badge-danger',
   passkey_added: 'badge-info', passkey_removed: 'badge-neutral', recovery_email_set: 'badge-info',
   two_factor_enabled: 'badge-ok', two_factor_disabled: 'badge-warn',
+  restore: 'badge-info',
 };
 
 /** Plain names for the codes the API writes, so an entry reads as a sentence. */
@@ -27,6 +28,7 @@ const ACTION_LABEL = {
   reset_denied: msg('Reset refused'), passkey_added: msg('Face ID / fingerprint turned on'),
   passkey_removed: msg('Face ID / fingerprint turned off'), recovery_email_set: msg('Recovery email set'),
   two_factor_enabled: msg('Two-step verification on'), two_factor_disabled: msg('Two-step verification off'),
+  restore: msg('Restored from the audit trail'),
 };
 
 /** Plain names for the fields the API records, in place of column names. */
@@ -54,8 +56,9 @@ const asFields = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : (
 function Diff({ oldValues, newValues, roles }) {
   const before = asFields(oldValues);
   const after = asFields(newValues);
+  // restored_from is shown as "Undoes entry #n" beside the entry, not as a field.
   const keys = [...new Set([...Object.keys(before), ...Object.keys(after)])]
-    .filter((k) => String(before[k] ?? '') !== String(after[k] ?? ''));
+    .filter((k) => k !== 'restored_from' && String(before[k] ?? '') !== String(after[k] ?? ''));
   if (!keys.length) return <span className="tiny faint">{t('No details recorded')}</span>;
 
   const show = (k, v) => {
@@ -92,6 +95,69 @@ function RecordCell({ entry }) {
   return <>{label}{entry.entity_id && <span className="mono tiny faint"> #{entry.entity_id}</span>}</>;
 }
 
+/**
+ * Put the record back as it was before this entry. Asks first; if the record
+ * has been changed again since, says so and offers to restore anyway.
+ */
+function RestoreButton({ entry, onDone }) {
+  const { toast, boot } = useApp();
+  const [open, setOpen] = useState(false);
+  const [changedSince, setChangedSince] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  if (entry.restored) return <span className="badge badge-neutral"><I.Check /> {t('Restored')}</span>;
+  if (!entry.restorable) return <span className="tiny faint" title={entry.restore_note ? t(entry.restore_note) : ''}>{t('Cannot be restored')}</span>;
+
+  const close = () => { setOpen(false); setChangedSince(false); };
+  const go = async () => {
+    setBusy(true);
+    try {
+      await api.restoreAudit(entry.id, changedSince);
+      toast(t('Restored.'), 'ok');
+      close();
+      onDone();
+    } catch (e) {
+      if (e.body?.code === 'CHANGED_SINCE') setChangedSince(true);
+      else toast(e.message, 'err');
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <>
+      <button type="button" className="btn btn-sm" onClick={() => setOpen(true)}><I.Refresh /> {t('Restore')}</button>
+      {open && (
+        <Modal
+          title={t('Restore this record?')}
+          onClose={close}
+          footer={(
+            <>
+              <button className="btn" onClick={close}>{t('Cancel')}</button>
+              <button className={'btn ' + (changedSince ? 'btn-danger' : 'btn-primary')} onClick={go} disabled={busy}>
+                {busy && <span className="spinner" />}{changedSince ? t('Restore anyway') : t('Restore')}
+              </button>
+            </>
+          )}
+        >
+          <div className="stack" style={{ '--gap': '12px' }}>
+            <p className="small" style={{ margin: 0 }}>
+              {entry.action === 'archive'
+                ? t('The plant comes back out of the archive.')
+                : t('The values on the left are put back, as they were before this change.')}
+            </p>
+            <Diff oldValues={entry.old_values} newValues={entry.new_values} roles={boot?.roles || []} />
+            {changedSince && (
+              <Notice kind="warn" title={t('Changed again since')}>
+                {t('Someone has edited this record after this entry. Restoring puts back the earlier values and undoes those later changes too.')}
+              </Notice>
+            )}
+            <div className="tiny mute">{t('The restore is recorded in the audit trail, so it can be undone in turn.')}</div>
+          </div>
+        </Modal>
+      )}
+    </>
+  );
+}
+
 function exportAuditCsv(rows) {
   const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
   const head = ['ID', 'Actor', 'Action', 'Entity Type', 'Entity ID', 'Old Values', 'New Values', 'Timestamp'];
@@ -123,9 +189,8 @@ export default function Audit() {
   const [entity, setEntity] = useState('');
   const [action, setAction] = useState('');
 
-  useEffect(() => {
-    api.audit({ entity_type: entity, action }).then(setData).catch(() => setData({ results: [] }));
-  }, [entity, action]);
+  const load = () => api.audit({ entity_type: entity, action }).then(setData).catch(() => setData({ results: [] }));
+  useEffect(() => { load(); }, [entity, action]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!data) return <LoadingBlock label={t('Loading the audit trail')} />;
 
@@ -150,6 +215,7 @@ export default function Audit() {
               <li>{t('Check who approved a plant before it went public.')}</li>
               <li>{t('See what a field said before someone edited it, so a mistake can be put back.')}</li>
               <li>{t("Find out who changed a staff member's role or a system setting.")}</li>
+              <li>{t('Restore a record to how it was before an edit, an archive or a deactivation.')}</li>
             </ul>
             <div className="small mute" style={{ marginTop: 8 }}>
               {t('Entries are added automatically. Nobody can edit or delete them.')}
@@ -193,10 +259,16 @@ export default function Audit() {
                       </span>
                     </td>
                     <td className="small"><RecordCell entry={r} /></td>
-                    <td style={{ maxWidth: 380 }}><Diff oldValues={r.old_values} newValues={r.new_values} roles={boot?.roles || []} /></td>
+                    <td style={{ maxWidth: 380 }}>
+                      <Diff oldValues={r.old_values} newValues={r.new_values} roles={boot?.roles || []} />
+                      {r.new_values?.restored_from && (
+                        <div className="tiny faint" style={{ marginTop: 3 }}>{t('Undoes entry #{id}', { id: r.new_values.restored_from })}</div>
+                      )}
+                    </td>
                     <td className="small nowrap">
                       {relativeTime(r.created_at)}
                       <div className="tiny faint">{formatDateTime(r.created_at)}</div>
+                      <div style={{ marginTop: 6 }}><RestoreButton entry={r} onDone={load} /></div>
                     </td>
                   </tr>
                 ))}

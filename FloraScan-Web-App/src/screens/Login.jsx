@@ -30,6 +30,12 @@ import { plantPhoto, realPhoto } from '../lib/photo.js';
  */
 function describe(err) {
   const b = err.body || {};
+  if (err.status === 423 && b.scope === 'ip') {
+    return t('Too many failed sign-ins from this network. Sign-in from here is paused for {minutes} min.', { minutes: b.minutes ?? 15 });
+  }
+  if (err.status === 423 && b.scope === 'device') {
+    return t('Too many failed sign-ins from this device. Sign-in from it is paused for {minutes} min.', { minutes: b.minutes ?? 15 });
+  }
   if (err.status === 423) {
     return t('Too many wrong passwords. This account is locked for {minutes} min. Try again later, or ask an administrator to unlock it.', { minutes: b.minutes ?? 15 });
   }
