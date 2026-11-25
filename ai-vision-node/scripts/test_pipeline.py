@@ -124,9 +124,15 @@ t = touch_scene([0.95], green=True)
 ok("ALERT" in t, f"touch model sure + hand among green leaves: {t}")
 t = touch_scene([0.95], green=False, leaf=0.05)
 ok("ALERT" in t, f"bare winter branches (no green) that move under the hand: {t}")
+need = load_config()["touch_frames"]
 t, old = touch_scene([0.9, 0.9, 0.1], green=True), touch_scene([0.9, 0.9, 0.1], green=True, window=0)
 ok("ALERT" in t and "ALERT" not in old,
-   f"one weak frame in three: 4 of last 6 -> {'ALERT' if 'ALERT' in t else 'none'}, old 4-in-a-row -> "
+   f"one weak frame in three: {need} of last 6 -> {'ALERT' if 'ALERT' in t else 'none'}, old {need}-in-a-row -> "
    f"{'ALERT' if 'ALERT' in old else 'none'}")
+# the debounce boundary: exactly `need` touch frames in every 6 alert; one fewer never does
+t = touch_scene([0.9] * need + [0.1] * (6 - need), green=True)
+ok("ALERT" in t, f"{need} touch frames in every 6 -> {'ALERT' if 'ALERT' in t else 'none'}")
+t = touch_scene([0.9] * (need - 1) + [0.1] * (7 - need), green=True)
+ok("ALERT" not in t, f"{need - 1} touch frames in every 6 -> {'ALERT' if 'ALERT' in t else 'none'} (stays a WARNING)")
 
 sys.exit(1 if fails else 0)

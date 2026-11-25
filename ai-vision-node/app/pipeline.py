@@ -58,7 +58,8 @@ DEFAULTS = {
     "warn_seconds": 1.0,        # how long someone must be in the buffer before WARNING
     "touch_conf": 0.6,          # touch classifier probability that counts as a touch frame
     "touch_assist": 0.2,        # ... or this much, when the wrist is on the plant and its leaves move
-    "touch_frames": 4,          # debounce: touch frames needed before ALERT ...
+    "touch_frames": 3,          # debounce: touch frames needed before ALERT (4 alerted ~5 s late on a
+                                # flat hand brushing dark leaves in the team's 25 Nov clips; 3 caught it in 0.5 s) ...
     "touch_window": 6,          # ... among the last this many model frames (0 = in a row, the old rule)
     "plant_green_min": 0.15,    # plant evidence: share of green pixels (2G - R - B) in the hand crop
     "require_zone": True,       # Live does not start until a plant zone is drawn

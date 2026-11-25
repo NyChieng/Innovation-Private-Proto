@@ -5,7 +5,7 @@ warns when a person gets too close or touches it.
 
 - **SAFE**: a person is in view, away from the plant.
 - **WARNING**: a person stays inside the buffer zone around the plant for 1 second, or puts a hand inside it.
-- **ALERT**: a hand is touching the plant in 4 of the last 6 frames, and the plant backs it up
+- **ALERT**: a hand is touching the plant in 3 of the last 6 frames, and the plant backs it up
   (its leaves move, or the hand is among green plant pixels). A snapshot is saved.
 - Animals are detected and labelled, but never trigger an alert (they live in the forest).
 
@@ -68,7 +68,7 @@ flowchart TD
     WAIT -- no --> SAFE
     WAIT -- yes --> WARN["🟠 WARNING"]
     HAND -- yes --> TOUCH["5. Touch model<br/>looks at a crop of the hand<br/>→ touch probability"]
-    TOUCH --> T{"Touching in<br/>4 of the last 6 frames?"}
+    TOUCH --> T{"Touching in<br/>3 of the last 6 frames?"}
     T -- no --> WARN
     T -- yes --> ALERT["🔴 ALERT<br/>+ snapshot saved"]
 
@@ -95,7 +95,7 @@ Every person has their own stage. The stage shown at the top of the screen is th
 ```mermaid
 flowchart LR
     S["🟢 SAFE"] -- "in the buffer 1 s,<br/>or hand in buffer" --> W["🟠 WARNING"]
-    W -- "touching in<br/>4 of the last 6 frames" --> A["🔴 ALERT"]
+    W -- "touching in<br/>3 of the last 6 frames" --> A["🔴 ALERT"]
     A -- "stops touching" --> W
     W -- "walks away" --> S
 
@@ -121,8 +121,11 @@ Walking away from ALERT goes straight back to SAFE.
 touch model alone can never alert: a hand holding a camera in front of a coat stays a WARNING. Either
 one is enough, because a bare winter tree has no green but its branches move when someone prunes it.
 
-**Debounce:** ALERT needs **4** touch frames among the last **6** model frames (`touch_frames`,
-`touch_window`; `touch_window: 0` = 4 in a row, the old rule). One weak frame no longer resets the count.
+**Debounce:** ALERT needs **3** touch frames among the last **6** model frames (`touch_frames`,
+`touch_window`; `touch_window: 0` = in a row, the old rule). One weak frame no longer resets the count.
+It was 4: on the team's own 9 recorded clips (25 Nov) both settings got all 9 right, but 4 alerted about
+5 s late on a flat hand brushing dark leaves, and 3 caught it within 0.5 s, with no new false alarm.
+Raise **Touch frames before ALERT** in the app for a stricter camera.
 
 Leaf movement is measured against a baseline learned while nobody is near, so wind and changing
 light don't count as a touch.
