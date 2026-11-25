@@ -139,10 +139,14 @@ test('an administrator cannot touch a super admin account or hand out the role',
   assert.equal((await call('/users/5', { role: 1, method: 'PATCH', body: { is_active: false } })).status, 403);
   assert.equal((await call('/users/5', { role: 1, method: 'PATCH', body: { role_id: 1 } })).status, 403);
   assert.equal((await call('/users/5/reset-password', { role: 1 })).status, 403);
-  assert.equal((await call('/users/5/unlock', { role: 1 })).status, 403);
   assert.equal((await call('/users/2', { role: 1, method: 'PATCH', body: { role_id: 5 } })).status, 403);
   assert.equal(state.users[4].is_active, 1);
   assert.equal(state.users[1].role_id, 2);
+});
+test('any administrator can unlock a super admin locked by wrong passwords', async () => {
+  state.users[4].locked_until = new Date(Date.now() + 15 * 60000).toISOString();
+  assert.equal((await call('/users/5/unlock', { role: 1 })).status, 200);
+  assert.equal(state.users[4].locked_until, null);
 });
 test('a super admin holds every permission and can manage administrators, but not demote itself', async () => {
   assert.equal((await call('/plants/10/approve', { role: 5 })).status, 200);

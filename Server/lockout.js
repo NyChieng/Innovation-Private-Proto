@@ -61,7 +61,14 @@ function keysFor(req, p) {
   const s = subjectsOf(req);
   const keys = [];
   if (p.ip && s.ip) keys.push({ scope: 'ip', key: hash('ip:' + s.ip), label: s.ip });
-  if (p.device && s.device) keys.push({ scope: 'device', key: hash('device:' + s.device), label: deviceLabel(s.ua) });
+  if (p.device) {
+    // The app always sends an id. A request without one - or with a malformed
+    // one - is a script, and leaving it uncounted let it skip the device lock
+    // altogether. All of them share one "no device id" row instead.
+    keys.push(s.device
+      ? { scope: 'device', key: hash('device:' + s.device), label: deviceLabel(s.ua) }
+      : { scope: 'device', key: hash('device:none'), label: 'No device id (not the FloraScan app)' });
+  }
   return keys;
 }
 
@@ -99,12 +106,13 @@ export async function blocked(req) {
 /**
  * Counts one wrong guess against this request's IP and device (whichever are
  * switched on). A count older than the lock window starts again from one.
- * Returns { left, lock } - guesses left before the nearest lock, and the
- * 423 body when this guess was the one that locked something.
+ * Returns { left, scope, lock } - guesses left before the nearest lock and
+ * which lock that is, and the 423 body when this guess locked something.
  */
 export async function recordSubjectFailure(req, what, userId = null) {
   const p = policy();
   let left = Infinity;
+  let scope = null;
   let lock = null;
   const staleBefore = new Date(Date.now() - p.minutes * 60000).toISOString();
   for (const k of keysFor(req, p)) {
@@ -127,11 +135,12 @@ export async function recordSubjectFailure(req, what, userId = null) {
       activity({ user_id: userId, action: `${k.scope}_locked`, detail: `${k.scope === 'ip' ? 'Network' : 'Device'} ${k.label} locked for ${p.minutes} minutes after ${p.attempts} wrong attempts (${what})` });
       audit({ user_id: userId, action: `${k.scope}_locked`, entity_type: 'login_lockouts', entity_id: row.id, new_values: { label: k.label, locked_until: until } });
       lock ||= { error: MESSAGES[k.scope], scope: k.scope, locked_until: until, minutes: p.minutes };
-    } else {
-      left = Math.min(left, p.attempts - failed);
+    } else if (p.attempts - failed < left) {
+      left = p.attempts - failed;
+      scope = k.scope;
     }
   }
-  return { left, lock };
+  return { left, scope, lock };
 }
 
 /** Active IP and device locks, for the administrators' list. */

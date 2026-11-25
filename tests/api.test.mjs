@@ -1598,6 +1598,43 @@ section('33. Locking an account after five wrong passwords');
   check('the lock reached the audit trail',
     audits.some((a) => a.action === 'account_locked' && a.entity_id === id));
 
+  // The warning names the lock that is nearest.
+  eq('a wrong password says the account lock is the nearest', (await wrong()).body.attempts_scope, 'account');
+
+  // A lock stops new sign-ins but does not throw out a session already open -
+  // otherwise anyone who knows an email address could sign its owner out at will.
+  await post(`/users/${id}/unlock`, {}, adminT);
+  const open = (await post('/auth/login', { email, password: passwordFor(email) })).body.token;
+  for (let i = 0; i < 5; i++) await wrong();
+  eq('locking the account...', (await wrong()).status, 423);
+  eq('...leaves a session already open signed in', (await get('/auth/me', open)).body?.user?.email, email);
+
+  // Switching account locking off releases a locked account, as switching off
+  // IP or device locking already did for theirs.
+  await patch('/settings/lockout_account', { value: false }, adminT);
+  eq('with account locking off, a locked account can sign in', (await post('/auth/login', { email, password: passwordFor(email) })).status, 200);
+  await patch('/settings/lockout_account', { value: true }, adminT);
+  await post(`/users/${id}/unlock`, {}, adminT);
+
+  // Device locking counts a client that sends no device id too (this suite
+  // sends none); before, such a script was never counted at all.
+  await patch('/settings/lockout_device', { value: true }, adminT);
+  const stranger = () => post('/auth/login', { email: `nobody.${Date.now()}@example.com`, password: 'x' });
+  await stranger();
+  await stranger();
+  const nearer = await wrong();
+  check('the warning names the device lock when it is nearer',
+    nearer.body.attempts_scope === 'device' && nearer.body.attempts_left === 2, JSON.stringify(nearer.body));
+  await stranger();
+  const paused = await stranger();
+  check('a client with no device id is locked as a device', paused.status === 423 && paused.body.scope === 'device', JSON.stringify(paused.body));
+  // Lift it, or every later sign-in from this suite would be refused.
+  for (const l of (await get('/security/lockouts', adminT)).body.results.filter((r) => r.scope === 'device')) {
+    await call('DELETE', `/security/lockouts/${l.id}`, { token: adminT });
+  }
+  await patch('/settings/lockout_device', { value: false }, adminT);
+  eq('...and once lifted, sign-in works again', (await post('/auth/login', { email, password: passwordFor(email) })).status, 200);
+
   await patch(`/users/${id}`, { is_active: false }, adminT);
 }
 

@@ -510,10 +510,10 @@ CREATE TABLE login_lockouts (
 -- ---------------------------------------------------------------------
 -- One more role, holding every permission: it can open, check and change
 -- anything, including the audit trail. Ordinary administrators cannot
--- edit, reset, unlock, approve a reset for or deactivate a super admin, so
+-- edit, reset, approve a reset for or deactivate a super admin, so
 -- a breached administrator account cannot lock the super admin out. Only a
 -- super admin - or "npm run superadmin" on the server itself - can give
--- this role.
+-- this role. Any administrator may still unlock one after wrong passwords.
 --
 -- Safe to re-run: the grants are rebuilt from the full permission list, so
 -- a permission added later reaches the super admin on the next db:setup.
@@ -529,3 +529,15 @@ DELETE rp FROM role_permissions rp
 
 INSERT INTO role_permissions (role_id, permission_id)
 SELECT r.id, p.id FROM roles r JOIN permissions p WHERE r.name = 'superadmin';
+
+
+-- ---------------------------------------------------------------------
+-- 18. Account lockout count runs out like the IP and device counts
+-- ---------------------------------------------------------------------
+-- failed_login_count used to count for ever: a typo a week added up until
+-- the account locked months later. When the last wrong guess is older than
+-- the lock length (lockout_minutes), the next one counts from 1 again -
+-- the same window login_lockouts uses for IP addresses and devices.
+
+ALTER TABLE users
+  ADD COLUMN last_failed_login_at DATETIME NULL AFTER failed_login_count;

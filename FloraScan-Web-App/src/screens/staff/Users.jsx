@@ -186,11 +186,11 @@ function UserDrawer({ user, roles, onClose, onDone, onIssued }) {
 
         {shielded && (
           <Notice kind="info" title={t('Super admin account')}>
-            {t('Only a super admin can reset, unlock, change or deactivate this account. That way a breached administrator account cannot lock the super admin out.')}
+            {t('Only a super admin can reset, change or deactivate this account. That way a breached administrator account cannot lock the super admin out. You can still unlock it after too many wrong passwords.')}
           </Notice>
         )}
 
-        {user.locked_until && canManage && (
+        {user.locked_until && can('user.manage') && (
           <Notice kind="warn" title={t('Locked after too many wrong passwords')}>
             {t('Sign in is refused until {time}. Unlock it now if you know this was the account holder.', { time: formatDateTime(user.locked_until) })}
             <div style={{ marginTop: 10 }}>

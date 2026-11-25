@@ -39,6 +39,14 @@ function describe(err) {
   if (err.status === 423) {
     return t('Too many wrong passwords. This account is locked for {minutes} min. Try again later, or ask an administrator to unlock it.', { minutes: b.minutes ?? 15 });
   }
+  // attempts_scope says which lock is nearest - the account, this network or
+  // this device - so the warning names the one that will actually close.
+  if (err.status === 401 && b.attempts_left && b.attempts_scope === 'ip') {
+    return t('Incorrect password. {count} attempts left before sign-in from this network is paused.', { count: b.attempts_left });
+  }
+  if (err.status === 401 && b.attempts_left && b.attempts_scope === 'device') {
+    return t('Incorrect password. {count} attempts left before sign-in from this device is paused.', { count: b.attempts_left });
+  }
   if (err.status === 401 && b.attempts_left === 1) {
     return t('Incorrect password. 1 attempt left before the account is locked.');
   }

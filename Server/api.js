@@ -118,9 +118,16 @@ const accountLockBody = (until) => ({
 async function lockedOut(req, user) {
   const subject = await lockout.blocked(req);
   if (subject) return subject;
-  if (user && isLocked(user)) return accountLockBody(user.locked_until);
+  if (accountLocked(user)) return accountLockBody(user.locked_until);
   return null;
 }
+
+/*
+ * An account lock only counts while account locking is switched on - the same
+ * as IP and device locks, which lockout.blocked() checks only for the scopes
+ * in force. Switching it off used to leave locked accounts locked.
+ */
+const accountLocked = (user) => lockout.policy().account && isLocked(user);
 
 /**
  * Counts one wrong guess - a password, a recovery code, an authenticator code -
@@ -133,20 +140,39 @@ async function recordFailedAttempt(req, user, what) {
   const p = lockout.policy();
   const subjects = await lockout.recordSubjectFailure(req, what, user?.id ?? null);
   let left = subjects.left;
+  let scope = subjects.scope;
   let lock = subjects.lock;
 
   if (user && p.account) {
-    // Incremented in SQL, so two attempts racing each other both count.
-    await q('UPDATE users SET failed_login_count = failed_login_count + 1 WHERE id = ?', [user.id]);
+    // Incremented in SQL, so two attempts racing each other both count. A
+    // count whose last wrong guess is older than the lock length starts again
+    // from 1, as IP and device counts do - it used to grow for ever, so a typo
+    // a week locked the account months later. failed_login_count is assigned
+    // first, so it reads the previous last_failed_login_at.
+    const now = nowIso();
+    const staleBefore = new Date(Date.now() - p.minutes * 60000).toISOString();
+    await q(
+      `UPDATE users
+          SET failed_login_count = IF(last_failed_login_at IS NULL OR last_failed_login_at < ?, 1, failed_login_count + 1),
+              last_failed_login_at = ?
+        WHERE id = ?`,
+      [staleBefore, now, user.id],
+    );
     const failed = Number((await one('SELECT failed_login_count FROM users WHERE id = ?', [user.id])).failed_login_count);
     if (failed < p.attempts) {
       activity({ user_id: user.id, action: 'login_failed', detail: `Wrong ${what} (${failed} of ${p.attempts})` });
-      left = Math.min(left, p.attempts - failed);
+      if (p.attempts - failed <= left) {
+        left = p.attempts - failed;
+        scope = 'account';
+      }
     } else {
       const until = new Date(Date.now() + p.minutes * 60000).toISOString();
       await update('users', user.id, { failed_login_count: 0, locked_until: until });
-      // Any session already open stays a risk while someone guesses at the account.
-      await revokeAllFor(user.id);
+      // Sessions already open are left alone. A lock stops new sign-ins; it
+      // used to sign the account out everywhere too, which let anyone who
+      // knew an email address throw its owner out every few minutes by
+      // typing wrong passwords. A suspected takeover is what Reset password
+      // and Deactivate are for - both end every session.
       activity({ user_id: user.id, action: 'account_locked', detail: `Locked for ${p.minutes} minutes after ${p.attempts} wrong attempts` });
       // Whoever was guessing is unknown, so the entry is filed under the account.
       audit({ user_id: user.id, action: 'account_locked', entity_type: 'users', entity_id: user.id, new_values: { locked_until: until } });
@@ -155,7 +181,7 @@ async function recordFailedAttempt(req, user, what) {
   } else if (user) {
     activity({ user_id: user.id, action: 'login_failed', detail: `Wrong ${what}` });
   }
-  return { lock, left: Number.isFinite(left) ? left : null };
+  return Number.isFinite(left) ? { lock, left, scope } : { lock, left: null, scope: null };
 }
 
 /* Password rules, shared by changing a password and recovering one. */
@@ -352,7 +378,7 @@ function shapeUser(u) {
       ? u.reset_requested_at : null,
     last_login_at: u.last_login_at, created_at: u.created_at,
     // Only while the lock is still running; an expired lock is no lock.
-    locked_until: isLocked(u) ? u.locked_until : null,
+    locked_until: accountLocked(u) ? u.locked_until : null,
     permissions: permissionsForRole(u.role_id),
   };
 }
@@ -885,14 +911,14 @@ export function createApi() {
     }
     // A locked account is refused before the password is even checked, so
     // guessing on stops being worth anything until the lock runs out.
-    if (isLocked(user)) {
+    if (accountLocked(user)) {
       activity({ user_id: user.id, action: 'login_failed', detail: 'Account locked' });
       return res.status(423).json(accountLockBody(user.locked_until));
     }
     if (!await verifyPassword(password, user.password_hash)) {
-      const { lock, left } = await recordFailedAttempt(req, user, 'password');
+      const { lock, left, scope } = await recordFailedAttempt(req, user, 'password');
       if (lock) return res.status(423).json(lock);
-      return res.status(401).json({ error: 'Incorrect password.', attempts_left: left });
+      return res.status(401).json({ error: 'Incorrect password.', attempts_left: left, attempts_scope: scope });
     }
     if (!user.is_active) {
       activity({ user_id: user.id, action: 'login_failed', detail: 'Account deactivated' });
@@ -930,12 +956,12 @@ export function createApi() {
     const step = secret ? totp.verifyCode(secret, code, user.totp_last_step) : null;
     if (step === null) {
       // Shares the lockout with passwords.
-      const { lock, left } = await recordFailedAttempt(req, user, 'authenticator code');
+      const { lock, left, scope } = await recordFailedAttempt(req, user, 'authenticator code');
       if (lock) {
         tickets.delete(ticket);
         return res.status(423).json(lock);
       }
-      return res.status(400).json({ error: 'That code is not right.', attempts_left: left });
+      return res.status(400).json({ error: 'That code is not right.', attempts_left: left, attempts_scope: scope });
     }
     tickets.delete(ticket);
     const after = await update('users', user.id, {
@@ -1053,7 +1079,7 @@ export function createApi() {
       if (lock) return res.status(423).json(lock);
       return res.status(400).json({ error: NO_MATCH });
     }
-    if (isLocked(user)) return res.status(423).json(accountLockBody(user.locked_until));
+    if (accountLocked(user)) return res.status(423).json(accountLockBody(user.locked_until));
     if (!recoveryCodeMatches(code, user.recovery_code_hash)) {
       const { lock } = await recordFailedAttempt(req, user, 'recovery code');
       if (lock) return res.status(423).json(lock);
@@ -1200,7 +1226,7 @@ export function createApi() {
       if (lock) return res.status(423).json(lock);
       return res.status(400).json({ error: NO_MATCH });
     }
-    if (isLocked(user)) return res.status(423).json(accountLockBody(user.locked_until));
+    if (accountLocked(user)) return res.status(423).json(accountLockBody(user.locked_until));
     // Checked before the code is spent, so a weak password does not waste it.
     const problem = newPasswordProblem(next, null);
     if (problem) return res.status(400).json({ error: problem });
@@ -1371,7 +1397,7 @@ export function createApi() {
       return res.status(403).json({ error: 'This account has been deactivated by an administrator.' });
     }
     // The lock is about the account, not the method: a stolen phone does not get around it.
-    if (isLocked(user)) {
+    if (accountLocked(user)) {
       return res.status(423).json({ error: LOCKED_MESSAGE, locked_until: user.locked_until, minutes: minutesLeft(user) });
     }
     let counter;
@@ -2406,11 +2432,15 @@ export function createApi() {
     res.json({ ok: true });
   }));
 
-  /** Lift a wrong-password lock before it runs out on its own. */
+  /*
+   * Lift a wrong-password lock before it runs out on its own. Any
+   * administrator may unlock a super admin too: lifting a lock only lets the
+   * real owner sign in again, and with only one super admin an attacker
+   * could otherwise keep it locked out by guessing every few minutes.
+   */
   api.post('/users/:id/unlock', need('user.manage'), route(async (req, res) => {
     const u = await byId('users', req.params.id);
     if (!u) return res.status(404).json({ error: 'Not found' });
-    if (superAdminBlock(req.user, u)) return res.status(403).json({ error: SUPER_ONLY });
     const after = await update('users', u.id, { failed_login_count: 0, locked_until: null, updated_at: nowIso() });
     audit({ user_id: req.user.id, action: 'account_unlocked', entity_type: 'users', entity_id: u.id, old_values: { locked_until: u.locked_until }, new_values: { locked_until: null } });
     activity({ user_id: req.user.id, action: 'account_unlocked', detail: 'Unlocked ' + u.email });

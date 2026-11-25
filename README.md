@@ -71,8 +71,9 @@ is the part of the email before `@`, followed by `123`.
 | Administrator | `nengyichieng@gmail.com` | Manage staff and audit logs |
 | Super Admin | `superadmin@gmail.com` | Open everything, including administrator accounts |
 
-Only a super admin can reset, unlock, change or deactivate a super admin, or
-give someone the role, so a breached administrator cannot lock it out. To
+Only a super admin can reset, change or deactivate a super admin, or give
+someone the role, so a breached administrator cannot lock it out. Any
+administrator can still unlock one after too many wrong passwords. To
 create or promote one on an existing database, run this on the server:
 `npm run superadmin -- <email> ["Full Name"]`. Run `npm run db:setup` first
 if the database predates the role.
