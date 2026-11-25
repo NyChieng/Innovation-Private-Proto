@@ -247,7 +247,7 @@ ALTER TABLE sensor_devices
 DELETE FROM sensor_alerts WHERE alert_type = 'light';
 
 ALTER TABLE sensor_alerts
-  MODIFY COLUMN alert_type ENUM('soil_moisture','temperature','humidity','offline') NOT NULL;
+  MODIFY COLUMN alert_type ENUM('soil_moisture','temperature','humidity','distance','sound','offline') NOT NULL;
 
 
 -- ---------------------------------------------------------------------
@@ -463,3 +463,24 @@ CREATE TABLE camera_alerts (
   CONSTRAINT fk_ca_plant  FOREIGN KEY (plant_id)  REFERENCES plants(id) ON DELETE SET NULL,
   CONSTRAINT fk_ca_user   FOREIGN KEY (resolved_by) REFERENCES users(id) ON DELETE SET NULL
 );
+
+
+-- ---------------------------------------------------------------------
+-- 16. Distance and sound alerts
+-- ---------------------------------------------------------------------
+-- Something closer than distance_min to the plant (HC-SR04), or a sound
+-- peak above sound_max (KY-037, % of its calibrated swing - not decibels),
+-- opens an alert like soil, temperature and humidity. The ENUM above (end
+-- of section 8) already lists the two new alert types.
+
+ALTER TABLE sensor_devices
+  ADD COLUMN distance_min DECIMAL(6,1) NULL AFTER humidity_max,
+  ADD COLUMN distance_max DECIMAL(6,1) NULL AFTER distance_min,
+  ADD COLUMN sound_min    DECIMAL(5,2) NULL AFTER distance_max,
+  ADD COLUMN sound_max    DECIMAL(5,2) NULL AFTER sound_min;
+
+-- Default limits, set once: re-running setup leaves edited limits alone.
+UPDATE sensor_devices
+   SET distance_min = 10, distance_max = 500, sound_min = 0, sound_max = 60
+ WHERE distance_min IS NULL AND distance_max IS NULL
+   AND sound_min IS NULL AND sound_max IS NULL;

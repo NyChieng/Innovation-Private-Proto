@@ -640,7 +640,7 @@ CREATE TABLE sensor_alerts (
   device_id        INT UNSIGNED    NOT NULL,
   plant_id         INT UNSIGNED    NULL,
   reading_id       BIGINT UNSIGNED NULL,     -- reading that crossed the limit; NULL for 'offline'
-  alert_type       ENUM('soil_moisture','temperature','humidity','offline')
+  alert_type       ENUM('soil_moisture','temperature','humidity','distance','sound','offline')
                                    NOT NULL,
   limit_crossed    ENUM('min','max') NULL,   -- NULL for 'offline'
   reading_value    DECIMAL(9,2)    NULL,

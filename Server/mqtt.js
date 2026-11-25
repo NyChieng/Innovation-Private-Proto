@@ -112,7 +112,9 @@ async function handleMessage(topic, message) {
     `SELECT id, device_code, device_key_hash, plant_id,
             soil_moisture_min, soil_moisture_max,
             temperature_min, temperature_max,
-            humidity_min, humidity_max
+            humidity_min, humidity_max,
+            distance_min, distance_max,
+            sound_min, sound_max
      FROM sensor_devices
      WHERE device_code = ?
        AND is_active = 1
@@ -212,6 +214,11 @@ const LIMIT_CHECKS = [
   { type: 'soil_moisture', field: 'soil_moisture_pct', min: 'soil_moisture_min', max: 'soil_moisture_max', label: 'Soil moisture', unit: ' %' },
   { type: 'temperature', field: 'temperature_c', min: 'temperature_min', max: 'temperature_max', label: 'Temperature', unit: ' °C' },
   { type: 'humidity', field: 'humidity_pct', min: 'humidity_min', max: 'humidity_max', label: 'Humidity', unit: ' %' },
+  // Something too close to the plant (HC-SR04), or a loud noise next to it
+  // (KY-037: % of the mic's calibrated swing, not decibels). distance_cm is
+  // null when no echo came back, so an empty space never raises an alert.
+  { type: 'distance', field: 'distance_cm', min: 'distance_min', max: 'distance_max', label: 'Distance', unit: ' cm' },
+  { type: 'sound', field: 'sound_peak_pct', min: 'sound_min', max: 'sound_max', label: 'Sound (peak)', unit: ' %' },
 ];
 
 // mysql2 returns DECIMAL columns as strings, so limits are converted first.

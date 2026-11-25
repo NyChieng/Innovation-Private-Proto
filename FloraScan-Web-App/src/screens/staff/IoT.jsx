@@ -22,14 +22,14 @@ const METRICS = [
   { key: 'soil_moisture_pct', limit: 'soil_moisture', label: msg('Soil moisture'), unit: '%', decimals: 1 },
   { key: 'temperature_c', limit: 'temperature', label: msg('Temperature'), unit: '°C', decimals: 1 },
   { key: 'humidity_pct', limit: 'humidity', label: msg('Humidity'), unit: '%', decimals: 1 },
-  // The rest of the kit, and the node's own Wi-Fi signal. No safe range is
-  // set for these, so they never raise an alert; they give context (rain
-  // explains a soil reading; motion, noise and distance show visitors near
-  // the plant) and help diagnose a node that goes quiet.
+  // The rest of the kit, and the node's own Wi-Fi signal. Sound and distance
+  // have safe ranges (a loud noise or something too close to the plant raises
+  // an alert); the others give context (rain explains a soil reading, motion
+  // shows visitors near the plant) and help diagnose a node that goes quiet.
   { key: 'rain_pct', limit: null, label: msg('Rain'), unit: '%', decimals: 1 },
   { key: 'motion_events', limit: null, label: msg('Motion'), unit: msg('events'), decimals: 0, nonNegative: true },
-  { key: 'sound_peak_pct', limit: null, label: msg('Sound (peak)'), unit: '%', decimals: 1 },
-  { key: 'distance_cm', limit: null, label: msg('Distance'), unit: 'cm', decimals: 1, nonNegative: true },
+  { key: 'sound_peak_pct', limit: 'sound', label: msg('Sound (peak)'), unit: '%', decimals: 1 },
+  { key: 'distance_cm', limit: 'distance', label: msg('Distance'), unit: 'cm', decimals: 1, nonNegative: true },
   { key: 'wifi_rssi_dbm', limit: null, label: msg('Wi-Fi signal'), unit: 'dBm', decimals: 0 },
 ];
 
@@ -40,6 +40,8 @@ const ALERT_METRIC = {
   soil_moisture: METRICS[0],
   temperature: METRICS[1],
   humidity: METRICS[2],
+  sound: METRICS.find((m) => m.key === 'sound_peak_pct'),
+  distance: METRICS.find((m) => m.key === 'distance_cm'),
 };
 
 const RANGES = [
