@@ -117,6 +117,14 @@ footer { display: none !important; }
 .fg-banner b { letter-spacing:.04em; }
 .fg-banner:empty { display:none; }
 
+/* live stats: a quiet two-column list, as the web app's detail rows (the table has no header) */
+#fg-status table { border-collapse:collapse; width:100%; border:none !important; box-shadow:none !important; }
+#fg-status thead { display:none; }
+#fg-status td { border:none !important; border-bottom:1px solid var(--border-color-primary) !important;
+                padding:7px 10px; background:transparent !important; }
+#fg-status tr:last-child td { border-bottom:none !important; }
+#fg-status td:first-child { color:var(--fg-soft); width:46%; }
+
 /* tabs and buttons in the FloraScan accent */
 button[role="tab"][aria-selected="true"] { color: var(--color-accent) !important; }
 button[role="tab"][aria-selected="true"]::after { background: var(--color-accent) !important; }

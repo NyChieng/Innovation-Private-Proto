@@ -318,12 +318,17 @@ def build():
     m = model_info()
     if not m:
         raise SystemExit("No exported models: run  python scripts/export_models.py")
+    models = (f"Detector {m['det']['weights']} · Pose {m['pose']['weights']} · "
+              f"Touch {m['touch']['weights'] if m.get('touch') else 'none yet (wrist + leaf motion rule)'}")
+
+    def header():  # re-read after Save zone / Clear saved zone, so the zone chip is never stale
+        c = load_config()
+        alerts = alerts_summary(c).replace("`", "")
+        return theme.header_html(alerts, alerts.startswith("on"),
+                                 c["require_zone"] and len(c.get("zone") or []) < 3, models)
+
     with gr.Blocks(title="FloraGuard") as demo:
-        alerts = alerts_summary(cfg).replace("`", "")
-        gr.HTML(theme.header_html(
-            alerts, alerts.startswith("on"), cfg["require_zone"] and len(cfg.get("zone") or []) < 3,
-            f"Detector {m['det']['weights']} · Pose {m['pose']['weights']} · "
-            f"Touch {m['touch']['weights'] if m.get('touch') else 'none yet (wrist + leaf motion rule)'}"))
+        hdr = gr.HTML(header())
         with gr.Row():
             kind = gr.Radio(["Webcam", "Video file"], value="Webcam", label="Source")
             cam = gr.Number(value=0, precision=0, label="Webcam index")
@@ -340,7 +345,7 @@ def build():
                             stop = gr.Button("Stop", variant="stop")
                             clear = gr.Button("Clear alerts")
                     with gr.Column(scale=2):
-                        status = gr.Markdown("Press **Start**.")
+                        status = gr.Markdown("Press **Start**.", elem_id="fg-status")
                         log = gr.Dataframe(headers=["Time", "Stage", "ID", "Detail"], label="Warnings and alerts",
                                            interactive=False, wrap=True, max_height=260)
                         gallery = gr.Gallery(label="Snapshots", columns=3, height=220)
@@ -392,8 +397,9 @@ def build():
         zone_img.select(add_point, [frame_state, pts_state], [pts_state, zone_img])
         undo.click(undo_point, [frame_state, pts_state], [pts_state, zone_img])
         clr.click(clear_points, [frame_state], [pts_state, zone_img])
-        save.click(save_zone, [frame_state, pts_state], [zone_msg, zone_saved])
-        clr_saved.click(clear_saved_zone, [frame_state], [pts_state, zone_img, zone_msg, zone_saved])
+        save.click(save_zone, [frame_state, pts_state], [zone_msg, zone_saved]).success(header, None, hdr)
+        clr_saved.click(clear_saved_zone, [frame_state], [pts_state, zone_img, zone_msg, zone_saved]).then(header, None, hdr)
+        demo.load(header, None, hdr)  # a page opened later shows the zone and alert state of now
     return demo
 
 
