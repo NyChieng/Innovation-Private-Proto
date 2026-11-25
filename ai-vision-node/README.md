@@ -250,7 +250,10 @@ Settings you can change in the app:
 | **Record touch-model training data** | Saves hand crops to `data/touch_user/` while you demo, to retrain the touch model for your own camera |
 
 The plant zone and settings you save are stored in `app/config.json` (not committed, since every
-camera is different). Alert snapshots go to `events/`.
+camera is different). It holds the zone and only the settings that differ from the defaults in
+`app/pipeline.py`, so a camera picks up a new default (such as `touch_frames`) without being set up
+again. A `config.json` saved before 26 Nov 2026 lists every setting: delete the lines you never
+changed, or just `touch_frames`, to get the current defaults. Alert snapshots go to `events/`.
 
 ### Sending alerts to FloraScan
 

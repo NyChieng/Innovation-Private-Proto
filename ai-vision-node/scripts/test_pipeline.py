@@ -135,4 +135,22 @@ ok("ALERT" in t, f"{need} touch frames in every 6 -> {'ALERT' if 'ALERT' in t el
 t = touch_scene([0.9] * (need - 1) + [0.1] * (7 - need), green=True)
 ok("ALERT" not in t, f"{need - 1} touch frames in every 6 -> {'ALERT' if 'ALERT' in t else 'none'} (stays a WARNING)")
 
+# 11. saving the zone keeps the defaults live: only the zone and changed settings are written
+import pipeline  # noqa: E402
+real_config = pipeline.CONFIG
+pipeline.CONFIG = Path(tempfile.mkdtemp()) / "config.json"
+try:
+    c = load_config()
+    c.update(zone=[[0.1, 0.1], [0.5, 0.1], [0.3, 0.6]], server_url="off")
+    pipeline.save_config(c)
+    written = __import__("json").loads(pipeline.CONFIG.read_text())
+    ok(sorted(written) == ["server_url", "zone"], f"saved config holds only the zone and changed settings: {sorted(written)}")
+    pipeline.DEFAULTS["touch_frames"], old_default = 99, pipeline.DEFAULTS["touch_frames"]
+    try:
+        ok(load_config()["touch_frames"] == 99, "a later change to a default reaches a camera that saved its zone earlier")
+    finally:
+        pipeline.DEFAULTS["touch_frames"] = old_default
+finally:
+    pipeline.CONFIG = real_config
+
 sys.exit(1 if fails else 0)
