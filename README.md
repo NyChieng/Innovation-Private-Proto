@@ -77,9 +77,11 @@ according to the configured conservation threshold.
 ## AI Vision and IoT
 
 - **FloraGuard** accepts a webcam or a recorded video. Draw and save a plant
-  zone before starting the **Live** view. When configured to send alerts,
-  FloraGuard can attach a snapshot for rangers in `/staff/iot`.
-  [AI Vision setup and model tests](ai-vision-node/README.md)
+  zone once before starting the **Live** view. It finds the FloraScan server
+  on the same computer by itself and sends every ALERT, with its snapshot, to
+  the rangers in `/staff/iot`, so a demo needs no set-up. `npm run demo`
+  starts the server and FloraGuard together; `npm run ai` starts FloraGuard
+  alone. [AI Vision setup and model tests](ai-vision-node/README.md)
 - **ESP32** publishes readings to the MQTT broker. Run the simulated sensor
   suite for a software-only demo, or follow the hardware guide to wire and
   flash the board. [ESP32 setup and wiring](iot-kit/README.md)

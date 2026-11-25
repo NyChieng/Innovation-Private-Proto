@@ -5,12 +5,19 @@ and by email with the picture attached; the picture is shown only to staff with
 sensor.view. See POST /api/camera/alerts in Server/api.js and section 15 of
 Server/schema-extensions.sql.
 
-Configured in app/config.json (the app's settings) or, taking precedence, by
-environment variables:
+In the live app (floraguard_app.py) it is on by default: with nothing set, it
+sends to the FloraScan server running from this same checkout, so a demo needs
+no set-up. Scripts and tests send only to a server_url set explicitly, so they
+never alert real rangers. Configured in app/config.json (the app's settings) or,
+taking precedence, by environment variables:
 
-    server_url   FLORAGUARD_SERVER_URL   e.g. https://localhost:42791   (empty = off)
-    camera_code  FLORAGUARD_CAMERA_CODE  e.g. CAM-001
-    camera_key   FLORAGUARD_CAMERA_KEY   the key set up for that camera
+    server_url   FLORAGUARD_SERVER_URL   empty = in the app, the local server, found
+                                         from the port in ../proto.config.json (or
+                                         PORT in ../.env); "off" = do not send
+    camera_code  FLORAGUARD_CAMERA_CODE  default CAM-001
+    camera_key   FLORAGUARD_CAMERA_KEY   the key set up for that camera; for the local
+                                         server, also read from ../.env, else the demo
+                                         key Server/seed.js gives CAM-001
     server_ca    FLORAGUARD_SERVER_CA    CA certificate to trust; defaults to the
                                          FloraScan server's own (../.certs/ca.pem)
 
@@ -31,20 +38,95 @@ from pathlib import Path
 import cv2
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_CA = ROOT.parent / ".certs" / "ca.pem"  # made by the FloraScan server on first start
+REPO = ROOT.parent   # the FloraScan checkout this node lives in
 MAX_SIDE = 1280      # long side of the picture sent; the server refuses more than 900 KB
 JPEG_QUALITY = 80
 RETRIES = 3
+# The key Server/seed.js gives CAM-001 when FLORAGUARD_CAMERA_KEY is not set. Fine on
+# a laptop demo; a real installation sets its own key in .env (see .env.example).
+DEMO_CAMERA_KEY = "demo-camera-key-change-me"
+OFF = {"off", "none", "false", "0", "no"}
 
 
-def settings(cfg):
+def read_env_file(path):
+    """KEY=value lines of the FloraScan server's .env, as the server itself reads them."""
+    try:
+        text = Path(path).read_text(encoding="utf-8")
+    except OSError:
+        return {}
+    out = {}
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        k, v = line.split("=", 1)
+        v = v.strip()
+        if len(v) >= 2 and v[0] == v[-1] and v[0] in "\"'":
+            v = v[1:-1]
+        out[k.strip()] = v
+    return out
+
+
+def local_server(repo=REPO):
+    """https://localhost:<port> of the FloraScan server run from this checkout, or "".
+
+    The port is PORT in .env when set (the server honours it), otherwise the one
+    `npm run dev` picked and saved in proto.config.json.
+    """
+    port = read_env_file(Path(repo) / ".env").get("PORT")
+    if not port:
+        try:
+            port = json.loads((Path(repo) / "proto.config.json").read_text(encoding="utf-8")).get("port")
+        except (OSError, ValueError, AttributeError):
+            port = None
+    try:
+        port = int(port)
+    except (TypeError, ValueError):
+        return ""
+    return f"https://localhost:{port}" if 0 < port < 65536 else ""
+
+
+def settings(cfg, repo=REPO, auto=False):
+    """Where alerts go. source: "set" (configured), "auto" (the local server) or "off".
+
+    auto: with no server_url, use the FloraScan server on this computer. The live app
+    asks for it; scripts and tests do not, so they never alert real rangers by accident.
+    """
     env = os.environ.get
+    url = (env("FLORAGUARD_SERVER_URL") or cfg.get("server_url") or "").strip()
+    if url.lower() in OFF:
+        url, source = "", "off"
+    elif url:
+        source = "set"
+    elif auto:
+        url, source = local_server(repo), "auto"
+    else:
+        source = "off"
+    key = env("FLORAGUARD_CAMERA_KEY") or cfg.get("camera_key") or ""
+    if not key and source == "auto":
+        # The local server was seeded from the same .env, so its key is the one there.
+        key = read_env_file(Path(repo) / ".env").get("FLORAGUARD_CAMERA_KEY") or DEMO_CAMERA_KEY
+    default_ca = Path(repo) / ".certs" / "ca.pem"  # made by the FloraScan server on first start
     return {
-        "server_url": (env("FLORAGUARD_SERVER_URL") or cfg.get("server_url") or "").rstrip("/"),
-        "camera_code": env("FLORAGUARD_CAMERA_CODE") or cfg.get("camera_code") or "",
-        "camera_key": env("FLORAGUARD_CAMERA_KEY") or cfg.get("camera_key") or "",
-        "server_ca": env("FLORAGUARD_SERVER_CA") or cfg.get("server_ca") or "",
+        "server_url": url.rstrip("/"),
+        "camera_code": env("FLORAGUARD_CAMERA_CODE") or cfg.get("camera_code") or "CAM-001",
+        "camera_key": key,
+        "server_ca": env("FLORAGUARD_SERVER_CA") or cfg.get("server_ca") or (str(default_ca) if default_ca.exists() else ""),
+        "source": source,
     }
+
+
+def summary(cfg, repo=REPO, auto=True):
+    """One line for the app's header: are alerts reaching the rangers, and where."""
+    s = settings(cfg, repo, auto)
+    if s["source"] == "off":
+        return 'off (server_url is "off")'
+    if not s["server_url"]:
+        return "off: no FloraScan server found. Start it once with `npm run dev`, or set server_url"
+    if not s["camera_key"]:
+        return f"off: set camera_key for {s['server_url']}"
+    how = "the FloraScan server on this computer" if s["source"] == "auto" else "the configured server"
+    return f"on: {s['server_url']} as {s['camera_code']} ({how})"
 
 
 def encode_snapshot(path):
@@ -66,11 +148,12 @@ def encode_snapshot(path):
 class AlertSender:
     """Queue of events to post. send() returns at once; a worker thread does the HTTP."""
 
-    def __init__(self, cfg, log=print):
-        s = settings(cfg)
+    def __init__(self, cfg, log=print, repo=REPO, auto=False):
+        s = settings(cfg, repo, auto)
         self.url = s["server_url"]
         self.code = s["camera_code"]
         self.key = s["camera_key"]
+        self.source = s["source"]
         self.log = log
         self.enabled = bool(self.url and self.code and self.key)
         self.sent = 0
@@ -78,10 +161,25 @@ class AlertSender:
         self.last_error = ""
         if not self.enabled:
             return
-        ca = s["server_ca"] or (str(DEFAULT_CA) if DEFAULT_CA.exists() else "")
+        ca = s["server_ca"]
         self.ctx = ssl.create_default_context(cafile=ca) if ca else ssl.create_default_context()
         self.q = queue.Queue(maxsize=50)
         threading.Thread(target=self._run, name="alert-sender", daemon=True).start()
+        found = " (the FloraScan server on this computer)" if self.source == "auto" else ""
+        self.log(f"[alerts] ALERT and AFTER-HOURS snapshots go to {self.url}{found} as {self.code}")
+
+    def describe(self):
+        """Status for the app's panel: where alerts go, and how sending has gone so far."""
+        if not self.enabled:
+            if self.source == "off":
+                return "off"
+            return "off: no FloraScan server found" if not self.url else "off: no camera key"
+        text = f"on: {self.url} as {self.code} · sent {self.sent}"
+        if self.failed:
+            text += f", failed {self.failed}"
+        if self.last_error:
+            text += f" · last error: {self.last_error[:90]}"
+        return text
 
     def send(self, event):
         """Queue an event that has a snapshot. Events without one (warnings) stay on the camera."""

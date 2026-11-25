@@ -20,6 +20,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from engine import available_backends  # noqa: E402
+from notifier import summary as alerts_summary  # noqa: E402
 from pipeline import FloraGuard, load_config, model_info, save_config  # noqa: E402
 
 _guard = None
@@ -35,7 +36,7 @@ def guard(backend="auto", threads=4):
     if _guard is None or (backend, threads) != (_guard.cfg["backend"], _guard.cfg["threads"]):
         cfg = load_config()
         cfg.update(backend=backend, threads=threads)
-        _guard = FloraGuard(cfg)
+        _guard = FloraGuard(cfg, find_server=True)  # alerts reach the local server with no set-up
     return _guard
 
 
@@ -186,6 +187,7 @@ def status_md(info, fps, g, saved, cam_fps=None, cpu=None):
             f"| Leaf motion | {info['leaf'] * 100:.2f}% (baseline {info.get('leaf_base', 0) * 100:.2f}%) |\n"
             f"| Detector | {run_name(spec['det'])} {spec['det']['imgsz'][0]}x{spec['det']['imgsz'][1]} |\n"
             f"| Touch model | {run_name(spec.get('touch')) or 'none yet (wrist + leaf motion rule)'} |\n"
+            f"| Alerts to rangers | {g.sender.describe()} |\n"
             f"| Recorded crops this run | {saved} |")
 
 
@@ -290,7 +292,10 @@ def build():
     with gr.Blocks(title="FloraGuard") as demo:
         gr.Markdown("# FloraGuard: live plant-protection detection\n"
                     f"Detector: `{m['det']['weights']}` · Pose: `{m['pose']['weights']}` · "
-                    f"Touch: `{m['touch']['weights'] if m.get('touch') else 'none yet (wrist + leaf motion rule)'}`")
+                    f"Touch: `{m['touch']['weights'] if m.get('touch') else 'none yet (wrist + leaf motion rule)'}`\n\n"
+                    f"**Alerts to rangers:** {alerts_summary(cfg)}"
+                    + ("" if len(cfg.get("zone") or []) >= 3 or not cfg["require_zone"]
+                       else " · **Plant zone:** draw it once in the Plant zone tab before Live (it is remembered)"))
         with gr.Row():
             kind = gr.Radio(["Webcam", "Video file"], value="Webcam", label="Source")
             cam = gr.Number(value=0, precision=0, label="Webcam index")
@@ -360,4 +365,5 @@ def build():
 
 
 if __name__ == "__main__":
+    print(f"[alerts] {alerts_summary(load_config())}")
     build().queue().launch(server_name="127.0.0.1", inbrowser=True)

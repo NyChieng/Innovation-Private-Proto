@@ -16,6 +16,8 @@
     "build": "vite build",
     "preview": "node Server/index.js --prod",
     "port": "node Server/port.js",
+    "ai": "node scripts/floraguard.mjs",
+    "demo": "node scripts/demo.mjs",
     "import:species": "node scripts/import-species.mjs",
     "import:tints": "node scripts/photo-tints.mjs",
     "test": "node --test tests/security.test.mjs tests/staff-workflows.test.mjs tests/plant-results.test.mjs && node tests/i18n.test.mjs && node tests/api.test.mjs && node tests/ui.test.mjs && node tests/passkey.test.mjs",

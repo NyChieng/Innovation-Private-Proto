@@ -1053,7 +1053,17 @@ section('20b. AI camera alerts reach the rangers, with the snapshot');
     headers: { 'Content-Type': 'application/json', ...headers },
     body: JSON.stringify(body),
   }).then(async (r) => ({ status: r.status, body: await r.json().catch(() => null) }));
-  const signed = { 'X-Camera-Code': 'CAM-001', 'X-Camera-Key': 'demo-camera-key-change-me' };
+  // The key Server/seed.js gave CAM-001: FLORAGUARD_CAMERA_KEY from the
+  // environment or .env (as the seed read it), else the demo default.
+  const cameraKey = process.env.FLORAGUARD_CAMERA_KEY || await (async () => {
+    const fs = await import('node:fs');
+    try {
+      const line = fs.readFileSync(new URL('../.env', import.meta.url), 'utf8')
+        .split(/\r?\n/).find((l) => /^\s*FLORAGUARD_CAMERA_KEY\s*=/.test(l));
+      return line ? line.slice(line.indexOf('=') + 1).trim().replace(/^(['"])(.*)\1$/, '$2') : '';
+    } catch { return ''; }
+  })() || 'demo-camera-key-change-me';
+  const signed = { 'X-Camera-Code': 'CAM-001', 'X-Camera-Key': cameraKey };
   const event = { tier: 'ALERT', track_id: 7, detail: 'touch 0.91 (test)', photo: JPEG };
 
   eq('no camera key: refused', (await camera({}, event)).status, 401);
