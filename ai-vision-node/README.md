@@ -12,10 +12,10 @@ warns when a person gets too close or touches it.
 It runs on a normal laptop CPU with no GPU (OpenVINO, about 10 frames per second), and uses an
 NVIDIA GPU if there is one.
 
-> Each ALERT and AFTER-HOURS event, with its snapshot, can also be sent to the FloraScan web app,
-> which notifies the rangers. This is off until you point the node at a server (see
-> [Sending alerts to FloraScan](#sending-alerts-to-florascan)). The sensor node (soil, rain,
-> motion, sound) is a separate part, in `iot-kit/`.
+> Each ALERT and AFTER-HOURS event, with its snapshot, is also sent to the FloraScan web app,
+> which notifies the rangers. The app finds the FloraScan server on the same computer by itself,
+> so this works with no set-up (see [Sending alerts to FloraScan](#sending-alerts-to-florascan)).
+> The sensor node (soil, rain, motion, sound) is a separate part, in `iot-kit/`.
 
 ---
 
@@ -229,11 +229,12 @@ git lfs pull                    # gets the models and videos if your clone only 
 python app/floraguard_app.py
 ```
 
-It opens **http://127.0.0.1:7860** in your browser.
+After this first set-up, `npm run ai` from the repository root starts the app, and `npm run demo`
+starts it together with the FloraScan server. It opens **http://127.0.0.1:7860** in your browser.
 
 1. Pick **Webcam** (index 0 is usually the built-in camera) or **Video file**. There are two test
    videos in `data/test_videos/`.
-2. Optional: open **Plant zone**, click **Grab frame**, click 6-10 points around the plant, then
+2. Once per camera: open **Plant zone**, click **Grab frame**, click 6-10 points around the plant, then
    **Save zone**.
 3. Open **Live** and click **Start**. Warnings and alerts appear on the right, with snapshots.
 
@@ -255,13 +256,20 @@ Each ALERT and AFTER-HOURS event, with its snapshot, can be posted to the FloraS
 picture attached when SMTP is set up. The picture is shown only to staff with `sensor.view`, and
 the alert is resolved on the IoT page. Warnings carry no picture and stay on the camera.
 
-It is off until all three of these are set, in `app/config.json` or as environment variables
-(the variables win):
+It is on with no set-up. With nothing configured, the app sends to the FloraScan server on this
+computer: the port in `../proto.config.json` (or `PORT` in `../.env`), as `CAM-001`, with the
+key the seed gave that camera (`FLORAGUARD_CAMERA_KEY` in `../.env`, or the demo key
+`demo-camera-key-change-me`). The app's header says where alerts go, and the Live panel counts
+what was sent. From the repository root, `npm run demo` starts the server and this app together.
+
+To send somewhere else, set these in `app/config.json` or as environment variables (the
+variables win). `"server_url": "off"` stops sending. The evaluation scripts and tests send only
+when `server_url` is set, so they never alert real rangers.
 
 | Setting | Variable | What it is |
 | --- | --- | --- |
-| `server_url` | `FLORAGUARD_SERVER_URL` | The FloraScan server, e.g. `https://localhost:42791` |
-| `camera_code` | `FLORAGUARD_CAMERA_CODE` | The camera's row in `camera_devices`, e.g. `CAM-001` |
+| `server_url` | `FLORAGUARD_SERVER_URL` | The FloraScan server, e.g. `https://floraguard.example.org`; empty = the local one |
+| `camera_code` | `FLORAGUARD_CAMERA_CODE` | The camera's row in `camera_devices` (default `CAM-001`) |
 | `camera_key` | `FLORAGUARD_CAMERA_KEY` | That camera's key |
 
 The node trusts the FloraScan server's own certificate (`../.certs/ca.pem`) automatically; set

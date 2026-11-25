@@ -488,11 +488,13 @@ export function seed() {
     last_seen_at: null, created_by: null, updated_at: nowIso(), deleted_at: null,
   });
 
-  // The AI camera (ai-vision-node). Its key goes in the node's config as
-  // camera_key; change both together for a real installation.
+  // The AI camera (ai-vision-node). The node reads the same FLORAGUARD_CAMERA_KEY
+  // from this .env (or falls back to the same demo key), so a local demo needs
+  // no set-up. A real installation sets its own key in .env before seeding.
+  const cameraKey = process.env.FLORAGUARD_CAMERA_KEY || 'demo-camera-key-change-me';
   insert('camera_devices', {
     device_code: 'CAM-001',
-    device_key_hash: crypto.createHash('sha256').update('demo-camera-key-change-me').digest('hex'),
+    device_key_hash: crypto.createHash('sha256').update(cameraKey).digest('hex'),
     plant_id: null, label: 'AI camera (demo)', is_active: 1,
     last_seen_at: null, updated_at: nowIso(), deleted_at: null,
   });

@@ -75,7 +75,8 @@ DEFAULTS = {
     "max_fps": 15,              # processing cap (the camera may deliver more)
     "after_hours": False,
     "open_hours": "08:00-17:00",
-    # Send ALERT / AFTER-HOURS snapshots to the FloraScan web app (rangers). Empty = off.
+    # Send ALERT / AFTER-HOURS snapshots to the FloraScan web app (rangers). Empty = in the live app,
+    # the FloraScan server on this computer, found by itself (scripts and tests: off); "off" = never.
     # See app/notifier.py; FLORAGUARD_* environment variables take precedence.
     "server_url": "",
     "camera_code": "CAM-001",
@@ -133,12 +134,14 @@ class PersonState:
 
 
 class FloraGuard:
-    def __init__(self, cfg=None, snapshot_dir=ROOT / "events"):
+    def __init__(self, cfg=None, snapshot_dir=ROOT / "events", find_server=False):
+        """find_server: with no server_url set, send alerts to the FloraScan server on this computer.
+        Only the live app asks for it, so evaluation scripts and tests never alert real rangers."""
         self.cfg = cfg or load_config()
         self.models = Models(self.cfg["backend"], self.cfg["threads"])
         self.snap_dir = Path(snapshot_dir)
         self.snap_dir.mkdir(parents=True, exist_ok=True)
-        self.sender = AlertSender(self.cfg)
+        self.sender = AlertSender(self.cfg, auto=find_server)
         self.reset()
 
     def reset(self):

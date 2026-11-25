@@ -5,6 +5,7 @@ No models or camera needed:
 """
 import base64
 import json
+import os
 import sys
 import tempfile
 import threading
@@ -16,8 +17,12 @@ import cv2
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app"))
-from notifier import AlertSender  # noqa: E402
+from notifier import DEMO_CAMERA_KEY, AlertSender, settings  # noqa: E402
 from pipeline import Event  # noqa: E402
+
+# The checks below build their own settings; a FLORAGUARD_* variable in this shell must not leak in.
+for _var in [v for v in os.environ if v.startswith("FLORAGUARD_")]:
+    del os.environ[_var]
 
 received = []
 status_to_send = [201]
@@ -62,9 +67,35 @@ rng = np.random.default_rng(0)
 cv2.imwrite(str(snap), rng.integers(0, 255, (2160, 3840, 3), dtype=np.uint8), [cv2.IMWRITE_JPEG_QUALITY, 95])  # a noisy 4K frame
 ok(snap.stat().st_size > 900 * 1024, f"the test snapshot is bigger than the server accepts ({snap.stat().st_size // 1024} KB)")
 
-off = AlertSender({"server_url": "", "camera_code": "CAM-001", "camera_key": "k"})
-ok(not off.enabled, "no server_url: sending is off")
+# Where alerts go when nothing is configured: the FloraScan server of the checkout the node lives in.
+# Each case uses a throwaway folder as that checkout, so the developer's own one never matters.
+bare = Path(tempfile.mkdtemp())  # a checkout where the server has never run
+local = Path(tempfile.mkdtemp())  # one where `npm run dev` saved its port
+(local / "proto.config.json").write_text('{"port": 48123}')
+blank = {"server_url": "", "camera_code": "CAM-001", "camera_key": ""}
+
+off = AlertSender({"server_url": "", "camera_code": "CAM-001", "camera_key": "k"}, repo=bare, auto=True)
+ok(not off.enabled, "no server_url and no FloraScan server here: sending is off")
 ok(not off.send(Event(0, "ALERT", 1, "x", str(snap))), "...and send() does nothing")
+ok(not AlertSender({**blank, "server_url": "off"}, repo=local, auto=True).enabled,
+   'server_url "off": off, even beside a server')
+ok(not AlertSender(blank, repo=local).enabled,
+   "scripts and tests (no auto) never send to the local server unless told to")
+
+auto = settings(blank, repo=local, auto=True)
+ok(auto["server_url"] == "https://localhost:48123" and auto["source"] == "auto",
+   f"the live app with no server_url: the local server, from proto.config.json ({auto['server_url']})")
+ok(auto["camera_key"] == DEMO_CAMERA_KEY and auto["camera_code"] == "CAM-001",
+   "...as CAM-001 with the key the seed gives it")
+ok(AlertSender(blank, log=lambda *_: None, repo=local, auto=True).enabled, "...so sending is on with no set-up")
+(local / ".env").write_text('PORT=48200\nFLORAGUARD_CAMERA_KEY="team-key"\n')
+auto = settings(blank, repo=local, auto=True)
+ok(auto["camera_key"] == "team-key", "FLORAGUARD_CAMERA_KEY in the server's .env is used, as the seed used it")
+ok(auto["server_url"] == "https://localhost:48200", "PORT in .env wins over proto.config.json, as on the server")
+ok(settings({**blank, "camera_key": "mine"}, repo=local, auto=True)["camera_key"] == "mine",
+   "...but camera_key in the config wins")
+ok(settings({**blank, "server_url": "https://floraguard.example"}, repo=local, auto=True)["camera_key"] == "",
+   "a configured server never gets the local demo key")
 
 cfg = {"server_url": url + "/", "camera_code": "CAM-001", "camera_key": "secret-key"}
 logs = []

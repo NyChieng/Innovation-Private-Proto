@@ -79,15 +79,21 @@ notification with the picture, and an email with it attached when SMTP is set up
 is shown only to roles with `sensor.view` and the alert is resolved on the IoT page. Warnings
 carry no picture and stay on the camera.
 
-The seed has one camera, `CAM-001`, with the key `demo-camera-key-change-me`. Point the node
-at your server in `ai-vision-node/app/config.json` (or with `FLORAGUARD_*` environment
-variables, see `app/notifier.py`):
+It is ready with no set-up. The seed has one camera, `CAM-001`, and the FloraGuard app finds
+the server on the same computer by itself (the port in `proto.config.json`, or `PORT` in
+`.env`), signs as `CAM-001` with the same key the seed used (`FLORAGUARD_CAMERA_KEY` in `.env`,
+or the demo key `demo-camera-key-change-me`), and trusts the server's own certificate
+(`.certs/ca.pem`). The app's header says where alerts go, and the Live panel shows how many
+were sent. Start both together with:
 
-```json
-{ "server_url": "https://localhost:42791", "camera_code": "CAM-001", "camera_key": "demo-camera-key-change-me" }
+```bash
+npm run demo      # the server and FloraGuard; or npm run ai for FloraGuard alone
 ```
 
-The node trusts the server's own certificate (`.certs/ca.pem`) automatically.
+To send to another server, set `server_url`, `camera_code` and `camera_key` in
+`ai-vision-node/app/config.json` (or the `FLORAGUARD_*` environment variables, see
+`app/notifier.py`); `"server_url": "off"` stops sending. The evaluation scripts and tests never
+send unless a `server_url` is set, so they cannot alert real rangers.
 
 ## Run the demo
 
