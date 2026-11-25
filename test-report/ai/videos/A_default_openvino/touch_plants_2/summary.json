@@ -1,0 +1,52 @@
+{
+  "video": "touch plants 2.mp4",
+  "slug": "touch_plants_2",
+  "resolution": "2160x3840",
+  "fps": 25.0,
+  "frames": 149,
+  "duration_s": 5.96,
+  "expected": "ALERT",
+  "alert_raised": false,
+  "passed": false,
+  "first_seen": {
+    "SAFE": 0.0
+  },
+  "stage_frames": {
+    "SAFE": 149,
+    "WARNING": 0,
+    "ALERT": 0
+  },
+  "stage_seconds": {
+    "SAFE": 5.96,
+    "WARNING": 0.0,
+    "ALERT": 0.0
+  },
+  "max_people": 1,
+  "max_animals": 1,
+  "max_plants": 0,
+  "frames_with_plant": 0,
+  "frames_with_hand": 0,
+  "peak_touch_p": 0.0,
+  "peak_touch_t": 0,
+  "frames_touch_ge_06": 0,
+  "zone": [],
+  "events": [],
+  "keyframes": [
+    {
+      "t": 0.0,
+      "stage": "SAFE",
+      "file": "keyframes/0000_SAFE.jpg",
+      "why": "first frame"
+    }
+  ],
+  "backend": "openvino",
+  "codec": "avc1",
+  "processing": {
+    "wall_s": 6.0,
+    "avg_ms": 20.6,
+    "p95_ms": 46.1,
+    "avg_model_ms": 45.2,
+    "model_frames": 50,
+    "effective_fps": 25.0
+  }
+}

@@ -1,0 +1,63 @@
+(node:21748) Warning: Setting the NODE_TLS_REJECT_UNAUTHORIZED environment variable to '0' makes TLS connections and HTTPS requests insecure by disabling certificate verification.
+(Use `node --trace-warnings ...` to show where the warning was created)
+FloraScan UI tests against https://localhost:42791
+Browser: C:/Program Files/Google/Chrome/Application/chrome.exe
+
+
+[1m1. Public pages render[0m
+  [32mok[0m   / renders content
+  [32mok[0m   /browse renders content
+  [32mok[0m   /species renders content
+  [32mok[0m   /connect renders content
+  [32mok[0m   /login renders content
+  [32mok[0m   /scan renders content
+  [32mok[0m   no console errors across the public site
+
+[1m2. The QR journey: scan a tag, land on the plant page[0m
+  [32mok[0m   the tag resolves to the plant page
+  [32mok[0m   the visitor is told the tag was scanned
+  [32mok[0m   the Plant ID is shown
+  [32mok[0m   conservation status is shown
+  [31mFAIL[0m a photograph is present
+  [32mok[0m   an unknown tag explains itself
+  [32mok[0m   no console errors on the plant page
+
+[1m3. Search and filters[0m
+  [32mok[0m   searching for a local name finds the record
+  [32mok[0m   a search with no matches explains itself
+  [32mok[0m   filtering by Critically endangered returns only CR
+  [32mok[0m   filtering by family returns records
+  [32mok[0m   browse loads a page, not the whole register
+  [32mok[0m   ...and offers to load more
+  [32mok[0m   ...which appends the next page
+  [32mok[0m   no console errors while searching
+
+[1m4. Staff sign in[0m
+  [32mok[0m   the prototype controls are on screen
+  [32mok[0m   it starts as the public visitor
+  [32mok[0m   it no longer lists accounts to jump into
+  [32mok[0m   the controls lead to the sign-in page
+  [32mok[0m   sign in is full screen, outside the site header
+  [32mok[0m   a wrong password shows an error
+  [32mok[0m   ...and stays on the sign-in page
+  [32mok[0m   the eye button reveals the password
+  [31mFAIL[0m the right password lands on a staff screen
+         https://localhost:42791/login {"error":"Too many login requests. Try again in 873 seconds.","fields":["drsuehanlee@gmail.com","drsuehanlee123"]}
+  [31mFAIL[0m the controls show the new role
+         Visitor
+^K
+  [32mok[0m   Ctrl+K opens the controls
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+Error [TypeError]: Cannot read properties of undefined (reading 'click')
+    at evaluate (evaluate at file:///D:/Prototyping%20Innovation/Demo/tests/ui.test.mjs:358:14, <anonymous>:0:100)
+    at #evaluate (file:///D:/Prototyping%20Innovation/Demo/node_modules/puppeteer-core/lib/puppeteer/cdp/ExecutionContext.js:402:19)
+    at async ExecutionContext.evaluate (file:///D:/Prototyping%20Innovation/Demo/node_modules/puppeteer-core/lib/puppeteer/cdp/ExecutionContext.js:288:16)
+    at async IsolatedWorld.evaluate (file:///D:/Prototyping%20Innovation/Demo/node_modules/puppeteer-core/lib/puppeteer/cdp/IsolatedWorld.js:104:16)
+    at async CdpFrame.evaluate (file:///D:/Prototyping%20Innovation/Demo/node_modules/puppeteer-core/lib/puppeteer/api/Frame.js:364:20)
+    at async CdpPage.evaluate (file:///D:/Prototyping%20Innovation/Demo/node_modules/puppeteer-core/lib/puppeteer/api/Page.js:832:20)
+    at async file:///D:/Prototyping%20Innovation/Demo/tests/ui.test.mjs:358:3
+
+Node.js v24.15.0

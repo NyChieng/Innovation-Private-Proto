@@ -5,9 +5,8 @@ import { homeFor, roleLabel } from './lib/format.js';
 import { t } from './lib/i18n.js';
 import { shouldShowIntro } from './lib/intro.js';
 import { WebShell, MobileShell } from './components/Shell.jsx';
-import RoleSwitcher from './components/RoleSwitcher.jsx';
 import InstallPrompt from './components/InstallPrompt.jsx';
-import { PageTransition } from './components/motion.jsx';
+import { PageTransition, RouteProgress } from './components/motion.jsx';
 import { Toasts, LoadingBlock, Empty } from './components/ui.jsx';
 import * as I from './lib/icons.jsx';
 
@@ -20,6 +19,7 @@ import Login from './screens/Login.jsx';
 import Connect from './screens/Connect.jsx';
 import Scan from './screens/Scan.jsx';
 import Welcome from './screens/Welcome.jsx';
+import NotFound from './screens/NotFound.jsx';
 
 import PlantRegister from './screens/staff/PlantRegister.jsx';
 import RegisterPlant from './screens/staff/RegisterPlant.jsx';
@@ -105,7 +105,6 @@ export default function App() {
     return (
       <>
         <Welcome />
-        <RoleSwitcher />
         <Toasts />
       </>
     );
@@ -116,7 +115,6 @@ export default function App() {
     return (
       <>
         <Login />
-        <RoleSwitcher />
         <Toasts />
       </>
     );
@@ -124,6 +122,7 @@ export default function App() {
 
   return (
     <>
+      <RouteProgress k={loc.pathname} />
       <ScrollToTop />
       <Shell sidebar={!mobile && isStaff}>
         <Suspense fallback={<LoadingBlock />}>
@@ -159,21 +158,11 @@ export default function App() {
             <Route path="/staff/me" element={<Guard><Me /></Guard>} />
             <Route path="/staff/password" element={<Guard><ChangePassword /></Guard>} />
 
-            <Route
-              path="*"
-              element={
-                <div className="page"><div className="wrap wrap-narrow">
-                  <Empty icon={I.Compass} title={t('Page not found')}>
-                    {t('That address does not match any screen in the prototype.')}
-                  </Empty>
-                </div></div>
-              }
-            />
+            <Route path="*" element={<NotFound />} />
           </Routes>
           </PageTransition>
         </Suspense>
       </Shell>
-      <RoleSwitcher />
       <InstallPrompt />
       <Toasts />
     </>

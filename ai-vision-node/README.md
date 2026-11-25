@@ -5,14 +5,17 @@ warns when a person gets too close or touches it.
 
 - **SAFE**: a person is in view, away from the plant.
 - **WARNING**: a person stays inside the buffer zone around the plant for 1 second, or puts a hand inside it.
-- **ALERT**: a hand is touching the plant for several frames in a row. A snapshot is saved.
+- **ALERT**: a hand is touching the plant in 3 of the last 6 frames, and the plant backs it up
+  (its leaves move, or the hand is among green plant pixels). A snapshot is saved.
 - Animals are detected and labelled, but never trigger an alert (they live in the forest).
 
 It runs on a normal laptop CPU with no GPU (OpenVINO, about 10 frames per second), and uses an
 NVIDIA GPU if there is one.
 
-> The sensor node (soil, rain, motion, sound) is a separate part, in `iot-node/` on the
-> `IotTesting` branch. This node does not send its alerts to the FloraScan server yet.
+> Each ALERT and AFTER-HOURS event, with its snapshot, is also sent to the FloraScan web app,
+> which notifies the rangers. The app finds the FloraScan server on the same computer by itself,
+> so this works with no set-up (see [Sending alerts to FloraScan](#sending-alerts-to-florascan)).
+> The sensor node (soil, rain, motion, sound) is a separate part, in `iot-kit/`.
 
 ---
 
@@ -37,8 +40,8 @@ flowchart LR
     PIPE --> SNAP[("Alert snapshots<br/>events/*.jpg")]
     APP <--> CFG[("Plant zone + settings<br/>app/config.json")]
 
-    PIPE -. "not connected yet" .-> SERVER["FloraScan server<br/>IoT dashboard"]
-    SENSOR["Sensor node<br/>iot-node/ (IotTesting branch)"] --> SERVER
+    PIPE -. "ALERT / AFTER-HOURS + snapshot<br/>(app/notifier.py, when set up)" .-> SERVER["FloraScan server<br/>rangers notified, IoT page"]
+    SENSOR["Sensor node<br/>iot-kit/"] -- "MQTT readings" --> SERVER
 ```
 
 - The **web app** reads the camera, shows the live picture, and lists warnings and alerts.
@@ -65,7 +68,7 @@ flowchart TD
     WAIT -- no --> SAFE
     WAIT -- yes --> WARN["🟠 WARNING"]
     HAND -- yes --> TOUCH["5. Touch model<br/>looks at a crop of the hand<br/>→ touch probability"]
-    TOUCH --> T{"Touching for<br/>4 frames in a row?"}
+    TOUCH --> T{"Touching in<br/>3 of the last 6 frames?"}
     T -- no --> WARN
     T -- yes --> ALERT["🔴 ALERT<br/>+ snapshot saved"]
 
@@ -81,7 +84,7 @@ flowchart TD
 | --- | --- | --- | --- |
 | 1. Motion check | none (background subtraction) | Compares the frame with the recent background | Every frame |
 | 2. Detector | YOLO26s, **trained by us** | Boxes people, animals and plants. A tracker keeps each person's ID across frames. | Something moves, or once a second |
-| 3. Zones | none | Plant zone = the shape you drew, or each detected plant. Buffer = plant zone grown by 25% of its width. | Every frame |
+| 3. Zones | none | Plant zone = the shape you drew (Live needs one; `require_zone`). Without one (scripts, tests), each detected plant. Buffer = plant zone grown by 25% of its width. | Every frame |
 | 4. Pose | YOLO26s-pose (stock) | Finds wrists and elbows, on a crop around the nearby people only | Someone is inside the buffer |
 | 5. Touch | YOLO26s-cls, **trained by us** | Says `touch` or `no_touch` for a 224×224 crop of each hand | A wrist is inside the buffer |
 
@@ -92,7 +95,7 @@ Every person has their own stage. The stage shown at the top of the screen is th
 ```mermaid
 flowchart LR
     S["🟢 SAFE"] -- "in the buffer 1 s,<br/>or hand in buffer" --> W["🟠 WARNING"]
-    W -- "touching<br/>4 frames in a row" --> A["🔴 ALERT"]
+    W -- "touching in<br/>3 of the last 6 frames" --> A["🔴 ALERT"]
     A -- "stops touching" --> W
     W -- "walks away" --> S
 
@@ -113,6 +116,17 @@ Walking away from ALERT goes straight back to SAFE.
   The leaf check helps because public datasets have few photos of hands on plants, so the model
   under-scores real touches.
 
+**The plant must back it up.** A touch frame also needs plant evidence: the plant's leaves are moving,
+**or** at least **15%** of the hand crop is green vegetation (excess-green index, 2G − R − B). So the
+touch model alone can never alert: a hand holding a camera in front of a coat stays a WARNING. Either
+one is enough, because a bare winter tree has no green but its branches move when someone prunes it.
+
+**Debounce:** ALERT needs **3** touch frames among the last **6** model frames (`touch_frames`,
+`touch_window`; `touch_window: 0` = in a row, the old rule). One weak frame no longer resets the count.
+It was 4: on the team's own 9 recorded clips (25 Nov) both settings got all 9 right, but 4 alerted about
+5 s late on a flat hand brushing dark leaves, and 3 caught it within 0.5 s, with no new false alarm.
+Raise **Touch frames before ALERT** in the app for a stricter camera.
+
 Leaf movement is measured against a baseline learned while nobody is near, so wind and changing
 light don't count as a touch.
 
@@ -120,6 +134,7 @@ light don't count as a touch.
 
 - The same person gets the same warning at most once every **10 seconds**.
 - Only **ALERT** and **AFTER-HOURS** (someone there outside opening hours, if switched on) save a snapshot to `events/`.
+  When a FloraScan server is set up, those two are also sent to it with the snapshot; warnings stay on the camera.
 - All numbers above are defaults in `app/pipeline.py` (`DEFAULTS`). Most can be changed in the app under **Thresholds**.
 
 ### 4. Plant zone and buffer zone
@@ -217,11 +232,12 @@ git lfs pull                    # gets the models and videos if your clone only 
 python app/floraguard_app.py
 ```
 
-It opens **http://127.0.0.1:7860** in your browser.
+After this first set-up, `npm run ai` from the repository root starts the app, and `npm run demo`
+starts it together with the FloraScan server. It opens **http://127.0.0.1:7860** in your browser.
 
 1. Pick **Webcam** (index 0 is usually the built-in camera) or **Video file**. There are two test
    videos in `data/test_videos/`.
-2. Optional: open **Plant zone**, click **Grab frame**, click 6-10 points around the plant, then
+2. Once per camera: open **Plant zone**, click **Grab frame**, click 6-10 points around the plant, then
    **Save zone**.
 3. Open **Live** and click **Start**. Warnings and alerts appear on the right, with snapshots.
 
@@ -235,6 +251,34 @@ Settings you can change in the app:
 
 The plant zone and settings you save are stored in `app/config.json` (not committed, since every
 camera is different). Alert snapshots go to `events/`.
+
+### Sending alerts to FloraScan
+
+Each ALERT and AFTER-HOURS event, with its snapshot, can be posted to the FloraScan web app
+(`POST /api/camera/alerts`). The server notifies every ranger in the app, and by email with the
+picture attached when SMTP is set up. The picture is shown only to staff with `sensor.view`, and
+the alert is resolved on the IoT page. Warnings carry no picture and stay on the camera.
+
+It is on with no set-up. With nothing configured, the app sends to the FloraScan server on this
+computer: the port in `../proto.config.json` (or `PORT` in `../.env`), as `CAM-001`, with the
+key the seed gave that camera (`FLORAGUARD_CAMERA_KEY` in `../.env`, or the demo key
+`demo-camera-key-change-me`). The app's header says where alerts go, and the Live panel counts
+what was sent. From the repository root, `npm run demo` starts the server and this app together.
+
+To send somewhere else, set these in `app/config.json` or as environment variables (the
+variables win). `"server_url": "off"` stops sending. The evaluation scripts and tests send only
+when `server_url` is set, so they never alert real rangers.
+
+| Setting | Variable | What it is |
+| --- | --- | --- |
+| `server_url` | `FLORAGUARD_SERVER_URL` | The FloraScan server, e.g. `https://floraguard.example.org`; empty = the local one |
+| `camera_code` | `FLORAGUARD_CAMERA_CODE` | The camera's row in `camera_devices` (default `CAM-001`) |
+| `camera_key` | `FLORAGUARD_CAMERA_KEY` | That camera's key |
+
+The node trusts the FloraScan server's own certificate (`../.certs/ca.pem`) automatically; set
+`server_ca` / `FLORAGUARD_SERVER_CA` to use another CA. Sending runs on a background thread, so a
+slow or unreachable server never holds up the camera; a failed send is retried a few times, then
+logged. See `app/notifier.py` and `docs/demo-branch.md`.
 
 ### If something goes wrong
 
@@ -256,6 +300,7 @@ app/
   engine.py           Runs the models on OpenVINO, ONNX Runtime or CUDA
   tracker.py          Keeps the same ID on a person from frame to frame
   touchcrop.py        Cuts the hand crop the touch model looks at
+  notifier.py         Sends ALERT / AFTER-HOURS snapshots to the FloraScan server (off until set up)
 models/
   export/             det.onnx, pose.onnx, touch.onnx + models.json   <- what the app runs
   yolo26*.pt          Base Ultralytics weights we started training from

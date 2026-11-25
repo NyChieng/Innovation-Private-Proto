@@ -63,7 +63,7 @@ function SpeciesPicker({ value, proposed, onPick, onPropose }) {
             placeholder={t('e.g. Hoya sp. (waxy leaves, pale globe flowers)')}
           />
           <div className="hint">
-            {t('Describe what you saw as precisely as you can. A reviewer will confirm the name before it is published.')}
+            {t('Describe what you saw as precisely as you can. A senior botanist will confirm the name before it is published.')}
           </div>
           <button
             type="button" className="btn btn-ghost btn-sm" style={{ alignSelf: 'flex-start', marginLeft: -10 }}
@@ -105,6 +105,43 @@ function SpeciesPicker({ value, proposed, onPick, onPropose }) {
 
 /* ------------------------------------------------------------------ */
 
+/**
+ * A phone photograph is 2-5 MB, and a stock XAMPP MariaDB refuses anything over
+ * 1 MB (max_allowed_packet), so registering with one failed. Scale it to at
+ * most 1600 pixels on the long side as a JPEG, about 200-500 KB - plenty for
+ * identifying a plant, and quicker on a field connection. A small picture, or
+ * one the browser cannot decode, is sent unchanged.
+ */
+const MAX_SIDE = 1600;
+const KEEP_UNDER = 700 * 1024;
+async function shrinkPhoto(dataUrl) {
+  const approxBytes = (dataUrl.length - dataUrl.indexOf(',') - 1) * 3 / 4;
+  try {
+    const img = await new Promise((res, rej) => {
+      const i = new Image();
+      i.onload = () => res(i);
+      i.onerror = rej;
+      i.src = dataUrl;
+    });
+    const scale = Math.min(1, MAX_SIDE / Math.max(img.naturalWidth, img.naturalHeight));
+    if (scale === 1 && approxBytes <= KEEP_UNDER) return dataUrl;
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(img.naturalWidth * scale);
+    canvas.height = Math.round(img.naturalHeight * scale);
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff'; // a transparent PNG would otherwise turn black as a JPEG
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    for (const quality of [0.85, 0.75, 0.6]) {
+      const out = canvas.toDataURL('image/jpeg', quality);
+      if ((out.length - out.indexOf(',') - 1) * 3 / 4 <= KEEP_UNDER) return out;
+    }
+    return canvas.toDataURL('image/jpeg', 0.5);
+  } catch {
+    return dataUrl;
+  }
+}
+
 function PhotoCapture({ photos, setPhotos }) {
   const fileRef = useRef(null);
   const [busy, setBusy] = useState(false);
@@ -113,15 +150,24 @@ function PhotoCapture({ photos, setPhotos }) {
     setBusy(true);
     const next = [];
     for (const file of Array.from(files).slice(0, 6 - photos.length)) {
-      const data_url = await new Promise((res) => {
+      const original = await new Promise((res) => {
         const fr = new FileReader();
         fr.onload = () => res(fr.result);
         fr.readAsDataURL(file);
       });
-      next.push({ data_url, file_name: file.name, mime_type: file.type, size_bytes: file.size });
+      const data_url = await shrinkPhoto(original);
+      const size_bytes = Math.round((data_url.length - data_url.indexOf(',') - 1) * 3 / 4);
+      const mime_type = data_url.slice(5, data_url.indexOf(';'));
+      next.push({ data_url, file_name: file.name, mime_type, size_bytes });
     }
     setPhotos([...photos, ...next]);
     setBusy(false);
+  };
+
+  const makeMain = (idx) => {
+    if (idx === 0) return;
+    const picked = photos[idx];
+    setPhotos([picked, ...photos.filter((_, k) => k !== idx)]);
   };
 
   return (
@@ -129,13 +175,18 @@ function PhotoCapture({ photos, setPhotos }) {
       <label>{t('Photographs')}</label>
       <div className="row row-wrap" style={{ gap: 9 }}>
         {photos.map((p, i) => (
-          <div key={i} style={{ position: 'relative', width: 92, height: 72, borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border)' }}>
+          <div
+            key={i}
+            style={{ position: 'relative', width: 92, height: 72, borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border)', cursor: i > 0 ? 'pointer' : 'default' }}
+            onClick={() => makeMain(i)}
+            title={i > 0 ? t('Set as main photograph') : undefined}
+          >
             <img src={p.data_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             {i === 0 && <span className="badge badge-ok" style={{ position: 'absolute', bottom: 3, left: 3, fontSize: '0.6rem', padding: '0 5px' }}>{t('Main')}</span>}
             <button
               type="button" className="btn btn-icon"
               style={{ position: 'absolute', top: 2, right: 2, width: 22, height: 22, padding: 0, borderRadius: 99, background: 'rgba(0,0,0,0.6)', color: '#fff', border: 0 }}
-              onClick={() => setPhotos(photos.filter((_, k) => k !== i))}
+              onClick={(e) => { e.stopPropagation(); setPhotos(photos.filter((_, k) => k !== i)); }}
               aria-label={t('Remove photograph')}
             >
               <I.X style={{ width: 12, height: 12 }} />
@@ -170,6 +221,8 @@ function PhotoCapture({ photos, setPhotos }) {
 
 /* ------------------------------------------------------------------ */
 
+const DRAFT_KEY = 'florascan.register.draft';
+
 export default function RegisterPlant() {
   const { boot, user, can, toast, refreshCounts } = useApp();
   const navigate = useNavigate();
@@ -182,13 +235,37 @@ export default function RegisterPlant() {
     health_status: 'healthy', life_stage: 'mature',
     morphology_notes: '', notes: '',
   });
+  const [savedDraft, setSavedDraft] = useState(() => {
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      return (parsed && (parsed.site_name || parsed.proposed_species_name || parsed.species_id || parsed.morphology_notes)) ? parsed : null;
+    } catch { return null; }
+  });
   const [photos, setPhotos] = useState([]);
   const [gps, setGps] = useState('idle'); // idle | locating | ok | error
   const [gpsError, setGpsError] = useState(null);
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState({});
 
-  const up = (patch) => setForm((f) => ({ ...f, ...patch }));
+  const up = (patch) => setForm((f) => {
+    const next = { ...f, ...patch };
+    try { localStorage.setItem(DRAFT_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+    return next;
+  });
+
+  const restoreDraft = () => {
+    if (!savedDraft) return;
+    setForm((f) => ({ ...f, ...savedDraft }));
+    setSavedDraft(null);
+    toast(t('Draft restored.'));
+  };
+
+  const discardDraft = () => {
+    try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
+    setSavedDraft(null);
+  };
 
   const locate = () => {
     if (!navigator.geolocation) { setGps('error'); setGpsError(t('This browser has no location support.')); return; }
@@ -243,6 +320,7 @@ export default function RegisterPlant() {
         photos,
       };
       const { plant } = await api.createPlant(payload);
+      try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
       await refreshCounts();
       toast(
         plant.status === 'approved'
@@ -264,12 +342,27 @@ export default function RegisterPlant() {
           sub={t('The ground-truthing form. Everything except the species and the location can be filled in later.')}
         />
 
+        {savedDraft && (
+          <div style={{ marginBottom: 18 }}>
+            <Notice kind="info" title={t('Unsaved draft found')}>
+              <div className="row row-wrap" style={{ gap: 8, marginTop: 6 }}>
+                <button type="button" className="btn btn-sm btn-primary" onClick={restoreDraft}>
+                  <I.Refresh /> {t('Restore draft')}
+                </button>
+                <button type="button" className="btn btn-sm" onClick={discardDraft}>
+                  <I.X /> {t('Discard')}
+                </button>
+              </div>
+            </Notice>
+          </div>
+        )}
+
         <div style={{ marginBottom: 18 }}>
           <Notice kind={willPublish ? 'ok' : 'info'} title={willPublish ? t('This will publish immediately') : t('This will go to the review queue')}>
             {publishesImmediately && t('You hold {permission}, so your own entries are published as soon as they are saved.', { permission: <span className="mono">plant.approve</span> })}
             {!publishesImmediately && willPublish && t('The {setting} setting is off, so new entries publish straight away.', { setting: <span className="mono">require_approval</span> })}
-            {!willPublish && !form.species_id && form.proposed_species_name && t('A record with no confirmed species always goes to a reviewer, whatever the approval setting.')}
-            {!willPublish && (form.species_id || !form.proposed_species_name) && t('A reviewer will check it and either publish it or return it with a note.')}
+            {!willPublish && !form.species_id && form.proposed_species_name && t('A record with no confirmed species always goes to a senior botanist, whatever the approval setting.')}
+            {!willPublish && (form.species_id || !form.proposed_species_name) && t('A senior botanist will check it and either publish it or return it with a note.')}
           </Notice>
         </div>
 
@@ -393,7 +486,7 @@ export default function RegisterPlant() {
                 <textarea
                   id="notes" className="textarea" style={{ minHeight: 60 }}
                   value={form.notes} onChange={(e) => up({ notes: e.target.value })}
-                  placeholder={t('Anything the reviewer should know. Never shown to visitors.')}
+                  placeholder={t('Anything the senior botanist should know. Never shown to visitors.')}
                 />
               </div>
             </div>

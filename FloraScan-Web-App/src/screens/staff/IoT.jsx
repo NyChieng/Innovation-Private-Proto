@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Empty, LoadingBlock, Modal, Notice, PageHead, Stat } from '../../components/ui.jsx';
 import { api } from '../../lib/api.js';
+import { useApp } from '../../lib/store.jsx';
+import AuthImage from '../../components/AuthImage.jsx';
 import { relativeTime, titleCase } from '../../lib/format.js';
 import * as I from '../../lib/icons.jsx';
 import { msg, t } from '../../lib/i18n.js';
@@ -20,14 +22,14 @@ const METRICS = [
   { key: 'soil_moisture_pct', limit: 'soil_moisture', label: msg('Soil moisture'), unit: '%', decimals: 1 },
   { key: 'temperature_c', limit: 'temperature', label: msg('Temperature'), unit: '°C', decimals: 1 },
   { key: 'humidity_pct', limit: 'humidity', label: msg('Humidity'), unit: '%', decimals: 1 },
-  // The rest of the kit, and the node's own Wi-Fi signal. No safe range is
-  // set for these, so they never raise an alert; they give context (rain
-  // explains a soil reading; motion, noise and distance show visitors near
-  // the plant) and help diagnose a node that goes quiet.
+  // The rest of the kit, and the node's own Wi-Fi signal. Sound and distance
+  // have safe ranges (a loud noise or something too close to the plant raises
+  // an alert); the others give context (rain explains a soil reading, motion
+  // shows visitors near the plant) and help diagnose a node that goes quiet.
   { key: 'rain_pct', limit: null, label: msg('Rain'), unit: '%', decimals: 1 },
   { key: 'motion_events', limit: null, label: msg('Motion'), unit: msg('events'), decimals: 0, nonNegative: true },
-  { key: 'sound_peak_pct', limit: null, label: msg('Sound (peak)'), unit: '%', decimals: 1 },
-  { key: 'distance_cm', limit: null, label: msg('Distance'), unit: 'cm', decimals: 1, nonNegative: true },
+  { key: 'sound_peak_pct', limit: 'sound', label: msg('Sound (peak)'), unit: '%', decimals: 1 },
+  { key: 'distance_cm', limit: 'distance', label: msg('Distance'), unit: 'cm', decimals: 1, nonNegative: true },
   { key: 'wifi_rssi_dbm', limit: null, label: msg('Wi-Fi signal'), unit: 'dBm', decimals: 0 },
 ];
 
@@ -38,6 +40,8 @@ const ALERT_METRIC = {
   soil_moisture: METRICS[0],
   temperature: METRICS[1],
   humidity: METRICS[2],
+  sound: METRICS.find((m) => m.key === 'sound_peak_pct'),
+  distance: METRICS.find((m) => m.key === 'distance_cm'),
 };
 
 const RANGES = [
@@ -100,12 +104,14 @@ function niceStep(span, count) {
 /* ------------------------------------------------------------------ */
 
 export default function IoT() {
+  const { can } = useApp();
   const [hours, setHours] = useState('2');
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [updatedAt, setUpdatedAt] = useState(null);
   const [deviceId, setDeviceId] = useState(null);
   const [resolving, setResolving] = useState(null);
+  const [resolvingCamera, setResolvingCamera] = useState(null);
   const [showTable, setShowTable] = useState(false);
 
   // Each request gets a number; a slow reply that arrives after a newer one
@@ -134,9 +140,19 @@ export default function IoT() {
     return () => clearInterval(timer);
   }, [load]);
 
+  // Opened from a camera-alert notification: go to the camera alerts once the
+  // page has drawn them.
+  const scrolledToHash = useRef(false);
+  useEffect(() => {
+    if (!data || scrolledToHash.current || window.location.hash !== '#camera-alerts') return;
+    scrolledToHash.current = true;
+    document.getElementById('camera-alerts')?.scrollIntoView({ block: 'start' });
+  }, [data]);
+
   const devices = data?.devices || [];
   const selected = devices.find((d) => d.id === deviceId) || devices[0] || null;
   const alerts = data?.alerts || [];
+  const cameraAlerts = data?.camera_alerts || [];
 
   const series = useMemo(
     () => (data?.readings || []).filter((r) => selected && r.device_id === selected.id),
@@ -259,6 +275,25 @@ export default function IoT() {
           </>
         )}
 
+        {/* AI camera alerts */}
+        <div className="card card-pad" style={{ marginTop: 22 }} id="camera-alerts">
+          <div className="row" style={{ marginBottom: 4 }}>
+            <h2 style={{ fontSize: '1.05rem', margin: 0 }}>{t('Camera alerts')}</h2>
+            <span className="spacer" />
+            <span className="tiny mute">{t('Most recent 50, unresolved first')}</span>
+          </div>
+          <div className="tiny mute">
+            {t('Snapshots from the AI camera when someone touches a plant or is near it after hours.')}
+          </div>
+          {cameraAlerts.length === 0 ? (
+            <div className="small mute" style={{ padding: '14px 0 4px' }}>{t('No camera alerts yet.')}</div>
+          ) : (
+            cameraAlerts.map((a) => (
+              <CameraAlertItem key={a.id} alert={a} onResolve={can('alert.resolve') ? () => setResolvingCamera(a) : null} />
+            ))
+          )}
+        </div>
+
         {/* Alerts */}
         <div className="card card-pad" style={{ marginTop: 22 }}>
           <div className="row" style={{ marginBottom: 4 }}>
@@ -271,7 +306,9 @@ export default function IoT() {
               {t("No alerts yet. One opens when a reading leaves its sensor's safe range.")}
             </div>
           ) : (
-            alerts.map((a) => <AlertItem key={a.id} alert={a} onResolve={() => setResolving(a)} />)
+            alerts.map((a) => (
+              <AlertItem key={a.id} alert={a} onResolve={can('alert.resolve') ? () => setResolving(a) : null} />
+            ))
           )}
         </div>
       </div>
@@ -283,7 +320,100 @@ export default function IoT() {
           onDone={() => { setResolving(null); load(); }}
         />
       )}
+      {resolvingCamera && (
+        <CameraResolveModal
+          alert={resolvingCamera}
+          onClose={() => setResolvingCamera(null)}
+          onDone={() => { setResolvingCamera(null); load(); }}
+        />
+      )}
     </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* AI camera alerts                                                    */
+/* ------------------------------------------------------------------ */
+
+const cameraWhat = (a) => (a.tier === 'AFTER-HOURS' ? t('Someone at the plant after hours') : t('Someone touched the plant'));
+
+function CameraAlertItem({ alert: a, onResolve }) {
+  const open = a.status === 'open';
+  const resolvedBy = a.resolved_by_name
+    ? t('Resolved by {name} {when}', { name: a.resolved_by_name, when: a.resolved_at ? relativeTime(a.resolved_at) : '' })
+    : t('Resolved {when}', { when: a.resolved_at ? relativeTime(a.resolved_at) : '' });
+  return (
+    <div className="row camera-alert" style={{ gap: 12, padding: '12px 0', borderTop: '1px solid rgba(127,127,127,0.18)', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+      <div style={{ flex: 'none' }}>
+        <AuthImage src={a.photo_url} alt={t('Camera snapshot')} style={{ width: 128, height: 72, objectFit: 'cover', borderRadius: 6, display: 'block' }} />
+      </div>
+      <div className="grow" style={{ minWidth: 160 }}>
+        <div className="strong">{cameraWhat(a)}</div>
+        {a.detail && <div className="small mono">{a.detail}</div>}
+        <div className="tiny mute">
+          <span className="mono">{a.device_code}</span>
+          {a.plant_code ? ` · ${a.plant_code}` : ''} · {relativeTime(a.triggered_at)}
+        </div>
+        {!open && (
+          <div className="tiny mute" style={{ marginTop: 4 }}>
+            {resolvedBy}
+            {a.resolution_note ? `: “${a.resolution_note}”` : ''}
+          </div>
+        )}
+      </div>
+      <span className={'badge ' + (open ? 'badge-warn' : 'badge-neutral')}><span className="dot" />{open ? t('Unresolved') : t('Resolved')}</span>
+      {open && onResolve && (
+        <button className="btn btn-sm" onClick={onResolve}><I.Check />{t('Resolve')}</button>
+      )}
+    </div>
+  );
+}
+
+function CameraResolveModal({ alert: a, onClose, onDone }) {
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+
+  const submit = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.post(`/sensors/camera-alerts/${a.id}/resolve`, { note });
+      onDone();
+    } catch (err) {
+      setError(err.message);
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal
+      title={t('Resolve camera alert')}
+      onClose={onClose}
+      footer={(
+        <>
+          <button className="btn" onClick={onClose}>{t('Cancel')}</button>
+          <button className="btn btn-primary" disabled={busy} onClick={submit}>
+            {busy && <span className="spinner" />}{t('Resolve')}
+          </button>
+        </>
+      )}
+    >
+      <AuthImage src={a.photo_url} alt={t('Camera snapshot')} style={{ width: '100%', borderRadius: 8, display: 'block', marginBottom: 10 }} />
+      <p className="small" style={{ marginTop: 0 }}>
+        {cameraWhat(a)} · <span className="mono">{a.device_code}</span>{a.plant_code ? ` (${a.plant_code})` : ''} · {relativeTime(a.triggered_at)}
+      </p>
+      <label className="small strong" htmlFor="camera-resolve-note">{t('What was done? (optional)')}</label>
+      <textarea
+        id="camera-resolve-note"
+        className="input"
+        value={note}
+        onChange={(e) => setNote(e.target.value)}
+        maxLength={500}
+        style={{ width: '100%', minHeight: 90, marginTop: 6, font: 'inherit', padding: 8, boxSizing: 'border-box' }}
+      />
+      {error && <div style={{ marginTop: 10 }}><Notice kind="danger">{error}</Notice></div>}
+    </Modal>
   );
 }
 

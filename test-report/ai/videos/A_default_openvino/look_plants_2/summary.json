@@ -1,0 +1,189 @@
+{
+  "video": "look plants 2.mp4",
+  "slug": "look_plants_2",
+  "resolution": "1920x1080",
+  "fps": 25.0,
+  "frames": 275,
+  "duration_s": 11.0,
+  "expected": "ALERT",
+  "alert_raised": true,
+  "passed": true,
+  "first_seen": {
+    "SAFE": 0.0,
+    "WARNING": 2.88,
+    "ALERT": 3.12
+  },
+  "stage_frames": {
+    "SAFE": 72,
+    "WARNING": 150,
+    "ALERT": 53
+  },
+  "stage_seconds": {
+    "SAFE": 2.88,
+    "WARNING": 6.0,
+    "ALERT": 2.12
+  },
+  "max_people": 1,
+  "max_animals": 0,
+  "max_plants": 2,
+  "frames_with_plant": 270,
+  "frames_with_hand": 200,
+  "peak_touch_p": 0.946,
+  "peak_touch_t": 5.68,
+  "frames_touch_ge_06": 57,
+  "zone": [],
+  "events": [
+    {
+      "t": 2.88,
+      "tier": "WARNING",
+      "track_id": 1,
+      "detail": "standing close to the plant",
+      "snapshot": ""
+    },
+    {
+      "t": 3.12,
+      "tier": "ALERT",
+      "track_id": 1,
+      "detail": "touching the plant (touch model p=0.92)",
+      "snapshot": "snapshots/20270115_160003_ALERT_1.jpg"
+    }
+  ],
+  "keyframes": [
+    {
+      "t": 0.0,
+      "stage": "SAFE",
+      "file": "keyframes/0000_SAFE.jpg",
+      "why": "first frame"
+    },
+    {
+      "t": 2.88,
+      "stage": "WARNING",
+      "file": "keyframes/0072_WARNING.jpg",
+      "why": "SAFE -> WARNING"
+    },
+    {
+      "t": 3.12,
+      "stage": "ALERT",
+      "file": "keyframes/0078_ALERT.jpg",
+      "why": "WARNING -> ALERT"
+    },
+    {
+      "t": 3.24,
+      "stage": "WARNING",
+      "file": "keyframes/0081_WARNING.jpg",
+      "why": "ALERT -> WARNING"
+    },
+    {
+      "t": 3.8,
+      "stage": "ALERT",
+      "file": "keyframes/0095_ALERT.jpg",
+      "why": "WARNING -> ALERT"
+    },
+    {
+      "t": 4.04,
+      "stage": "WARNING",
+      "file": "keyframes/0101_WARNING.jpg",
+      "why": "ALERT -> WARNING"
+    },
+    {
+      "t": 4.28,
+      "stage": "ALERT",
+      "file": "keyframes/0107_ALERT.jpg",
+      "why": "WARNING -> ALERT"
+    },
+    {
+      "t": 4.32,
+      "stage": "WARNING",
+      "file": "keyframes/0108_WARNING.jpg",
+      "why": "ALERT -> WARNING"
+    },
+    {
+      "t": 5.68,
+      "stage": "ALERT",
+      "file": "keyframes/0142_ALERT.jpg",
+      "why": "WARNING -> ALERT"
+    },
+    {
+      "t": 5.76,
+      "stage": "WARNING",
+      "file": "keyframes/0144_WARNING.jpg",
+      "why": "ALERT -> WARNING"
+    },
+    {
+      "t": 6.28,
+      "stage": "ALERT",
+      "file": "keyframes/0157_ALERT.jpg",
+      "why": "WARNING -> ALERT"
+    },
+    {
+      "t": 6.44,
+      "stage": "WARNING",
+      "file": "keyframes/0161_WARNING.jpg",
+      "why": "ALERT -> WARNING"
+    },
+    {
+      "t": 7.4,
+      "stage": "ALERT",
+      "file": "keyframes/0185_ALERT.jpg",
+      "why": "WARNING -> ALERT"
+    },
+    {
+      "t": 7.44,
+      "stage": "WARNING",
+      "file": "keyframes/0186_WARNING.jpg",
+      "why": "ALERT -> WARNING"
+    },
+    {
+      "t": 7.6,
+      "stage": "ALERT",
+      "file": "keyframes/0190_ALERT.jpg",
+      "why": "WARNING -> ALERT"
+    },
+    {
+      "t": 7.72,
+      "stage": "WARNING",
+      "file": "keyframes/0193_WARNING.jpg",
+      "why": "ALERT -> WARNING"
+    },
+    {
+      "t": 8.2,
+      "stage": "ALERT",
+      "file": "keyframes/0205_ALERT.jpg",
+      "why": "WARNING -> ALERT"
+    },
+    {
+      "t": 9.04,
+      "stage": "WARNING",
+      "file": "keyframes/0226_WARNING.jpg",
+      "why": "ALERT -> WARNING"
+    },
+    {
+      "t": 10.48,
+      "stage": "ALERT",
+      "file": "keyframes/0262_ALERT.jpg",
+      "why": "WARNING -> ALERT"
+    },
+    {
+      "t": 10.96,
+      "stage": "WARNING",
+      "file": "keyframes/0274_WARNING.jpg",
+      "why": "ALERT -> WARNING"
+    },
+    {
+      "t": 5.68,
+      "stage": "peak",
+      "file": "keyframes/peak_touch.jpg",
+      "why": "highest touch probability 0.95"
+    }
+  ],
+  "backend": "openvino",
+  "codec": "avc1",
+  "processing": {
+    "wall_s": 19.7,
+    "avg_ms": 64.4,
+    "p95_ms": 81.1,
+    "avg_model_ms": 71.9,
+    "model_frames": 244,
+    "effective_fps": 14.0
+  }
+}

@@ -8,10 +8,9 @@ import {
   audit, activity, notify, notifyPermission, recordRevisions, requestContext,
 } from './db.js';
 import path from 'node:path';
-import { renderPhoto } from './images.js';
 import { photoExists, PHOTO_DIR, SPECIES_DATA, hasRealPhotos } from './species-data.js';
 import { lanAddresses, localHostName } from './net.js';
-import { hashPassword, verifyPassword, DEMO_PASSWORD } from './passwords.js';
+import { hashPassword, verifyPassword, temporaryPassword } from './passwords.js';
 import { createApiRateLimits } from './security.js';
 import * as passkeys from './passkeys.js';
 import { sendMail, maskEmail } from './mailer.js';
@@ -134,7 +133,7 @@ function newPasswordProblem(pw, current) {
   // Fixed wording rather than templates, so the browser can translate them.
   if (pw.length < MIN_PASSWORD) return 'The new password must be at least 8 characters.';
   if (pw.length > 128) return 'The new password is too long (maximum 128 characters).';
-  if ((current && pw === String(current)) || pw === DEMO_PASSWORD) {
+  if (current && pw === String(current)) {
     return 'Choose a password you have not used here before.';
   }
   if (!/[a-z]/i.test(pw) || !/\d/.test(pw)) return 'The new password needs at least one letter and one number.';
@@ -268,7 +267,6 @@ const RESET_REQUEST_MINUTES = 30;
 // open is an open door for whoever reaches that screen next.
 const APPROVAL_MINUTES = 5;
 const MAX_WRONG_CHECK_CODES = 5;
-const resetNotifiedAt = new Map(); // user id -> when the admins were last told
 const requestExpired = (row) => new Date(row.expires_at).getTime() < Date.now()
   || (row.status === 'approved' && row.decided_at
     && Date.now() - new Date(row.decided_at).getTime() > APPROVAL_MINUTES * 60000);
@@ -432,9 +430,44 @@ async function plantExtras(rows) {
   };
 }
 
+/*
+ * Photographs of a record that is not published yet are served only to staff
+ * who may see it (GET /photos/upload/:id). The app shows them with a plain
+ * <img>, which cannot send the session token, so a reviewer saw a broken image
+ * for every uploaded photograph in the review queue. Instead, the addresses
+ * handed to such a viewer carry a short-lived signature. It is keyed per server
+ * process, names one photograph, and runs out within 12 hours; published
+ * photographs keep their plain, cacheable address.
+ */
+const PHOTO_SIG_KEY = crypto.randomBytes(32);
+const PHOTO_SIG_HOURS = 12;
+const UPLOAD_PATH = /^\/api\/photos\/upload\/(\d+)$/;
+const photoSig = (photoId, exp) =>
+  crypto.createHmac('sha256', PHOTO_SIG_KEY).update(`${photoId}.${exp}`).digest('base64url');
+
+function signedPhotoPath(file) {
+  const m = UPLOAD_PATH.exec(file || '');
+  if (!m) return file;
+  // Whole hours, so the address - and the browser's copy - is stable for an hour.
+  const exp = (Math.floor(Date.now() / 3600000) + PHOTO_SIG_HOURS) * 3600;
+  return `${file}?exp=${exp}&sig=${photoSig(m[1], exp)}`;
+}
+
+function validPhotoSig(photoId, exp, sig) {
+  const e = Number(exp);
+  if (!Number.isInteger(e) || e * 1000 < Date.now() || typeof sig !== 'string') return false;
+  const want = Buffer.from(photoSig(String(photoId), e));
+  const got = Buffer.from(sig);
+  return got.length === want.length && crypto.timingSafeEqual(got, want);
+}
+
 function shapePlant(p, ex, { full = false, viewer = null } = {}) {
   if (!p) return null;
-  const photos = ex.photos.get(p.id) || [];
+  const mayOpen = viewer && p.status !== 'approved'
+    && (userCan(viewer, 'plant.view_all') || p.registered_by === viewer.id);
+  const photos = (ex.photos.get(p.id) || []).map((ph) => (mayOpen
+    ? { ...ph, file_path: signedPhotoPath(ph.file_path), thumbnail_path: signedPhotoPath(ph.thumbnail_path) }
+    : ph));
   const qr = (ex.qr.get(p.id) || [])[0] || null;
   const sub = (ex.subs.get(p.id) || [])[0] || null;
 
@@ -1008,9 +1041,12 @@ export function createApi() {
     await update('users', user.id, { reset_requested_at: nowIso() });
 
     // Once per quarter hour, so the button cannot bury the administrators.
-    const last = resetNotifiedAt.get(user.id) || 0;
+    // `user` was read before the update above, so this is the previous
+    // request. Kept in the database rather than in memory: a remembered user
+    // id outlived a reseed, and a new account given the same id was never
+    // announced.
+    const last = user.reset_requested_at ? new Date(user.reset_requested_at).getTime() : 0;
     if (Date.now() - last > 15 * 60000) {
-      resetNotifiedAt.set(user.id, Date.now());
       await notifyPermission('user.manage', {
         type: 'password.reset_request',
         title: `${user.full_name} forgot their password`,
@@ -1299,6 +1335,17 @@ export function createApi() {
       name: (a, b) => (a.scientific_name || '').localeCompare(b.scientific_name || ''),
       code: (a, b) => a.plant_code.localeCompare(b.plant_code),
       popular: (a, b) => b.view_count - a.view_count,
+      // By trail and marker, so a list can be grouped by where plants stand.
+      // Withheld locations go last and in name order: sorting them by their
+      // real site would let the order give the location away.
+      place: (a, b) => {
+        const pa = !req.user && isLocationProtected(a.conservation_code);
+        const pb = !req.user && isLocationProtected(b.conservation_code);
+        if (pa !== pb) return pa ? 1 : -1;
+        if (pa) return (a.scientific_name || '').localeCompare(b.scientific_name || '');
+        return (a.site_name || '').localeCompare(b.site_name || '', 'en', { numeric: true })
+          || (a.scientific_name || '').localeCompare(b.scientific_name || '');
+      },
     };
     rows.sort(sorters[sort] || sorters.recent);
 
@@ -1390,7 +1437,8 @@ export function createApi() {
     // Plant counts for the whole list in one query rather than one each.
     const counts = new Map((await q(
       `SELECT species_id, COUNT(*) n FROM plants
-        WHERE deleted_at IS NULL AND species_id IS NOT NULL GROUP BY species_id`,
+        WHERE deleted_at IS NULL AND species_id IS NOT NULL
+          ${req.can('plant.view_all') ? '' : "AND status = 'approved'"} GROUP BY species_id`,
     )).map((r) => [r.species_id, Number(r.n)]));
     const statuses = new Map((await q('SELECT * FROM conservation_statuses')).map((c) => [c.id, c]));
 
@@ -1416,7 +1464,7 @@ export function createApi() {
       : "p.species_id = ? AND p.deleted_at IS NULL AND p.status = 'approved'";
     const rows = await plantsWhere(where, [s.id]);
     res.json({
-      species: await shapeSpecies(s),
+      species: { ...await shapeSpecies(s), plant_count: rows.length },
       plants: await shapeMany(rows, { viewer: req.user }),
     });
   }));
@@ -1481,8 +1529,11 @@ export function createApi() {
 
     const where = ['p.deleted_at IS NULL'];
     const params = [];
-    // Someone who can register but not see everything sees only their own.
-    if (!req.can('plant.view_all') || mine === '1') {
+    // Someone who can register but not see everything sees only their own -
+    // except that whoever prints QR tags may list every published plant, since
+    // published records are public anyway (the tag sheet asks for these).
+    const tagPrinting = req.can('qr.print') && status === 'approved';
+    if ((!req.can('plant.view_all') && !tagPrinting) || mine === '1') {
       where.push('p.registered_by = ?');
       params.push(req.user.id);
     }
@@ -1644,17 +1695,38 @@ export function createApi() {
     res.status(201).json({ plant: await shapeOne(joined, { full: true, viewer: req.user }) });
   }));
 
-  api.patch('/plants/:id', need('plant.edit'), route(async (req, res) => {
+  api.patch('/plants/:id', route(async (req, res) => {
+    if (!req.user) return res.status(401).json({ error: 'Sign in required' });
+    const denied = () => res.status(403).json({ error: 'Your role does not have permission: plant.edit' });
+    if (!req.can('plant.edit') && !req.can('plant.create')) return denied();
     const before = await byId('plants', req.params.id);
     if (!before || before.deleted_at) return res.status(404).json({ error: 'Not found' });
-    const invalid = validatePlant(req.body || {});
-    if (invalid) return res.status(400).json({ error: invalid });
-
+    // A botanist registers plants but does not edit the register. The one
+    // exception is their own record after a senior botanist returned it:
+    // correcting it is exactly what "returned with a note" asks them to do.
+    const ownReturned = before.registered_by === req.user.id && before.status === 'rejected';
+    if (!req.can('plant.edit') && !ownReturned) return denied();
     const allowed = ['species_id', 'proposed_species_name', 'site_name', 'location_notes',
       'latitude', 'longitude', 'altitude_m', 'height_m', 'trunk_diameter_cm',
       'health_status', 'life_stage', 'morphology_notes', 'notes'];
     const patch = {};
     allowed.forEach((k) => { if (k in (req.body || {})) patch[k] = req.body[k]; });
+
+    // PATCH describes only changes; paired fields and required values must
+    // be checked against the complete record that would actually be saved.
+    const candidate = { ...before, ...patch };
+    const invalid = validatePlant(candidate);
+    if (invalid) return res.status(400).json({ error: invalid });
+    if (typeof candidate.site_name !== 'string' || !candidate.site_name.trim()) {
+      return res.status(400).json({ error: 'A location or site name is required.' });
+    }
+    if (!candidate.species_id && (typeof candidate.proposed_species_name !== 'string' || !candidate.proposed_species_name.trim())) {
+      return res.status(400).json({ error: 'Choose a species, or type a name under "species not listed".' });
+    }
+    if (before.status === 'approved' && !candidate.species_id) {
+      return res.status(400).json({ error: 'A published record must have a confirmed species.' });
+    }
+    if ('site_name' in patch) patch.site_name = patch.site_name.trim();
 
     const speciesId = 'species_id' in patch ? patch.species_id : before.species_id;
     if (speciesId && !await byId('species', speciesId)) {
@@ -1682,17 +1754,19 @@ export function createApi() {
    * so this must reactivate rather than insert a second. A printed tag stays
    * valid across archive and restore because its token never changes.
    */
-  async function issueQr(plantId, userId) {
-    const active = await one("SELECT * FROM qr_codes WHERE plant_id = ? AND status = 'active' LIMIT 1", [plantId]);
+  async function issueQr(plantId, userId, db = { q, one, insert }) {
+    const active = await db.one("SELECT * FROM qr_codes WHERE plant_id = ? AND status = 'active' LIMIT 1", [plantId]);
     if (active) return active;
 
-    const old = await one("SELECT * FROM qr_codes WHERE plant_id = ? AND status = 'inactive' LIMIT 1", [plantId]);
+    const old = await db.one("SELECT * FROM qr_codes WHERE plant_id = ? AND status = 'inactive' LIMIT 1", [plantId]);
     if (old) {
-      return await update('qr_codes', old.id, {
-        status: 'active', deactivated_at: null, deactivation_reason: null,
-      });
+      await db.q(
+        "UPDATE qr_codes SET status = 'active', deactivated_at = NULL, deactivation_reason = NULL WHERE id = ?",
+        [old.id],
+      );
+      return { ...old, status: 'active', deactivated_at: null, deactivation_reason: null };
     }
-    return await insert('qr_codes', {
+    return await db.insert('qr_codes', {
       plant_id: plantId, qr_token: crypto.randomUUID(),
       image_path: null, target_url: null, version: 1, status: 'active',
       generated_by: userId ?? null, generated_at: nowIso(),
@@ -1723,7 +1797,7 @@ export function createApi() {
       return null;
     }
     if (sub.submitted_by === req.user.id || plant.registered_by === req.user.id) {
-      res.status(403).json({ error: 'You cannot review a record you submitted yourself. Another reviewer must check it.' });
+      res.status(403).json({ error: 'You cannot review a record you submitted yourself. Another senior botanist must check it.' });
       return null;
     }
     return { before: plant, sub };
@@ -1872,12 +1946,24 @@ export function createApi() {
   }));
 
   api.post('/plants/:id/restore', need('plant.archive'), route(async (req, res) => {
-    const before = await byId('plants', req.params.id);
-    if (!before) return res.status(404).json({ error: 'Not found' });
-    const after = await update('plants', before.id, { status: 'approved', updated_at: nowIso() });
-    await issueQr(before.id, req.user.id);
-    await recordRevisions(before.id, req.user.id, before, after, 'Restored to public view');
-    audit({ user_id: req.user.id, action: 'update', entity_type: 'plants', entity_id: before.id, old_values: { status: 'archived' }, new_values: { status: 'approved' } });
+    const result = await tx(async (db) => {
+      const before = await db.one('SELECT * FROM plants WHERE id = ? FOR UPDATE', [req.params.id]);
+      if (!before || before.deleted_at) return { code: 404, error: 'Not found' };
+      if (before.status !== 'archived') return { code: 409, error: 'Only an archived record can be restored.' };
+
+      // A previously unverified archive still needs review. For a published
+      // record, commit restoration together with reactivation of its printed tag.
+      const status = before.verified_at && before.species_id ? 'approved' : 'rejected';
+      const updated_at = nowIso();
+      await db.q('UPDATE plants SET status = ?, updated_at = ? WHERE id = ?', [status, updated_at, before.id]);
+      if (status === 'approved') await issueQr(before.id, req.user.id, db);
+      return { before, after: { ...before, status, updated_at }, status };
+    });
+    if (result.error) return res.status(result.code).json({ error: result.error });
+    const { before, after, status } = result;
+    await recordRevisions(before.id, req.user.id, before, after,
+      status === 'approved' ? 'Restored to public view' : 'Restored for corrections before review');
+    audit({ user_id: req.user.id, action: 'update', entity_type: 'plants', entity_id: before.id, old_values: { status: 'archived' }, new_values: { status } });
     const joined = (await plantsWhere('p.id = ?', [before.id]))[0];
     res.json({ plant: await shapeOne(joined, { full: true, viewer: req.user }) });
   }));
@@ -1941,9 +2027,18 @@ export function createApi() {
   /* ================================================================ */
 
   api.get('/qr/:plantId', route(async (req, res) => {
+    // Staff only, and only for records they could open: the reply names the
+    // plant even while it is pending, returned or archived, and the request
+    // records the tag's address. Same rule as GET /plants.
+    if (!req.user) return res.status(401).json({ error: 'Sign in required' });
     const rows = await plantsWhere('p.id = ?', [req.params.plantId]);
     const plant = rows[0];
     if (!plant) return res.status(404).json({ error: 'Not found' });
+    const own = plant.registered_by === req.user.id;
+    const tagPrinting = req.can('qr.print') && plant.status === 'approved';
+    if (!req.can('plant.view_all') && !(req.can('plant.create') && own) && !tagPrinting) {
+      return res.status(403).json({ error: 'Not permitted' });
+    }
     const qr = await one(
       "SELECT * FROM qr_codes WHERE plant_id = ? ORDER BY (status = 'active') DESC, id ASC LIMIT 1",
       [plant.id],
@@ -2082,17 +2177,18 @@ export function createApi() {
     if (dupe) return res.status(409).json({ error: 'An account with that email address already exists.' });
     if (!roleById(b.role_id)) return res.status(400).json({ error: 'Choose a role.' });
 
+    const temporary = temporaryPassword();
     const row = await insert('users', {
       role_id: Number(b.role_id),
       full_name: b.full_name.trim(), email: b.email.trim().toLowerCase(),
       title: b.title || null, phone: b.phone || null,
-      password_hash: hashPassword(DEMO_PASSWORD),
+      password_hash: hashPassword(temporary),
       must_change_password: 1, is_active: 1,
       email_verified_at: null, last_login_at: null,
       created_by: req.user.id, updated_at: nowIso(), deleted_at: null,
     });
     audit({ user_id: req.user.id, action: 'create', entity_type: 'users', entity_id: row.id, new_values: { email: row.email, role_id: row.role_id } });
-    res.status(201).json({ user: shapeUser(row), temporary_password: DEMO_PASSWORD });
+    res.status(201).json({ user: shapeUser(row), temporary_password: temporary });
   }));
 
   api.patch('/users/:id', need('user.manage'), route(async (req, res) => {
@@ -2103,9 +2199,16 @@ export function createApi() {
 
     if ('role_id' in body) {
       if (!req.can('user.assign_role')) return res.status(403).json({ error: 'Not permitted to change roles.' });
+      if (!roleById(body.role_id)) return res.status(400).json({ error: 'Choose a role.' });
       patch.role_id = Number(body.role_id);
     }
     ['full_name', 'title', 'phone'].forEach((k) => { if (k in body) patch[k] = body[k]; });
+    if ('full_name' in patch) {
+      if (typeof patch.full_name !== 'string' || !patch.full_name.trim()) {
+        return res.status(400).json({ error: 'Full name is required.' });
+      }
+      patch.full_name = patch.full_name.trim();
+    }
     if ('is_active' in body) patch.is_active = body.is_active ? 1 : 0;
     patch.updated_at = nowIso();
 
@@ -2126,10 +2229,11 @@ export function createApi() {
   api.post('/users/:id/reset-password', need('user.manage'), route(async (req, res) => {
     const u = await byId('users', req.params.id);
     if (!u) return res.status(404).json({ error: 'Not found' });
+    const temporary = temporaryPassword();
     // This used to flag the account and report a temporary password without
     // ever setting one - the old password went on working.
     await update('users', u.id, {
-      password_hash: hashPassword(DEMO_PASSWORD),
+      password_hash: hashPassword(temporary),
       must_change_password: 1,
       // A reset may be because the account was taken over, so a code the
       // intruder could have seen goes too; a new one comes with the new password.
@@ -2150,7 +2254,7 @@ export function createApi() {
     await q("UPDATE password_reset_requests SET status = 'closed' WHERE user_id = ? AND status IN ('pending', 'approved')", [u.id]);
     audit({ user_id: req.user.id, action: 'password_reset', entity_type: 'users', entity_id: u.id, new_values: { must_change_password: 1 } });
     activity({ user_id: req.user.id, action: 'password_changed', detail: 'Reset the password for ' + u.email });
-    res.json({ ok: true, temporary_password: DEMO_PASSWORD });
+    res.json({ ok: true, temporary_password: temporary });
   }));
 
   /**
@@ -2319,8 +2423,7 @@ export function createApi() {
    *   ?hours=2       how far back `readings` goes (1-48)
    *   ?device_id=1   limit `readings` to one device
    */
-  api.get('/sensors', route(async (req, res) => {
-    if (!req.user) return res.status(401).json({ error: 'Sign in required' });
+  api.get('/sensors', need('sensor.view'), route(async (req, res) => {
 
     // Both are whole numbers by construction, so they are safe to put in the
     // SQL text; MySQL does not accept a placeholder inside every INTERVAL.
@@ -2328,12 +2431,14 @@ export function createApi() {
     const hours = Math.min(48, Math.max(1, Math.floor(Number(req.query.hours) || 2)));
     const deviceId = req.query.device_id ? Number(req.query.device_id) : null;
 
-    const [devices, latest, readings, alerts] = await Promise.all([
+    const [devices, latest, readings, alerts, cameraAlerts] = await Promise.all([
       // Every DATETIME in the schema is UTC, hence UTC_TIMESTAMP() not NOW().
       q(`SELECT d.id, d.device_code, d.label, d.plant_id, d.is_simulated, d.is_active,
                 d.soil_moisture_min, d.soil_moisture_max,
                 d.temperature_min, d.temperature_max,
                 d.humidity_min, d.humidity_max,
+                d.distance_min, d.distance_max,
+                d.sound_min, d.sound_max,
                 d.last_seen_at,
                 (d.last_seen_at IS NOT NULL
                   AND d.last_seen_at >= UTC_TIMESTAMP() - INTERVAL ${offlineMinutes} MINUTE) AS online,
@@ -2368,6 +2473,22 @@ export function createApi() {
            LEFT JOIN users u     ON u.id = a.resolved_by
           ORDER BY (a.status = 'open') DESC, a.triggered_at DESC
           LIMIT 50`),
+
+      // AI camera alerts, without the pictures (fetched one by one).
+      q(`SELECT a.id, a.camera_id, a.plant_id, a.tier, a.track_id, a.detail,
+                a.photo_mime, a.photo_bytes, a.status, a.triggered_at, a.resolved_by, a.resolved_at,
+                a.resolution_note, c.device_code, c.label AS camera_label, p.plant_code,
+                u.full_name AS resolved_by_name
+           FROM camera_alerts a
+           JOIN camera_devices c ON c.id = a.camera_id
+           LEFT JOIN plants p    ON p.id = a.plant_id
+           LEFT JOIN users u     ON u.id = a.resolved_by
+          ORDER BY (a.status = 'open') DESC, a.triggered_at DESC
+          LIMIT 50`).catch((err) => {
+        // A database set up before section 15 has no camera tables yet.
+        if (err?.code === 'ER_NO_SUCH_TABLE') return [];
+        throw err;
+      }),
     ]);
 
     const latestByDevice = new Map(latest.map((r) => [r.device_id, shapeReading(r)]));
@@ -2397,6 +2518,8 @@ export function createApi() {
           soil_moisture: { min: num(d.soil_moisture_min), max: num(d.soil_moisture_max) },
           temperature: { min: num(d.temperature_min), max: num(d.temperature_max) },
           humidity: { min: num(d.humidity_min), max: num(d.humidity_max) },
+          distance: { min: num(d.distance_min), max: num(d.distance_max) },
+          sound: { min: num(d.sound_min), max: num(d.sound_max) },
         },
         latest: latestByDevice.get(d.id) || null,
         open_alerts: shapedAlerts.filter((a) => a.device_id === d.id && a.status === 'open').length,
@@ -2405,12 +2528,13 @@ export function createApi() {
       readings: readings.reverse().map(shapeReading),
       alerts: shapedAlerts,
       open_alerts: shapedAlerts.filter((a) => a.status === 'open').length,
+      camera_alerts: cameraAlerts.map((a) => ({ ...a, photo_url: `/api/sensors/camera-alerts/${a.id}/photo` })),
+      open_camera_alerts: cameraAlerts.filter((a) => a.status === 'open').length,
     });
   }));
 
   /** Mark an alert as dealt with, with an optional note. */
-  api.post('/sensors/alerts/:id/resolve', route(async (req, res) => {
-    if (!req.user) return res.status(401).json({ error: 'Sign in required' });
+  api.post('/sensors/alerts/:id/resolve', need('alert.resolve'), route(async (req, res) => {
     const alert = await byId('sensor_alerts', req.params.id);
     if (!alert) return res.status(404).json({ error: 'No such alert' });
     if (alert.status !== 'open') return res.status(409).json({ error: 'This alert is already resolved.' });
@@ -2429,6 +2553,144 @@ export function createApi() {
     res.json({
       alert: { ...after, reading_value: num(after.reading_value), limit_value: num(after.limit_value) },
     });
+  }));
+
+  /* ================================================================ */
+  /* AI camera alerts (section 15 of Server/schema-extensions.sql)    */
+  /* ================================================================ */
+
+  // Everything but the picture, which is fetched on its own and only by roles
+  // with sensor.view.
+  const CAMERA_ALERT_COLUMNS = `a.id, a.camera_id, a.plant_id, a.tier, a.track_id, a.detail,
+    a.photo_mime, a.photo_bytes, a.status, a.triggered_at, a.resolved_by, a.resolved_at,
+    a.resolution_note`;
+  const shapeCameraAlert = (a) => ({ ...a, photo_url: `/api/sensors/camera-alerts/${a.id}/photo` });
+  const CAMERA_TIERS = new Set(['ALERT', 'AFTER-HOURS']);
+  // Under a stock XAMPP MariaDB's 1 MB max_allowed_packet. The camera sends a
+  // 1280-pixel JPEG, typically 100-300 KB.
+  const MAX_SNAPSHOT_BYTES = 900 * 1024;
+
+  /** Same check as the sensor nodes: SHA-256 of the key, compared in constant time. */
+  const cameraKeyMatches = (key, expectedHex) => {
+    if (typeof key !== 'string' || !key || !/^[0-9a-f]{64}$/i.test(expectedHex || '')) return false;
+    const got = crypto.createHash('sha256').update(key).digest();
+    return crypto.timingSafeEqual(got, Buffer.from(expectedHex, 'hex'));
+  };
+
+  /**
+   * The AI camera reports an alert with the snapshot that shows why.
+   * Not a user request: the camera signs it with X-Camera-Code / X-Camera-Key.
+   *
+   * Body: { tier: 'ALERT' | 'AFTER-HOURS', photo: base64 JPEG (or a data URL),
+   *         track_id?: number, detail?: string }
+   */
+  api.post('/camera/alerts', route(async (req, res) => {
+    const code = String(req.get('x-camera-code') || '').trim();
+    const key = req.get('x-camera-key') || '';
+    const camera = code ? await one(
+      'SELECT * FROM camera_devices WHERE device_code = ? AND deleted_at IS NULL LIMIT 1', [code],
+    ) : null;
+    // One answer for an unknown camera, a wrong key and a switched-off camera,
+    // so the endpoint does not reveal which camera codes exist.
+    if (!camera || !camera.is_active || !cameraKeyMatches(key, camera.device_key_hash)) {
+      return res.status(401).json({ error: 'Unknown camera or wrong key' });
+    }
+
+    const b = req.body || {};
+    const tier = String(b.tier || '');
+    if (!CAMERA_TIERS.has(tier)) {
+      return res.status(400).json({ error: 'tier must be ALERT or AFTER-HOURS' });
+    }
+    const raw = String(b.photo || '').replace(/^data:image\/jpeg;base64,/i, '');
+    if (!raw || !/^[A-Za-z0-9+/=\s]+$/.test(raw)) {
+      return res.status(400).json({ error: 'photo must be a base64 JPEG' });
+    }
+    const photo = Buffer.from(raw, 'base64');
+    // JPEG files start FF D8 FF; anything else is refused rather than served
+    // back to a ranger's browser later.
+    if (photo.length < 4 || photo[0] !== 0xff || photo[1] !== 0xd8 || photo[2] !== 0xff) {
+      return res.status(400).json({ error: 'photo must be a base64 JPEG' });
+    }
+    if (photo.length > MAX_SNAPSHOT_BYTES) {
+      return res.status(413).json({ error: 'The snapshot is larger than 900 KB' });
+    }
+    const trackId = Number.isInteger(b.track_id) && b.track_id >= 0 && b.track_id <= 0xFFFFFFFF ? b.track_id : null;
+    const detail = typeof b.detail === 'string' ? b.detail.trim().slice(0, 255) || null : null;
+
+    const now = nowIso();
+    // q, not insert(): insert() reads the row back, picture and all.
+    const result = await q(
+      `INSERT INTO camera_alerts (camera_id, plant_id, tier, track_id, detail, photo, photo_mime, photo_bytes, status, triggered_at)
+       VALUES (?, ?, ?, ?, ?, ?, 'image/jpeg', ?, 'open', ?)`,
+      [camera.id, camera.plant_id, tier, trackId, detail, photo, photo.length, now],
+    );
+    const alertId = result.insertId;
+    await q('UPDATE camera_devices SET last_seen_at = ? WHERE id = ?', [now, camera.id]);
+
+    // Only the people who respond to alerts are told - the Ranger role - in the
+    // app, and by email with the snapshot attached.
+    const what = tier === 'ALERT' ? 'Someone is touching the plant' : 'Someone is at the plant after hours';
+    await notifyPermission('alert.resolve', {
+      type: 'camera.alert',
+      title: `Camera alert: ${camera.device_code}`,
+      body: `${what}${camera.label ? ` (${camera.label})` : ''}.${detail ? ` ${detail}` : ''}`,
+      related_type: 'camera_alert', related_id: alertId,
+    });
+    emailCameraAlert({ camera, tier, what, detail, photo, alertId, when: now, origin: publicOrigin(req) })
+      .catch((err) => console.warn(`[camera] Alert email failed: ${err.message}`));
+
+    console.log(`[camera] ${tier} from ${camera.device_code} (alert ${alertId}, ${photo.length} bytes)`);
+    res.status(201).json({ id: alertId });
+  }));
+
+  async function emailCameraAlert({ camera, tier, what, detail, photo, alertId, when, origin }) {
+    const recipients = (await q(
+      'SELECT email, role_id FROM users WHERE is_active = 1 AND deleted_at IS NULL',
+    )).filter((u) => permissionsForRole(u.role_id).includes('alert.resolve') && u.email);
+    for (const u of recipients) {
+      await sendMail({
+        to: u.email,
+        subject: `FloraScan camera alert (${tier}): ${camera.device_code}`,
+        text: [
+          `${what}.`,
+          camera.label ? `Camera: ${camera.device_code} - ${camera.label}` : `Camera: ${camera.device_code}`,
+          detail ? `Detail: ${detail}` : null,
+          `Time (UTC): ${when.slice(0, 19).replace('T', ' ')}`,
+          '',
+          'The snapshot is attached. Open the IoT page to resolve the alert:',
+          `${origin}/staff/iot`,
+        ].filter((l) => l !== null).join('\n'),
+        attachments: [{ filename: `camera-alert-${alertId}.jpg`, content: photo, contentType: 'image/jpeg' }],
+      });
+    }
+  }
+
+  /** The snapshot for one camera alert. Staff with sensor.view only, never cached by a proxy. */
+  api.get('/sensors/camera-alerts/:id/photo', need('sensor.view'), route(async (req, res) => {
+    const row = await one('SELECT photo, photo_mime FROM camera_alerts WHERE id = ? LIMIT 1', [req.params.id]);
+    if (!row) return res.status(404).json({ error: 'No such alert' });
+    res.set('Cache-Control', 'private, no-store');
+    res.type(row.photo_mime || 'image/jpeg');
+    res.send(row.photo);
+  }));
+
+  /** Mark a camera alert as dealt with, with an optional note. */
+  api.post('/sensors/camera-alerts/:id/resolve', need('alert.resolve'), route(async (req, res) => {
+    const alert = await one('SELECT id, status FROM camera_alerts WHERE id = ? LIMIT 1', [req.params.id]);
+    if (!alert) return res.status(404).json({ error: 'No such alert' });
+    if (alert.status !== 'open') return res.status(409).json({ error: 'This alert is already resolved.' });
+
+    const note = String(req.body?.note || '').trim().slice(0, 500) || null;
+    await q(
+      "UPDATE camera_alerts SET status = 'resolved', resolved_by = ?, resolved_at = ?, resolution_note = ? WHERE id = ?",
+      [req.user.id, nowIso(), note, alert.id],
+    );
+    audit({
+      user_id: req.user.id, action: 'update', entity_type: 'camera_alerts', entity_id: alert.id,
+      old_values: { status: 'open' }, new_values: { status: 'resolved', note },
+    });
+    const after = await one(`SELECT ${CAMERA_ALERT_COLUMNS} FROM camera_alerts a WHERE a.id = ?`, [alert.id]);
+    res.json({ alert: shapeCameraAlert(after) });
   }));
 
   /* ================================================================ */
@@ -2464,20 +2726,18 @@ export function createApi() {
     );
     if (!row || row.deleted_at) return res.status(404).json({ error: 'No such photograph' });
 
-    const visible = row.status === 'approved' || req.can('plant.view_all')
-      || (req.user && row.registered_by === req.user.id);
+    const published = row.status === 'approved';
+    const visible = published || req.can('plant.view_all')
+      || (req.user && row.registered_by === req.user.id)
+      || validPhotoSig(req.params.id, req.query.exp, req.query.sig);
     if (!visible) return res.status(404).json({ error: 'No such photograph' });
 
-    res.set('Cache-Control', 'public, max-age=604800, immutable');
+    // Only a published photograph may sit in a shared cache; an unpublished
+    // one stays in the viewer's own browser.
+    res.set('Cache-Control', published ? 'public, max-age=604800, immutable' : 'private, max-age=3600');
     res.type(row.mime_type || 'image/jpeg');
     res.send(row.bytes);
   }));
-
-  api.get('/photos/:name', (req, res) => {
-    res.type('image/svg+xml');
-    res.set('Cache-Control', 'public, max-age=86400');
-    res.send(renderPhoto(req.params.name));
-  });
 
   /** Everything the "open on your phone" screen needs. */
   api.get('/connect', route(async (req, res) => {
@@ -2526,6 +2786,14 @@ export function createApi() {
     }
     if (err?.type === 'entity.parse.failed') {
       return res.status(400).json({ error: 'The request body was not valid JSON.' });
+    }
+    // The database refused a value bigger than its max_allowed_packet (1 MB on
+    // a stock XAMPP MariaDB). Say so, instead of a bare 500.
+    if (err?.code === 'ER_NET_PACKET_TOO_LARGE') {
+      console.error('API error on ' + req.method + ' ' + req.path + ': value larger than max_allowed_packet');
+      return res.status(413).json({
+        error: 'That photograph is too large for the database. Use a smaller picture, or raise max_allowed_packet in MySQL (see README).',
+      });
     }
     console.error('API error on ' + req.method + ' ' + req.path + ':', err);
     res.status(500).json({ error: err.message || 'Unexpected server error' });

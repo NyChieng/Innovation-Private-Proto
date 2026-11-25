@@ -1,0 +1,9 @@
+
+[1mTranslations[0m  1089 strings in 47 files, 1089 dictionary entries
+
+  [32mok[0m   every string has a Malay and a Chinese translation
+  [32mok[0m   every translation keeps the same {placeholders}
+  [32mok[0m   no t() key is built at run time
+  [32mok[0m   no dictionary entry is left over from a removed string
+
+[32mAll translation checks passed.[0m

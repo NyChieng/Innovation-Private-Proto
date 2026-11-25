@@ -52,6 +52,7 @@ export const Bell = (p) => (<Svg {...p}><path d="M18 8.5a6 6 0 1 0-12 0c0 6-2 7.
 export const ChevronRight = (p) => (<Svg {...p}><path d="m9 5 7 7-7 7" /></Svg>);
 export const ChevronLeft = (p) => (<Svg {...p}><path d="m15 5-7 7 7 7" /></Svg>);
 export const ChevronDown = (p) => (<Svg {...p}><path d="m5 9 7 7 7-7" /></Svg>);
+export const ChevronUp = (p) => (<Svg {...p}><path d="m5 15 7-7 7 7" /></Svg>);
 export const ArrowLeft = (p) => (<Svg {...p}><path d="M20 12H4M10 6l-6 6 6 6" /></Svg>);
 export const MapPin = (p) => (<Svg {...p}><path d="M12 21s7-5.6 7-11a7 7 0 1 0-14 0c0 5.4 7 11 7 11Z" /><circle cx="12" cy="10" r="2.6" /></Svg>);
 export const Camera = (p) => (<Svg {...p}><path d="M4 8h3l1.6-2.4h6.8L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Z" /><circle cx="12" cy="13.5" r="3.6" /></Svg>);

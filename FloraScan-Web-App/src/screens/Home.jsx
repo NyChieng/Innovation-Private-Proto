@@ -1,205 +1,123 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../lib/api.js';
 import { useApp } from '../lib/store.jsx';
-import { PlantCard, SearchInput, Skeleton } from '../components/ui.jsx';
-import { Reveal, CountUp, SmartImage } from '../components/motion.jsx';
-import { num } from '../lib/format.js';
+import { SmartImage, CountUp } from '../components/motion.jsx';
+import { ForestBand, MarkerDot } from '../components/forest.jsx';
+import { plantPhoto, realPhoto } from '../lib/photo.js';
 import * as I from '../lib/icons.jsx';
 import { t } from '../lib/i18n.js';
 
+/**
+ * The front door: one question, one way to scan, one way to type the number,
+ * and two ways to browse. Nothing else, on purpose.
+ */
 export default function Home() {
-  const { boot, mobile } = useApp();
-  const [stats, setStats] = useState(null);
-  const [recent, setRecent] = useState(null);
-  const [threatened, setThreatened] = useState(null);
-  const [q, setQ] = useState('');
+  const { mobile, user } = useApp();
   const navigate = useNavigate();
+  const [code, setCode] = useState('');
+  const [stats, setStats] = useState(null);
+  // undefined while loading (the photo's place is held), null when there is none.
+  const [featured, setFeatured] = useState(undefined);
+  const [tiles, setTiles] = useState([]);
 
   useEffect(() => {
     api.publicStats().then(setStats).catch(() => {});
-    api.publicPlants({ sort: 'recent' }).then((r) => setRecent(r.results)).catch(() => setRecent([]));
-    Promise.all(['CR', 'EN', 'VU'].map((c) => api.publicPlants({ conservation: c })))
-      .then((rs) => setThreatened(rs.flatMap((r) => r.results)))
-      .catch(() => setThreatened([]));
+    api.publicPlants({ sort: 'popular', limit: 24 })
+      .then((r) => {
+        const withPhoto = r.results.filter((p) => plantPhoto(p) && !p.location_protected);
+        setFeatured(withPhoto[0] || null);
+        setTiles(withPhoto.slice(1, 3).map(plantPhoto));
+      })
+      .catch(() => setFeatured(null));
   }, []);
 
-  const submit = (e) => {
+  const open = (e) => {
     e.preventDefault();
-    navigate('/browse' + (q.trim() ? '?q=' + encodeURIComponent(q.trim()) : ''));
+    const v = code.trim();
+    navigate('/browse' + (v ? '?q=' + encodeURIComponent(v) : ''));
   };
 
-  /* Where the published records actually are, so a visitor standing on a
-     trail can start from the trail rather than from a species name. */
-  const places = useMemo(() => {
-    if (!recent) return [];
-    const counts = new Map();
-    recent.forEach((p) => counts.set(p.site_name, (counts.get(p.site_name) || 0) + 1));
-    return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
-  }, [recent]);
-
-  // A tree or whole-plant shot reads better behind the headline than a
-  // close-up of a single flower, so prefer one.
-  const heroPhoto = useMemo(() => {
-    if (!recent?.length) return null;
-    const withPhoto = recent.filter((p) => p.photo);
-    const scenic = withPhoto.find((p) => ['tree', 'palm'].includes(p.growth_form));
-    return (scenic || withPhoto[0])?.photo || null;
-  }, [recent]);
-  const families = (boot?.families || []).slice(0, 12);
-  const newest = (recent || []).slice(0, mobile ? 4 : 8);
-  const atRisk = (threatened || []).slice(0, 4);
+  const featuredName = featured && (featured.common_name || featured.local_name || featured.scientific_name);
 
   return (
-    <>
-      {/* ---------------- Hero ---------------- */}
-      <section className="hero">
-        {heroPhoto && (
-          <div className="hero-photo" aria-hidden="true">
-            <SmartImage src={heroPhoto} alt="" />
-          </div>
-        )}
-        <div className="wrap">
-          <div className="hero-in">
-            <div className="hero-place">
-              <I.MapPin style={{ width: 13, height: 13 }} />
-              {t('{park}, Sarawak', { park: boot?.park_name ? t(boot.park_name) : t('Niah National Park') })}
-            </div>
-
-            <h1>{t('Every plant on the trail, explained.')}</h1>
-            <p>
-              {t('Scan the tag beside a plant, or search the register by name, family or location. Nothing appears here until a botanist has recorded it and a reviewer has checked it.')}
-            </p>
-
-            <form onSubmit={submit} className="hero-search">
-              <SearchInput
-                value={q}
-                onChange={setQ}
-                large
-                placeholder={mobile ? t('Search the register') : t('Try "Belian", "Nepenthes", "Dipterocarpaceae" or a Plant ID')}
+    <div className="home">
+      <section className="wrap home-hero">
+        <div className="home-hero-text">
+          <h1 className="display rise">{t('What is growing beside you?')}</h1>
+          <p className="home-lede rise rise-2">{t('Scan the tag, or type its number.')}</p>
+          <div className="home-actions rise rise-3">
+            <Link to="/scan" className="fbtn fbtn-dark fbtn-lg">
+              <I.Scan /> {t('Scan a tag')}
+            </Link>
+            <form className="code-form" onSubmit={open}>
+              <label htmlFor="home-code" className="visually-hidden">{t('Number on the tag')}</label>
+              <input
+                id="home-code"
+                inputMode="text"
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                placeholder={t('Tag number, e.g. 0112')}
               />
+              <button type="submit">{t('Go')}</button>
             </form>
+          </div>
+        </div>
 
-            <div className="hero-actions">
-              <Link to="/scan" className="hero-btn hero-btn-solid"><I.Scan /> {t('Scan a tag')}</Link>
-              <Link to="/browse" className="hero-btn"><I.Grid /> {t('Browse all plants')}</Link>
-            </div>
-
-            {stats && (
-              <div className="hero-figures">
-                <span>{t('{n} plants', { n: <strong><CountUp value={stats.published_plants} /></strong> })}</span>
-                <span>{t('{n} species', { n: <strong><CountUp value={stats.species} /></strong> })}</span>
-                <span>{t('{n} families', { n: <strong><CountUp value={stats.families} /></strong> })}</span>
-                <span>{t('{n} threatened', { n: <strong><CountUp value={stats.threatened} /></strong> })}</span>
-              </div>
+        {/* The photo's column is there from the first paint. Rendering it only
+            once the plants arrived made the hero start as one column and then
+            split: the text jumped and the photo popped in on the right. The
+            entrance animation sits on the slot, so it plays once, not again
+            when the placeholder is swapped for the photo. */}
+        {featured !== null && (
+          <div className="home-photo-slot rise rise-2">
+            {featured ? (
+              <Link to={'/plant/' + featured.id} className="home-photo">
+                <SmartImage
+                  src={plantPhoto(featured)}
+                  fallback={realPhoto(featured.photo) ? realPhoto(featured.photo_remote) : undefined}
+                  tint={featured.photo_tint}
+                  alt={featuredName || ''}
+                  eager
+                />
+                <span className="home-photo-tag">
+                  <MarkerDot site={featured.site_name} />
+                  <span className="col" style={{ gap: 0 }}>
+                    <strong>{featuredName}</strong>
+                    <span className="small mute">{featured.site_name}</span>
+                  </span>
+                </span>
+              </Link>
+            ) : (
+              <div className="home-photo" aria-hidden="true"><span className="smart-img" /></div>
             )}
           </div>
-        </div>
+        )}
       </section>
 
-      <div className="page">
-        <div className="wrap">
-          {/* ---------------- Start from where you are ---------------- */}
-          {places.length > 0 && (
-            <Reveal className="section">
-              <div className="section-head">
-                <h2>{t('Start from where you are')}</h2>
-                <p>{t('Published records, grouped by where they stand in the park.')}</p>
-              </div>
-              <div className="place-list">
-                {places.map(([site, count], i) => (
-                  <Link key={site} to={'/browse?site=' + encodeURIComponent(site)} className="place">
-                    <I.MapPin />
-                    <span className="grow truncate">{site}</span>
-                    <span className="place-n">{count}</span>
-                  </Link>
-                ))}
-              </div>
-            </Reveal>
-          )}
-
-          {/* ---------------- Recently verified ---------------- */}
-          <Reveal className="section">
-            <div className="section-head">
-              <div className="grow">
-                <h2>{t('Recently verified')}</h2>
-                <p>{t('The newest records to pass review.')}</p>
-              </div>
-              <Link to="/browse" className="btn btn-sm">All {num(stats?.published_plants || 0)} <I.ChevronRight /></Link>
-            </div>
-
-            <div className="plant-grid">
-              {recent
-                ? newest.map((p, i) => (
-                    <Reveal key={p.id} index={i}><PlantCard plant={p} eager={i < 4} /></Reveal>
-                  ))
-                : Array.from({ length: 4 }).map((_, i) => (
-                    <div className="card" key={i}>
-                      <Skeleton h={0} style={{ aspectRatio: '4/3', height: 'auto' }} />
-                      <div style={{ padding: 14 }}><Skeleton h={14} w="70%" /><div style={{ height: 7 }} /><Skeleton h={11} w="45%" /></div>
-                    </div>
-                  ))}
-            </div>
-          </Reveal>
-
-          {/* ---------------- Conservation ---------------- */}
-          {atRisk.length > 0 && (
-            <Reveal className="section">
-              <div className="section-head">
-                <div className="grow">
-                  <h2>{t('Under pressure')}</h2>
-                  <p>{t('Specimens of species assessed as vulnerable or worse on the IUCN Red List.')}</p>
-                </div>
-              </div>
-
-              <div className="ramp">
-                {['LC', 'NT', 'VU', 'EN', 'CR'].map((c) => (
-                  <Link key={c} to={'/browse?conservation=' + c} className="ramp-step" style={{ '--c': `var(--cs-${c})` }}>
-                    <span className="ramp-bar" />
-                    <span className="ramp-code">{c}</span>
-                  </Link>
-                ))}
-                <span className="ramp-caption">{t('least concern → critically endangered')}</span>
-              </div>
-
-              <div className="plant-grid">
-                {atRisk.map((p, i) => <Reveal key={p.id} index={i}><PlantCard plant={p} /></Reveal>)}
-              </div>
-            </Reveal>
-          )}
-
-          {/* ---------------- Families ---------------- */}
-          {families.length > 0 && (
-            <Reveal className="section">
-              <div className="section-head">
-                <h2>{t('By family')}</h2>
-                <p>{t('Taxonomy is held once per species, so a correction reaches every specimen at once.')}</p>
-              </div>
-              <div className="row row-wrap" style={{ gap: 7 }}>
-                {families.map((f) => (
-                  <Link key={f} className="chip" to={'/browse?family=' + encodeURIComponent(f)}>{f}</Link>
-                ))}
-                <Link className="chip" to="/species">{t('All species')} <I.ChevronRight style={{ width: 13, height: 13 }} /></Link>
-              </div>
-            </Reveal>
-          )}
-
-          {/* ---------------- Provenance + reporting ---------------- */}
-          <Reveal className="colophon">
-            <div>
-              <strong>{t('Where this comes from.')}</strong>{' '}
-              {t('Taxonomy and Red List categories are drawn from {gbif}; photographs are contributed to {inat} under Creative Commons licences and credited on each plant page. Specimen records are entered by park botanists and checked by a reviewer before they appear.', {
-                gbif: <a href="https://www.gbif.org" target="_blank" rel="noreferrer">GBIF</a>,
-                inat: <a href="https://www.inaturalist.org" target="_blank" rel="noreferrer">iNaturalist</a>,
-              })}
-            </div>
-            <div style={{ marginTop: 10 }}>
-              <strong>{t('Spotted something wrong?')}</strong>{' '}
-              {t('Open any plant page and use {action}. No account needed.', { action: <em>{t('Report incorrect information')}</em> })}
-            </div>
-          </Reveal>
+      <ForestBand ferns="left" className="home-band">
+        <div className="home-tiles">
+          <Link to="/browse" className="photo-tile">
+            {tiles[0] && <SmartImage src={tiles[0]} alt="" placeholderLabel={false} />}
+            <span className="photo-tile-shade" />
+            <span className="photo-tile-text">
+              <strong className="display">{t('Browse plants')} <I.ChevronRight /></strong>
+              {stats && <span>{t('{n} tagged plants', { n: <CountUp value={stats.published_plants} /> })}</span>}
+            </span>
+          </Link>
+          <Link to="/species" className="photo-tile">
+            {tiles[1] && <SmartImage src={tiles[1]} alt="" placeholderLabel={false} />}
+            <span className="photo-tile-shade" />
+            <span className="photo-tile-text">
+              <strong className="display">{t('Species')} <I.ChevronRight /></strong>
+              {stats && <span>{t('{n} species in {f} families', { n: <CountUp value={stats.species} />, f: stats.families })}</span>}
+            </span>
+          </Link>
         </div>
-      </div>
-    </>
+        {mobile && !user && (
+          <Link to="/login" className="band-link">{t('Staff sign in')}</Link>
+        )}
+      </ForestBand>
+    </div>
   );
 }

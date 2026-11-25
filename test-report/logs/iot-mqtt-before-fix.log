@@ -1,0 +1,120 @@
+(node:15232) Warning: Setting the NODE_TLS_REJECT_UNAUTHORIZED environment variable to '0' makes TLS connections and HTTPS requests insecure by disabling certificate verification.
+(Use `node --trace-warnings ...` to show where the warning was created)
+FloraScan IoT end-to-end test
+  broker  mqtts://l11c8d1d.ala.asia-southeast1.emqxsl.com
+  topic   florascan-demo-test/SN-001/readings
+  server  https://localhost:42791
+
+[1m1. The node connects to the broker like the ESP32[0m
+  [32mok[0m   connects with the device login (mqtts, 94 ms)
+  [32mok[0m   the broker refuses a wrong broker password
+
+[1m2. A reading in the sketch's format is saved[0m
+  [32mok[0m   the reading reaches MySQL (116 ms after publishing)
+  [32mok[0m   soil moisture
+  [32mok[0m   temperature
+  [32mok[0m   humidity
+  [32mok[0m   rain
+  [32mok[0m   is_raining stored as 0
+  [32mok[0m   motion events
+  [32mok[0m   sound peak
+  [32mok[0m   distance
+  [32mok[0m   Wi-Fi signal
+  [32mok[0m   uptime
+  [32mok[0m   boot id kept
+  [32mok[0m   sequence kept
+  [32mok[0m   time is the server's clock in UTC (within 60 s of now)
+  [32mok[0m   the device's last_seen_at is updated
+
+[1m3. Sequence protection: retries, restarts and replays (newest commit)[0m
+  [32mok[0m   the same reading sent again 3 times (QoS 1 retries) adds no rows
+  [32mok[0m   ...so the boot still has exactly one row
+  [32mok[0m   the same boot id in lower case is still a duplicate
+  [32mok[0m   the next sequence number in the same boot is saved
+  [32mok[0m   after a restart (new boot id) sequence 1 is accepted again
+  [32mok[0m   an out-of-order sequence in the same boot is saved (only exact repeats are refused)
+  [32mok[0m   the largest sequence (2^32 - 1) is accepted
+
+[1m4. Messages the server must refuse[0m
+  [32mok[0m   refused: wrong device key
+  [32mok[0m   refused: no device key
+  [32mok[0m   refused: unknown device
+  [32mok[0m   refused: device_code does not match the topic
+  [32mok[0m   refused: SQL in the device code
+  [32mok[0m   refused: script tag and emoji in the device code
+  [32mok[0m   refused: missing boot_id (the sketch before the newest commit)
+  [32mok[0m   refused: missing sequence
+  [32mok[0m   refused: boot_id 15 characters
+  [32mok[0m   refused: boot_id not hexadecimal
+  [32mok[0m   refused: sequence 0
+  [32mok[0m   refused: sequence negative
+  [32mok[0m   refused: sequence 1.5
+  [32mok[0m   refused: sequence as text "5"
+  [32mok[0m   refused: sequence 2^32 (too big for the column)
+  [32mok[0m   refused: soil moisture 101 %
+  [32mok[0m   refused: temperature -41 °C
+  [32mok[0m   refused: humidity -1 %
+  [32mok[0m   refused: distance 501 cm
+  [32mok[0m   refused: motion events 1.5 (whole numbers only)
+  [32mok[0m   refused: Wi-Fi signal +5 dBm
+  [32mok[0m   refused: soil moisture as text "50"
+  [32mok[0m   refused: is_raining as "yes"
+  [32mok[0m   refused: only rain / motion / sound, no soil, temperature or humidity
+  [32mok[0m   refused: not JSON
+  [32mok[0m   refused: a JSON array
+  [32mok[0m   refused: JSON null
+  [32mok[0m   refused: an empty message
+  [32mok[0m   refused: over 2 KB
+  [32mok[0m   an unknown extra field under the 2 KB limit is ignored and the reading saved
+  [32mok[0m   a failed DHT11 and no HC-SR04 echo (the sketch sends null) still saves the soil reading
+  [32mok[0m   ...with temperature, humidity and distance left empty
+  [32mok[0m   refused: a switched-off device, even with the right key
+  [32mok[0m   the server is still up after all of that
+
+[1m5. Alerts when a reading leaves the botanist's limits[0m
+  [2mlimits: soil 30-80 %, temperature 18-35 °C, humidity 40-90 %[0m
+  [32mok[0m   readings exactly on the limits raise no alert
+  [32mok[0m   dry soil (10 %) opens a soil-moisture alert (110 ms)
+  [32mok[0m   ...marked as below the minimum
+  [32mok[0m   ...with the reading
+  [32mok[0m   ...and the limit
+  [32mok[0m   ...linked to the reading that caused it
+  [32mok[0m   a second dry reading does not open a second alert
+  [32mok[0m   40 °C opens a temperature alert marked above the maximum
+  [32mok[0m   the ranger's dashboard API answers
+  [32mok[0m   ...shows SN-001 online
+  [32mok[0m   ...with the newest temperature
+  [32mok[0m   ...and 2 open alerts
+  [32mok[0m   ...readings come back as numbers, not strings
+  [32mok[0m   the ranger resolves the soil alert
+  [32mok[0m   ...and the note is stored as typed
+  [32mok[0m   resolving it twice is refused
+  [32mok[0m   the resolution is in the audit log
+  [32mok[0m   the next dry reading after resolving opens a new alert
+
+[1m6. Who may see sensors and resolve alerts[0m
+  [32mok[0m   anonymous GET /sensors is refused
+  [32mok[0m   a botanist (sensor.view) can open the dashboard
+  [31mFAIL[0m a reviewer (no sensor permission) cannot open the dashboard
+         expected 403, got 200
+  [31mFAIL[0m an administrator (no sensor permission) cannot open the dashboard
+         expected 403, got 200
+  [31mFAIL[0m a botanist (no alert.resolve) cannot resolve an alert
+         expected 403, got 200
+  [31mFAIL[0m a reviewer cannot resolve an alert
+         expected 403, got 409
+  [32mok[0m   anonymous cannot resolve an alert
+
+[1m7. Speed and load[0m
+  [32mok[0m   10 readings one after another all saved; publish -> MySQL median 108 ms, worst 111 ms
+  [32mok[0m   a burst of 50 readings at once (like 50 nodes reporting together) is all saved in 4559 ms
+  [32mok[0m   ...with no duplicates
+
+[1m8. The IoT dashboard shows it[0m
+  [32mok[0m   the dashboard names SN-001
+  [32mok[0m   ...shows the 40 °C reading
+  [32mok[0m   ...shows the open alerts
+  [32mok[0m   ...with no browser errors
+  [2mscreenshot: test-report/iot/iot-dashboard.png[0m
+
+[31m86 passed, 4 failed[0m

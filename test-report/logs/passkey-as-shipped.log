@@ -1,0 +1,17 @@
+Passkey tests against https://localhost:42791
+
+(node:6768) Warning: Setting the NODE_TLS_REJECT_UNAUTHORIZED environment variable to '0' makes TLS connections and HTTPS requests insecure by disabling certificate verification.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[1mServer refuses what it should[0m
+  [32mok[0m   signed-out users cannot add a passkey
+  [32mok[0m   a made-up passkey cannot sign in
+
+[1mTurning it on[0m
+file:///D:/Prototyping%20Innovation/Demo/tests/passkey.test.mjs:199
+  await api('PATCH', `/users/${made.body.user.id}`, { is_active: false }, admin);
+                                              ^
+
+TypeError: Cannot read properties of undefined (reading 'id')
+    at file:///D:/Prototyping%20Innovation/Demo/tests/passkey.test.mjs:199:47
+
+Node.js v24.15.0

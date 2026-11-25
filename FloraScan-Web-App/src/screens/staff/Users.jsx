@@ -9,7 +9,47 @@ import { formatDateTime, relativeTime, roleLabel } from '../../lib/format.js';
 import * as I from '../../lib/icons.jsx';
 import { t } from '../../lib/i18n.js';
 
-function NewUserDialog({ roles, onClose, onDone }) {
+/**
+ * The temporary password is random and the server keeps only its hash, so this
+ * is the one time anyone sees it: a dialog the admin closes, not a toast that
+ * disappears before they have written it down.
+ */
+function TempPasswordDialog({ issued, onClose }) {
+  const { toast } = useApp();
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(issued.password);
+      toast(t('Copied'));
+    } catch {
+      toast(t('Could not copy. Select the password and copy it by hand.'), 'err');
+    }
+  };
+  return (
+    <Modal
+      title={issued.created ? t('Account created') : t('Password reset')}
+      onClose={onClose}
+      footer={<button className="btn btn-primary" onClick={onClose}>{t('Done')}</button>}
+    >
+      <div className="stack" style={{ '--gap': '14px' }}>
+        <div className="small">
+          {t('Give this temporary password to {name}. They must change it when they first sign in.', { name: <strong>{issued.name}</strong> })}
+        </div>
+        <div className="row" style={{ gap: 8 }}>
+          <code
+            className="mono grow temp-password"
+            style={{ padding: '10px 14px', borderRadius: 'var(--r-sm)', background: 'var(--surface-3)', border: '1px solid var(--border)', fontSize: '1.05rem', letterSpacing: '0.04em', userSelect: 'all' }}
+          >
+            {issued.password}
+          </code>
+          <button type="button" className="btn" onClick={copy}><I.Copy /> {t('Copy')}</button>
+        </div>
+        <Notice kind="warn">{t('It is shown only once. If it is lost, reset the password again.')}</Notice>
+      </div>
+    </Modal>
+  );
+}
+
+function NewUserDialog({ roles, onClose, onDone, onIssued }) {
   const { toast } = useApp();
   const [form, setForm] = useState({ full_name: '', email: '', title: '', phone: '', role_id: 2 });
   const [busy, setBusy] = useState(false);
@@ -19,7 +59,7 @@ function NewUserDialog({ roles, onClose, onDone }) {
     setBusy(true);
     try {
       const r = await api.createUser(form);
-      toast(t('{name} created. Temporary password: {password}', { name: r.user.full_name, password: r.temporary_password }));
+      onIssued({ name: r.user.full_name, password: r.temporary_password, created: true });
       onDone(); onClose();
     } catch (e) { toast(e.message, 'err'); } finally { setBusy(false); }
   };
@@ -45,7 +85,7 @@ function NewUserDialog({ roles, onClose, onDone }) {
         </div>
         <div className="field">
           <label htmlFor="u-email">{t('Email address')} <span className="req">*</span></label>
-          <input id="u-email" type="email" className="input" value={form.email} onChange={(e) => up({ email: e.target.value })} placeholder="name@niah.sarawak.gov.my" />
+          <input id="u-email" type="email" className="input" value={form.email} onChange={(e) => up({ email: e.target.value })} placeholder="name@florascan.test" />
         </div>
         <div className="grid grid-2" style={{ gap: 12 }}>
           <div className="field">
@@ -78,7 +118,7 @@ function NewUserDialog({ roles, onClose, onDone }) {
   );
 }
 
-function UserDrawer({ user, roles, onClose, onDone }) {
+function UserDrawer({ user, roles, onClose, onDone, onIssued }) {
   const { toast, user: me, can } = useApp();
   const [busy, setBusy] = useState(false);
   const [checkCode, setCheckCode] = useState('');
@@ -191,7 +231,10 @@ function UserDrawer({ user, roles, onClose, onDone }) {
                 {t('A temporary password is issued and they must change it at the next sign in. Any active session is revoked immediately.')}
               </Notice>
             }
-            onConfirm={() => act(() => api.resetPassword(user.id), t('Password reset. Temporary password: {password}', { password: 'demo1234' }))}
+            onConfirm={() => act(async () => {
+              const r = await api.resetPassword(user.id);
+              onIssued({ name: user.full_name, password: r.temporary_password });
+            }, t('Password reset'))}
           />
           {!isMe && (
             user.is_active ? (
@@ -230,6 +273,7 @@ export default function Users() {
   const [q, setQ] = useState('');
   const [open, setOpen] = useState(null);
   const [creating, setCreating] = useState(false);
+  const [issued, setIssued] = useState(null);
 
   const [params, setParams] = useSearchParams();
 
@@ -319,13 +363,14 @@ export default function Users() {
 
         <div style={{ marginTop: 18 }}>
           <Notice kind="plain" title={t('Roles are permission sets, not hard-coded names')}>
-            {t('The API checks permission codes such as {code}, never the role name. That is how the Reviewer role was added: one more set of permissions, with no new tables and no change to the API.', { code: <span className="mono">plant.approve</span> })}
+            {t('The API checks permission codes such as {code}, never the role name. That is how the Senior Botanist role was added: one more set of permissions, with no new tables and no change to the API.', { code: <span className="mono">plant.approve</span> })}
           </Notice>
         </div>
       </div>
 
-      {creating && <NewUserDialog roles={roles} onClose={() => setCreating(false)} onDone={load} />}
-      {open && <UserDrawer user={open} roles={roles} onClose={closeDrawer} onDone={() => { load(); closeDrawer(); }} />}
+      {creating && <NewUserDialog roles={roles} onClose={() => setCreating(false)} onDone={load} onIssued={setIssued} />}
+      {open && <UserDrawer user={open} roles={roles} onClose={closeDrawer} onDone={() => { load(); closeDrawer(); }} onIssued={setIssued} />}
+      {issued && <TempPasswordDialog issued={issued} onClose={() => setIssued(null)} />}
     </div>
   );
 }

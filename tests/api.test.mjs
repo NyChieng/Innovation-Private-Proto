@@ -84,23 +84,37 @@ async function call(method, path, { token, body } = {}) {
 }
 
 const get = (p, t) => call('GET', p, { token: t });
-const post = (p, body, t) => call('POST', p, { token: t, body });
+// Temporary passwords are random, so remember the one the API hands back when
+// an account is created or reset, keyed by email.
+const TEMP = new Map();
+const EMAIL_OF = new Map();
+async function post(p, body, t) {
+  const r = await call('POST', p, { token: t, body });
+  const pw = r.body?.temporary_password;
+  if (pw && p === '/users' && body?.email) {
+    TEMP.set(body.email.toLowerCase(), pw);
+    if (r.body.user?.id) EMAIL_OF.set(Number(r.body.user.id), body.email.toLowerCase());
+  }
+  const reset = /^\/users\/(\d+)\/reset-password$/.exec(p);
+  if (pw && reset && EMAIL_OF.has(Number(reset[1]))) TEMP.set(EMAIL_OF.get(Number(reset[1])), pw);
+  return r;
+}
 const patch = (p, body, t) => call('PATCH', p, { token: t, body });
 
 // Seeded accounts use the email's local part + 123 (Server/seed.js); an
-// account an admin creates starts on the temporary password demo1234.
-const passwordFor = (email) => (email.endsWith('@gmail.com') ? email.split('@')[0] + '123' : 'demo1234');
+// account an admin creates or resets uses the temporary password it was issued.
+const passwordFor = (email) => (email.endsWith('@florascan.test') ? email.split('@')[0] + '123' : TEMP.get(email.toLowerCase()));
 
 async function login(email, password = passwordFor(email)) {
   const r = await post('/auth/login', { email, password });
   return r.body?.token;
 }
 
-const ADMIN = 'nengyichieng@gmail.com';
-const BOTANIST = 'drsuehanlee@gmail.com';
-const BOTANIST_2 = 'hansjiasynyee@gmail.com';
-const RANGER = 'edmundguoqianyu@gmail.com';
-const REVIEWER = 'drmeilingwong@gmail.com';
+const ADMIN = 'farah.hamid@florascan.test';
+const BOTANIST = 'grace.lim@florascan.test';
+const BOTANIST_2 = 'daniel.jugah@florascan.test';
+const RANGER = 'ahmad.rosli@florascan.test';
+const REVIEWER = 'aisyah.rahman@florascan.test';
 
 /* ================================================================== */
 
@@ -129,7 +143,7 @@ section('1. Authentication');
   eq('wrong password is refused', bad.status, 401);
   check('the error does not reveal whether the account exists', !/no account/i.test(bad.body.error || ''));
 
-  const unknown = await post('/auth/login', { email: 'nobody@example.com', password: 'demo1234' });
+  const unknown = await post('/auth/login', { email: 'nobody@example.com', password: 'any-pass-1' });
   eq('unknown email is refused', unknown.status, 401);
 
   const other = await post('/auth/login', { email: RANGER, password: passwordFor(ADMIN) });
@@ -208,9 +222,13 @@ section('4. Access control - a botanist registers but cannot publish, or do an a
   const me = (await get('/auth/me', botT)).body.user;
   check('a botanist holds plant.create', me.permissions.includes('plant.create'));
   check('...but not plant.approve, so nothing they register publishes itself', !me.permissions.includes('plant.approve'));
-  const pending = (await get('/plants?status=pending', botT)).body.results[0];
+  check('...and for plant records only registers: no view-all, edit, archive or history',
+    ['plant.view_all', 'plant.edit', 'plant.archive', 'plant.history'].every((c) => !me.permissions.includes(c)));
+  const pending = (await get('/plants?status=pending', revT)).body.results[0];
   eq('a botanist cannot approve a record', (await post(`/plants/${pending.id}/approve`, {}, botT)).status, 403);
   eq('...or return one', (await post(`/plants/${pending.id}/reject`, { note: 'n' }, botT)).status, 403);
+  eq('...or edit one waiting for review', (await patch(`/plants/${pending.id}`, { notes: 'not allowed' }, botT)).status, 403);
+  eq('...or archive one', (await post(`/plants/${pending.id}/archive`, { reason: 'not allowed' }, botT)).status, 403);
 
   const cases = [
     ['GET', '/users'], ['GET', '/activity'], ['GET', '/audit'], ['GET', '/settings'],
@@ -241,13 +259,15 @@ section('5. Access control - admin may not do botanical work');
 }
 
 /* ------------------------------------------------------------------ */
-section('5b. Access control - the reviewer checks records, and nothing else (#8)');
+section('5b. Access control - the senior botanist reviews records, and nothing else (#8)');
 {
   const me = (await get('/auth/me', revT)).body.user;
-  eq('the reviewer role exists', me.role, 'reviewer');
-  check('a reviewer holds plant.approve', me.permissions.includes('plant.approve'));
+  eq('the senior botanist role exists (it replaced the reviewer)', me.role, 'senior_botanist');
+  eq('...labelled Senior Botanist', me.role_label, 'Senior Botanist');
+  check('a senior botanist holds plant.approve', me.permissions.includes('plant.approve'));
+  check('...and plant.archive', me.permissions.includes('plant.archive'));
   check('...but cannot register a plant', !me.permissions.includes('plant.create'));
-  eq('a reviewer POST /plants is refused',
+  eq('a senior botanist POST /plants is refused',
     (await post('/plants', { site_name: 'x', proposed_species_name: 'y' }, revT)).status, 403);
   for (const [m, p, b] of [
     ['POST', '/species', { scientific_name: 'Testus reviewerus' }],
@@ -258,7 +278,7 @@ section('5b. Access control - the reviewer checks records, and nothing else (#8)
   const queue = await get('/submissions', revT);
   eq('the reviewer reads the whole queue', queue.status, 200);
   check('...which holds the seeded botanist submissions', queue.body.results.length >= 6, 'got ' + queue.body.results.length);
-  check('...all from botanists', queue.body.results.every((x) => ['Dr Sue Han Lee', 'Hans Jia Syn Yee'].includes(x.submitted_by_name)));
+  check('...all from botanists', queue.body.results.every((x) => ['Dr Grace Lim', 'Daniel Jugah'].includes(x.submitted_by_name)));
   const notes = (await get('/notifications', revT)).body.results;
   check('the reviewer was notified of the waiting submissions', notes.some((n) => n.type === 'submission.new'));
 }
@@ -269,10 +289,10 @@ section('6. Data scoping');
   const revList = (await get('/plants', revT)).body.results;
   const botList = (await get('/plants', botT)).body.results;
   const mine = (await get('/plants?mine=1', botT)).body.results;
-  check('a botanist sees the whole register', botList.length > mine.length && mine.length > 0,
-    `all ${botList.length} vs own ${mine.length}`);
-  check('...and mine=1 narrows it to their own', mine.every((p) => p.registered_by_name === 'Dr Sue Han Lee'));
-  eq('a reviewer sees the same register', revList.length, botList.length);
+  check('a botanist sees only their own records', botList.length > 0 && botList.length === mine.length
+    && botList.every((p) => p.registered_by_name === 'Dr Grace Lim'), `${botList.length} listed, ${mine.length} own`);
+  check('a senior botanist sees the whole register', revList.length > botList.length,
+    `senior ${revList.length} vs botanist ${botList.length}`);
 }
 
 /* ------------------------------------------------------------------ */
@@ -283,7 +303,7 @@ section('7. Publication control - nothing unapproved is public');
   check('every public record has a confirmed species', pub.results.every((p) => p.species_id));
   check('no public record is still awaiting identification', pub.results.every((p) => !p.species_not_listed));
 
-  const all = (await get('/plants', botT)).body.results;
+  const all = (await get('/plants', revT)).body.results;
   for (const status of ['pending', 'rejected', 'archived']) {
     const row = all.find((p) => p.status === status);
     if (!row) continue;
@@ -454,7 +474,7 @@ section('11. The verification workflow end to end');
   eq('approval succeeds', approved.status, 200);
   eq('...the status becomes approved', approved.body.plant.status, 'approved');
   check('...a QR tag is issued automatically', !!approved.body.plant.qr_token);
-  check('...the verifier is recorded', approved.body.plant.verified_by_name === 'Dr Mei Ling Wong',
+  check('...the verifier is recorded', approved.body.plant.verified_by_name === 'Dr Aisyah Rahman',
     approved.body.plant.verified_by_name);
 
   const again = await post(`/plants/${id}/approve`, {}, revT);
@@ -471,21 +491,25 @@ section('11. The verification workflow end to end');
   check('the botanist was told it was published',
     botNotes.some((n) => n.type === 'submission.approved' && (n.body || '').includes('approved')));
 
+  // A botanist cannot change a published record; the senior botanist can.
+  eq('the botanist cannot edit it once published',
+    (await patch(`/plants/${id}`, { site_name: 'Workflow test, botanist edit' }, botT)).status, 403);
   // Editing must not invalidate a printed tag.
-  await patch(`/plants/${id}`, { site_name: 'Workflow test, marker 2 (moved)' }, botT);
+  await patch(`/plants/${id}`, { site_name: 'Workflow test, marker 2 (moved)' }, revT);
   const afterEdit = await get('/public/plants/token/' + token);
   eq('the tag still works after an edit', afterEdit.status, 200);
   eq('...and shows the edited value', afterEdit.body.plant.site_name, 'Workflow test, marker 2 (moved)');
 
   // Archive withdraws it; restore brings the same token back.
-  await post(`/plants/${id}/archive`, { reason: 'test' }, botT);
+  await post(`/plants/${id}/archive`, { reason: 'test' }, revT);
   const reApprove = await post(`/plants/${id}/approve`, {}, revT);
   eq('approving an archived record does not republish it', reApprove.status, 409);
   const archivedScan = await get('/public/plants/token/' + token);
   eq('an archived record is withdrawn from the public site', archivedScan.status, 404);
   eq('...with the archived reason', archivedScan.body.reason, 'archived');
 
-  await post(`/plants/${id}/restore`, {}, botT);
+  eq('the botanist cannot restore it', (await post(`/plants/${id}/restore`, {}, botT)).status, 403);
+  await post(`/plants/${id}/restore`, {}, revT);
   const restored = await get('/public/plants/token/' + token);
   eq('restoring makes the same printed tag valid again', restored.status, 200);
 }
@@ -617,16 +641,17 @@ section('16. Audit completeness');
   const created = await post('/plants', { species_id: species.id, site_name: 'Audit test plot' }, botT);
   const id = created.body.plant.id;
 
-  await patch(`/plants/${id}`, { site_name: 'Audit test plot (renamed)', height_m: 12.5 }, botT);
+  // The senior botanist corrects it during review.
+  await patch(`/plants/${id}`, { site_name: 'Audit test plot (renamed)', height_m: 12.5 }, revT);
 
   const hist = await get(`/plants/${id}/history`, botT);
-  eq('the history is readable', hist.status, 200);
+  eq('the botanist can read the history of their own record', hist.status, 200);
 
   const rev = hist.body.revisions.find((r) => r.field_name === 'site_name');
   check('the field change was recorded', !!rev);
   eq('...with the old value', rev?.old_value, 'Audit test plot');
   eq('...with the new value', rev?.new_value, 'Audit test plot (renamed)');
-  check('...with the actor', rev?.changed_by_name === 'Dr Sue Han Lee');
+  check('...with the actor', rev?.changed_by_name === 'Dr Aisyah Rahman', rev?.changed_by_name);
   check('...with a timestamp', !!rev?.created_at);
 
   const audits = await get('/audit', adminT);
@@ -652,7 +677,7 @@ section('17. Admin account management');
   const afterOff = await get('/plants', newToken);
   eq('deactivating revokes the live session immediately', afterOff.status, 401);
 
-  const loginOff = await post('/auth/login', { email, password: 'demo1234' });
+  const loginOff = await post('/auth/login', { email, password: passwordFor(email) });
   eq('...and blocks a fresh sign in', loginOff.status, 403);
 
   await patch(`/users/${id}`, { is_active: true }, adminT);
@@ -685,16 +710,16 @@ section('17b. Changing your own password');
   const wrong = await change('not-it', 'fresh-pass-9');
   eq('a wrong current password is refused', wrong.status, 400);
   eq('...without signing the user out', (await get('/auth/me', tokenA)).body.user?.email, email);
-  eq('a short password is refused', (await change('demo1234', 'ab1')).status, 400);
-  eq('a password without a number is refused', (await change('demo1234', 'onlyletters')).status, 400);
-  eq('reusing the temporary password is refused', (await change('demo1234', 'demo1234')).status, 400);
+  eq('a short password is refused', (await change(passwordFor(email), 'ab1')).status, 400);
+  eq('a password without a number is refused', (await change(passwordFor(email), 'onlyletters')).status, 400);
+  eq('reusing the temporary password is refused', (await change(passwordFor(email), passwordFor(email))).status, 400);
 
-  const ok = await change('demo1234', 'fresh-pass-9');
+  const ok = await change(passwordFor(email), 'fresh-pass-9');
   eq('a valid change succeeds', ok.status, 200);
   check('...and clears must_change_password', ok.body.user?.must_change_password === false);
   eq('...keeps the session that made the change', (await get('/auth/me', tokenA)).body.user?.email, email);
   eq('...signs out the other device', (await get('/auth/me', tokenB)).body.user, null);
-  eq('the old password no longer works', (await post('/auth/login', { email, password: 'demo1234' })).status, 401);
+  eq('the old password no longer works', (await post('/auth/login', { email, password: passwordFor(email) })).status, 401);
   check('the new password works', !!await login(email, 'fresh-pass-9'));
   check('...and the change issues a recovery code', /^[0-9A-Z]{4}-[0-9A-Z]{4}-[0-9A-Z]{4}$/.test(ok.body.recovery_code || ''));
   check('...which the account now reports holding', ok.body.user?.has_recovery_code === true);
@@ -707,7 +732,7 @@ section('17c. Forgotten password - recovery codes');
   const made = await post('/users', { full_name: 'Recovery Test User', email, role_id: 2 }, adminT);
   const userId = made.body.user.id;
   const first = await login(email);
-  const set = await post('/auth/password', { current_password: 'demo1234', new_password: 'first-pass-1' }, first);
+  const set = await post('/auth/password', { current_password: passwordFor(email), new_password: 'first-pass-1' }, first);
   const code = set.body.recovery_code;
   const other = await login(email, 'first-pass-1');
   const recover = (body) => post('/auth/recover', body);
@@ -817,7 +842,7 @@ section('17d. Forgotten password, no recovery code - an administrator approves')
   const fifth = await post('/auth/reset-request', { email });
   await post(`/users/${userId}/reset-password`, {}, adminT);
   eq('an administrator reset closes a waiting request', await status(fifth.body.token), 'closed');
-  check('...and the temporary password then works', !!await login(email, 'demo1234'));
+  check('...and the temporary password then works', !!await login(email, passwordFor(email)));
 }
 
 /* ------------------------------------------------------------------ */
@@ -842,7 +867,7 @@ section("17e. An administrator's recovery email");
   const backup = `test.admin.backup.${ts}@example.com`;
   const made = await post('/users', { full_name: 'Recovery Email Admin', email, role_id: 1 }, adminT);
   const first = await login(email);
-  await post('/auth/password', { current_password: 'demo1234', new_password: 'admin-pass-1' }, first);
+  await post('/auth/password', { current_password: passwordFor(email), new_password: 'admin-pass-1' }, first);
   const tok = await login(email, 'admin-pass-1');
 
   eq('a non-administrator cannot add one', (await post('/auth/recovery-email', { email: backup, current_password: passwordFor(BOTANIST) }, botT)).status, 403);
@@ -896,7 +921,7 @@ section('17f. Two-step verification with an authenticator app');
   const made = await post('/users', { full_name: 'Two Step Test User', email, role_id: 2 }, adminT);
   const userId = made.body.user.id;
   const first = await login(email);
-  const changed = await post('/auth/password', { current_password: 'demo1234', new_password: 'twofa-pass-1' }, first);
+  const changed = await post('/auth/password', { current_password: passwordFor(email), new_password: 'twofa-pass-1' }, first);
   const recoveryCode = changed.body.recovery_code;
   const tok = await login(email, 'twofa-pass-1');
 
@@ -939,7 +964,7 @@ section('17f. Two-step verification with an authenticator app');
   await post(`/users/${userId}/reset-password`, {}, adminT);
   const listed = (await get('/users', adminT)).body.results.find((u) => u.id === userId);
   check('an administrator reset turns it off, for a lost phone', listed && listed.two_factor === false);
-  check('...and the temporary password then signs in directly', !!await login(email, 'demo1234'));
+  check('...and the temporary password then signs in directly', !!await login(email, passwordFor(email)));
 
   // The audit trail: values as objects (not text), and who it came from.
   const entry = (await get('/audit?action=two_factor_enabled', adminT)).body.results.find((r) => r.entity_id === userId);
@@ -955,7 +980,11 @@ section('17f. Two-step verification with an authenticator app');
 section('18. QR codes');
 {
   const plant = (await get('/public/plants')).body.results[0];
-  const qr = await get(`/qr/${plant.id}`);
+  // Staff only: the reply names the plant even before it is published.
+  eq('signed out, nobody can fetch a QR code', (await get(`/qr/${plant.id}`)).status, 401);
+  eq('a ranger (no plant permission) cannot', (await get(`/qr/${plant.id}`, rangerT)).status, 403);
+  eq('an administrator (no plant permission) cannot', (await get(`/qr/${plant.id}`, adminT)).status, 403);
+  const qr = await get(`/qr/${plant.id}`, botT);
   eq('a QR payload is returned', qr.status, 200);
   check('...as a PNG data URL', (qr.body.png || '').startsWith('data:image/png;base64,'));
   check('...and as SVG', (qr.body.svg || '').includes('<svg'));
@@ -963,16 +992,28 @@ section('18. QR codes');
   check('the token is a UUID, not a database id',
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(qr.body.qr_token || ''));
 
-  const again = await get(`/qr/${plant.id}`);
+  const again = await get(`/qr/${plant.id}`, botT);
   eq('the token is stable across requests', again.body.qr_token, qr.body.qr_token);
+
+  // A botanist only registers plant records, but still prints tags: the tag
+  // sheet lists every published plant, and nothing unpublished of others.
+  const sheetBot = (await get('/plants?status=approved', botT)).body.results;
+  const sheetAll = (await get('/plants?status=approved', revT)).body.results;
+  eq('the tag sheet lists every published plant for a botanist', sheetBot.length, sheetAll.length);
+  const othersPending = (await get('/plants?status=pending', revT)).body.results
+    .find((p) => p.registered_by_name !== 'Dr Grace Lim');
+  if (othersPending) {
+    eq("...but a botanist cannot fetch the tag of someone else's unpublished record",
+      (await get(`/qr/${othersPending.id}`, botT)).status, 403);
+  }
 }
 
 /* ------------------------------------------------------------------ */
-section('19. Generated imagery and connect endpoint');
+section('19. Connect endpoint');
 {
+  // Generated stand-in drawings were removed: a plant with no photo gets none.
   const res = await fetch(`${ORIGIN}/api/photos/test-species--leaf--1.svg`);
-  eq('a placeholder photo renders', res.status, 200);
-  check('...as SVG', (res.headers.get('content-type') || '').includes('svg'));
+  eq('no generated drawing is served', res.status, 404);
 
   const conn = await get('/connect');
   eq('the connect endpoint answers', conn.status, 200);
@@ -991,6 +1032,103 @@ section('20. IoT monitoring');
   // exist; each one must come from a registered device.
   const ids = new Set(r.body.devices.map((d) => d.id));
   check('...with no readings from unknown devices', r.body.readings.every((x) => ids.has(x.device_id)));
+
+  // The same permissions as the IoT page: sensor.view to read, alert.resolve to resolve.
+  eq('a ranger can read the sensors', (await get('/sensors', rangerT)).status, 200);
+  eq('a reviewer, who has no sensor.view, cannot', (await get('/sensors', revT)).status, 403);
+  eq('signed out, nobody can', (await get('/sensors')).status, 401);
+  eq('a botanist cannot resolve an alert (no alert.resolve)',
+    (await post('/sensors/alerts/999999/resolve', { note: 'x' }, botT)).status, 403);
+  eq('a ranger can, and gets a 404 for an alert that does not exist',
+    (await post('/sensors/alerts/999999/resolve', { note: 'x' }, rangerT)).status, 404);
+}
+
+/* ------------------------------------------------------------------ */
+section('20b. AI camera alerts reach the rangers, with the snapshot');
+{
+  // A real (1 x 1) JPEG; the server checks the JPEG signature.
+  const JPEG = '/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=';
+  const camera = (headers, body) => fetch(ORIGIN + '/api/camera/alerts', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...headers },
+    body: JSON.stringify(body),
+  }).then(async (r) => ({ status: r.status, body: await r.json().catch(() => null) }));
+  // The key Server/seed.js gave CAM-001: FLORAGUARD_CAMERA_KEY from the
+  // environment or .env (as the seed read it), else the demo default.
+  const cameraKey = process.env.FLORAGUARD_CAMERA_KEY || await (async () => {
+    const fs = await import('node:fs');
+    try {
+      const line = fs.readFileSync(new URL('../.env', import.meta.url), 'utf8')
+        .split(/\r?\n/).find((l) => /^\s*FLORAGUARD_CAMERA_KEY\s*=/.test(l));
+      return line ? line.slice(line.indexOf('=') + 1).trim().replace(/^(['"])(.*)\1$/, '$2') : '';
+    } catch { return ''; }
+  })() || 'demo-camera-key-change-me';
+  const signed = { 'X-Camera-Code': 'CAM-001', 'X-Camera-Key': cameraKey };
+  const event = { tier: 'ALERT', track_id: 7, detail: 'touch 0.91 (test)', photo: JPEG };
+
+  eq('no camera key: refused', (await camera({}, event)).status, 401);
+  eq('a wrong key: refused', (await camera({ ...signed, 'X-Camera-Key': 'guess' }, event)).status, 401);
+  eq('an unknown camera: the same answer', (await camera({ ...signed, 'X-Camera-Code': 'CAM-999' }, event)).status, 401);
+  eq('a staff session is not a camera key', (await call('POST', '/camera/alerts', { token: rangerT, body: event })).status, 401);
+  eq('a warning tier (no picture) is refused', (await camera(signed, { ...event, tier: 'WARNING' })).status, 400);
+  eq('a picture that is not a JPEG is refused',
+    (await camera(signed, { ...event, photo: Buffer.from('<svg onload=alert(1)>').toString('base64') })).status, 400);
+  eq('no picture is refused', (await camera(signed, { ...event, photo: '' })).status, 400);
+  const big = Buffer.alloc(950 * 1024, 0); big[0] = 0xff; big[1] = 0xd8; big[2] = 0xff;
+  eq('a snapshot over 900 KB is refused', (await camera(signed, { ...event, photo: big.toString('base64') })).status, 413);
+
+  const made = await camera(signed, event);
+  eq('the camera reports an alert with its snapshot', made.status, 201);
+  const id = made.body?.id;
+  check('...and gets the alert id back', Number.isInteger(id), JSON.stringify(made.body));
+
+  const told = (notes) => (notes.body?.results || []).find((n) => n.related_type === 'camera_alert' && n.related_id === id);
+  const forRanger = told(await get('/notifications', rangerT));
+  check('the ranger is notified', !!forRanger);
+  eq('...as a camera alert', forRanger?.type, 'camera.alert');
+  check('...titled with the camera', /^Camera alert: CAM-001$/.test(forRanger?.title || ''), forRanger?.title);
+  check('the botanist is not notified', !told(await get('/notifications', botT)));
+  check('the administrator is not notified', !told(await get('/notifications', adminT)));
+  check('the reviewer is not notified', !told(await get('/notifications', revT)));
+
+  const photo = (t) => fetch(`${ORIGIN}/api/sensors/camera-alerts/${id}/photo`, { headers: t ? { Authorization: 'Bearer ' + t } : {} });
+  const asRanger = await photo(rangerT);
+  eq('the ranger can open the snapshot', asRanger.status, 200);
+  eq('...served as a JPEG', asRanger.headers.get('content-type'), 'image/jpeg');
+  check('...never kept by a shared cache', /no-store/.test(asRanger.headers.get('cache-control') || ''), asRanger.headers.get('cache-control'));
+  eq('...byte for byte what the camera sent',
+    Buffer.from(await asRanger.arrayBuffer()).toString('base64'), Buffer.from(JPEG, 'base64').toString('base64'));
+  eq('signed out, nobody can open it', (await photo()).status, 401);
+  eq('a reviewer (no sensor.view) cannot', (await photo(revT)).status, 403);
+  eq('an administrator (no sensor.view) cannot', (await photo(adminT)).status, 403);
+
+  const dash = await get('/sensors', rangerT);
+  const listed = dash.body?.camera_alerts?.find((a) => a.id === id);
+  check('the IoT dashboard lists it as open', listed?.status === 'open', JSON.stringify(listed));
+  check('...without the picture bytes in the list', listed && !('photo' in listed));
+  eq('...pointing at the protected picture', listed?.photo_url, `/api/sensors/camera-alerts/${id}/photo`);
+
+  eq('a botanist cannot resolve a camera alert', (await post(`/sensors/camera-alerts/${id}/resolve`, {}, botT)).status, 403);
+  const done = await post(`/sensors/camera-alerts/${id}/resolve`, { note: 'Visitor reminded not to touch' }, rangerT);
+  eq('the ranger resolves it', done.status, 200);
+  eq('...with the note', done.body?.alert?.resolution_note, 'Visitor reminded not to touch');
+  eq('resolving it twice is refused', (await post(`/sensors/camera-alerts/${id}/resolve`, {}, rangerT)).status, 409);
+
+  // With no mail account configured the server writes each email to the outbox.
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+  const outbox = path.join(path.dirname(path.dirname(fileURLToPath(import.meta.url))), '.outbox.log');
+  if (fs.existsSync(outbox)) {
+    let mails = [];
+    for (let i = 0; i < 30 && !mails.length; i++) {
+      mails = fs.readFileSync(outbox, 'utf8').trim().split('\n').map((l) => { try { return JSON.parse(l); } catch { return null; } })
+        .filter((m) => m && /camera alert/i.test(m.subject) && (m.attachments || []).some((a) => a.filename === `camera-alert-${id}.jpg`));
+      if (!mails.length) await new Promise((r) => setTimeout(r, 100));
+    }
+    check('the ranger is emailed, with the snapshot attached', mails.some((m) => m.to === RANGER && m.attachments[0].bytes > 0), JSON.stringify(mails.map((m) => m.to)));
+    check('...and nobody without alert.resolve is', !mails.some((m) => [ADMIN, BOTANIST, BOTANIST_2, REVIEWER].includes(m.to)));
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -1152,7 +1290,7 @@ section('25. Photo serving');
   }
 
   const svg = await fetch(`${BASE}/photos/some-species--leaf--1.svg`);
-  eq('the generated illustration still works as a fallback', svg.status, 200);
+  eq('generated stand-in drawings are no longer served', svg.status, 404);
 }
 
 /* ------------------------------------------------------------------ */
@@ -1243,7 +1381,7 @@ section('28. A printed tag points somewhere a phone can reach');
   // The address must never come from the browser that asked for the code: a
   // botanist printing tags is on localhost, and a tag encoding localhost sends
   // every phone that scans it to its own device.
-  const spoofed = await get(`/qr/${plant.id}?origin=${encodeURIComponent('https://localhost:9999')}`);
+  const spoofed = await get(`/qr/${plant.id}?origin=${encodeURIComponent('https://localhost:9999')}`, botT);
   eq('a QR code is produced', spoofed.status, 200);
   check('the caller cannot dictate the address', !spoofed.body.target_url.includes('localhost:9999'),
     spoofed.body.target_url);
@@ -1253,7 +1391,7 @@ section('28. A printed tag points somewhere a phone can reach');
     !/^(localhost|127\.|::1)/.test(url.hostname), url.hostname);
   check('...and it carries the opaque token', url.pathname.includes(spoofed.body.qr_token));
 
-  const plain = await get(`/qr/${plant.id}`);
+  const plain = await get(`/qr/${plant.id}`, botT);
   eq('the address is the same with no origin given', plain.body.target_url, spoofed.body.target_url);
 
   // Following the encoded URL has to land on that plant.
@@ -1264,18 +1402,18 @@ section('28. A printed tag points somewhere a phone can reach');
 
   // A park with a real domain configures it, and tags then carry that instead.
   await patch('/settings/public_base_url', { value: 'https://florascan.example.gov.my' }, adminT);
-  const configured = await get(`/qr/${plant.id}`);
+  const configured = await get(`/qr/${plant.id}`, botT);
   check('a configured public address wins',
     configured.body.target_url.startsWith('https://florascan.example.gov.my/p/'),
     configured.body.target_url);
 
   await patch('/settings/public_base_url', { value: 'https://florascan.example.gov.my/' }, adminT);
-  const trailing = await get(`/qr/${plant.id}`);
+  const trailing = await get(`/qr/${plant.id}`, botT);
   check('a trailing slash does not double up',
     !trailing.body.target_url.includes('//p/'), trailing.body.target_url);
 
   await patch('/settings/public_base_url', { value: '' }, adminT);
-  const back = await get(`/qr/${plant.id}`);
+  const back = await get(`/qr/${plant.id}`, botT);
   check('clearing it falls back to the network address',
     !back.body.target_url.includes('example.gov.my'), back.body.target_url);
 }
@@ -1346,8 +1484,9 @@ section('31. Archiving a record that was still awaiting review');
   const queued = await get('/submissions?status=pending', revT);
   check('it shows in the review queue', queued.body.results.some((s) => s.plant.id === id));
 
-  const arch = await post(`/plants/${id}/archive`, { reason: 'Withdrawn, wrong tree' }, botT);
-  eq('a botanist archives it before reviewing', arch.status, 200);
+  eq('the botanist cannot archive it', (await post(`/plants/${id}/archive`, { reason: 'Withdrawn, wrong tree' }, botT)).status, 403);
+  const arch = await post(`/plants/${id}/archive`, { reason: 'Withdrawn, wrong tree' }, revT);
+  eq('the senior botanist archives it before reviewing', arch.status, 200);
 
   const after = await get('/submissions?status=pending', revT);
   check('it no longer sits in the queue', !after.body.results.some((s) => s.plant.id === id),
@@ -1386,9 +1525,13 @@ section('32. Uploading a photograph');
     }, botT);
     eq('a plant with a photograph is accepted', made.status, 201);
     check('the photograph is served from a path, not stored as a data URL',
-      /^\/api\/photos\/upload\/\d+$/.test(made.body.plant.photo || ''), made.body.plant.photo);
+      /^\/api\/photos\/upload\/\d+(\?exp=\d+&sig=[\w-]+)?$/.test(made.body.plant.photo || ''), made.body.plant.photo);
 
-    const served = await fetch(ORIGIN + made.body.plant.photo);
+    // A botanist's record waits for review, so its photograph is only visible
+    // to the uploader (and staff) until it is approved - fetch it as them.
+    const served = await fetch(ORIGIN + made.body.plant.photo, {
+      headers: { Authorization: 'Bearer ' + botT },
+    });
     eq('...and it can be fetched back', served.status, 200);
     check('...as an image', (served.headers.get('content-type') || '').startsWith('image/'));
 
@@ -1425,12 +1568,26 @@ section('32. Uploading a photograph');
       photos: [{ data_url: dataUrl }],
     }, botT);
     eq('a botanist entry with a photograph is accepted', pending.status, 201);
-    const anon = await fetch(ORIGIN + pending.body.plant.photo);
+    const plainPath = pending.body.plant.photo.split('?')[0];
+    const anon = await fetch(ORIGIN + plainPath);
     eq('its photograph is not public while the record is pending', anon.status, 404);
-    const asStaff = await fetch(ORIGIN + pending.body.plant.photo, {
+    const asStaff = await fetch(ORIGIN + plainPath, {
       headers: { Authorization: 'Bearer ' + revT },
     });
     eq('...but the reviewer checking it can see it', asStaff.status, 200);
+    check('...kept out of shared caches', /private/.test(asStaff.headers.get('cache-control') || ''), asStaff.headers.get('cache-control'));
+
+    // The app shows photographs with <img>, which cannot send the session
+    // token, so the reviewer's copy of the record carries a signed address.
+    const forReviewer = await get(`/public/plants/${pending.body.plant.id}`, revT);
+    const signedPath = forReviewer.body?.plant?.photo || '';
+    check('the reviewer is given a signed address for it', /\?exp=\d+&sig=/.test(signedPath), signedPath);
+    eq('...which an <img> (no token) can load', (await fetch(ORIGIN + signedPath)).status, 200);
+    eq('...but not with the signature altered', (await fetch(ORIGIN + signedPath.replace(/sig=./, 'sig=Z'))).status, 404);
+    eq('...nor for another photograph', (await fetch(ORIGIN + signedPath.replace(/upload\/\d+/, 'upload/1'))).status, 404);
+    const forRanger = await get(`/public/plants/${pending.body.plant.id}`, rangerT);
+    check('a ranger, who cannot open the record, gets no signed address',
+      forRanger.status !== 200 || !/sig=/.test(forRanger.body?.plant?.photo || ''), `${forRanger.status} ${forRanger.body?.plant?.photo}`);
   }
 }
 
@@ -1452,7 +1609,7 @@ section('33. Locking an account after five wrong passwords');
   eq('the fifth wrong password locks the account', fifth.status, 423);
   check('...and says for how long', fifth.body.minutes === 15 && !!fifth.body.locked_until, JSON.stringify(fifth.body));
 
-  const right = await post('/auth/login', { email, password: 'demo1234' });
+  const right = await post('/auth/login', { email, password: passwordFor(email) });
   eq('while locked, even the right password is refused', right.status, 423);
 
   const listed = (await get('/users', adminT)).body.results.find((u) => u.id === id);
@@ -1464,11 +1621,11 @@ section('33. Locking an account after five wrong passwords');
   const unlocked = await post(`/users/${id}/unlock`, {}, adminT);
   eq('an administrator can unlock it', unlocked.status, 200);
   check('...which clears the lock', unlocked.body.user.locked_until === null);
-  eq('...and sign in works again', (await post('/auth/login', { email, password: 'demo1234' })).status, 200);
+  eq('...and sign in works again', (await post('/auth/login', { email, password: passwordFor(email) })).status, 200);
 
   // A correct sign in wipes the slate, so mistakes do not pile up for weeks.
   for (let i = 0; i < 4; i++) await wrong();
-  await post('/auth/login', { email, password: 'demo1234' });
+  await post('/auth/login', { email, password: passwordFor(email) });
   eq('a correct sign in resets the count', (await wrong()).body.attempts_left, 4);
 
   const audits = (await get('/audit', adminT)).body.results;
@@ -1483,9 +1640,9 @@ section('34. Tidying up after the run');
 {
   // These suites create records to exercise the workflow. Left behind, they
   // sit at the top of the public register and make a demo look broken, so
-  // archive them: the same soft-delete a botanist would use, which keeps the
+  // archive them: the same soft-delete a senior botanist would use, which keeps the
   // audit trail intact rather than pretending they never happened.
-  const all = (await get('/plants', botT)).body.results;
+  const all = (await get('/plants', revT)).body.results;
   // Section 10's awkward payload hides its markers in the species name and the
   // notes rather than the site, so match across every field a suite writes to -
   // otherwise that record sits in the review queue for the next demo.
@@ -1496,7 +1653,7 @@ section('34. Tidying up after the run');
 
   let archived = 0;
   for (const p of litter) {
-    const r = await post(`/plants/${p.id}/archive`, { reason: 'Created by the automated test suite' }, botT);
+    const r = await post(`/plants/${p.id}/archive`, { reason: 'Created by the automated test suite' }, revT);
     if (r.status === 200) archived++;
   }
   check(`archived ${archived} of ${litter.length} test records`, archived === litter.length,

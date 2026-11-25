@@ -1,0 +1,49 @@
+
+> florascan-prototype@0.1.0 db:setup
+> node scripts/db-setup.mjs
+
+Target: florascan_demo on 127.0.0.1
+
+Schema: 32 statement(s) applied, 3 skipped.
+Extensions: 23 statement(s) applied, 3 skipped.
+
+Loading the demo dataset...
+
+Emptied every table.
+
+roles                    4
+permissions              20
+role_permissions         23
+users                    9
+password_resets          0
+refresh_tokens           0
+user_activity_logs       11
+conservation_statuses    9
+species                  80
+plants                   130
+plant_photos             350
+plant_photo_data         0
+plant_submissions        20
+plant_revisions          0
+plant_reports            3
+qr_codes                 122
+qr_scans                 4776
+notifications            10
+audit_logs               254
+settings                 10
+sensor_devices           1
+sensor_readings          0
+sensor_alerts            0
+
+5832 rows loaded into florascan_demo.
+orphaned rows: orphan_plants=0  orphan_photos=0  orphan_scans=0
+
+Differences between the seed and the schema:
+  - permissions: the seed writes created_at, which the schema has no column for
+  - conservation_statuses: the seed writes created_at, which the schema has no column for
+  - plant_submissions: the seed writes created_at, which the schema has no column for
+  - qr_codes: the seed writes created_at, which the schema has no column for
+  - qr_scans: the seed writes created_at, which the schema has no column for
+  - settings: the seed writes id, created_at, which the schema has no column for
+
+Ready. Start the server with "npm run dev".

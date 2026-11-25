@@ -1,0 +1,11 @@
+Sketch uses 1025358 bytes (78%) of program storage space. Maximum is 1310720 bytes.
+Global variables use 48660 bytes (14%) of dynamic memory, leaving 279020 bytes for local variables. Maximum is 327680 bytes.
+
+Used library        Version Path
+WiFi                3.3.12  C:\Users\LocalAdmin\AppData\Local\Temp\claude\673a6bdadc7d3246\fc3dd50f-9920-4a56-a10c-ef5dce25f9b1\scratchpad\arduino\data\packages\esp32\hardware\esp32\3.3.12\libraries\WiFi
+Networking          3.3.12  C:\Users\LocalAdmin\AppData\Local\Temp\claude\673a6bdadc7d3246\fc3dd50f-9920-4a56-a10c-ef5dce25f9b1\scratchpad\arduino\data\packages\esp32\hardware\esp32\3.3.12\libraries\Network
+PubSubClient        2.8     C:\Users\LocalAdmin\AppData\Local\Temp\claude\673a6bdadc7d3246\fc3dd50f-9920-4a56-a10c-ef5dce25f9b1\scratchpad\arduino\user\libraries\PubSubClient
+NetworkClientSecure 3.3.12  C:\Users\LocalAdmin\AppData\Local\Temp\claude\673a6bdadc7d3246\fc3dd50f-9920-4a56-a10c-ef5dce25f9b1\scratchpad\arduino\data\packages\esp32\hardware\esp32\3.3.12\libraries\NetworkClientSecure
+
+Used platform Version Path
+esp32:esp32   3.3.12  C:\Users\LocalAdmin\AppData\Local\Temp\claude\673a6bdadc7d3246\fc3dd50f-9920-4a56-a10c-ef5dce25f9b1\scratchpad\arduino\data\packages\esp32\hardware\esp32\3.3.12

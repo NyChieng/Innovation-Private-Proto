@@ -1,3 +1,4 @@
+import { referencesForPlants } from './reference-photos.js';
 import crypto from 'node:crypto';
 // The fixture store, not the database: this file generates the demo dataset,
 // and scripts/seed-mysql.mjs writes it into MySQL.
@@ -44,9 +45,9 @@ export function seed() {
   /* ---------------------------------------------------------------- */
   const roles = [
     { id: 1, name: 'admin', label: 'Administrator', description: 'Manages staff accounts and roles, resets passwords, reviews the activity log' },
-    { id: 2, name: 'ranger', label: 'Ranger', description: 'Responds to IoT sensor alerts in the field. Does not register or edit plant records' },
-    { id: 3, name: 'botanist', label: 'Botanist / Officer', description: 'Ground-truths plants: registers, edits and archives plant and species records, prints QR tags; sets up sensors' },
-    { id: 4, name: 'reviewer', label: 'Reviewer', description: 'Double-checks every plant a botanist registers, then approves it for publication or returns it with a note' },
+    { id: 2, name: 'ranger', label: 'Ranger', description: 'Sets up the IoT sensors and responds to their alerts in the field. Does not register or edit plant records' },
+    { id: 3, name: 'botanist', label: 'Botanist / Officer', description: 'Registers plants in the field and corrects their own returned records; looks after the species list, QR tags and visitor reports' },
+    { id: 4, name: 'senior_botanist', label: 'Senior Botanist', description: 'Reviews every plant a botanist registers: corrects it, approves it for publication or returns it with a note; archives and restores records' },
   ];
   roles.forEach((r) => db.roles.push({ ...r, created_at: nowIso() }));
 
@@ -83,15 +84,18 @@ export function seed() {
   // The prototype lets an admin flip the require_approval switch, so admin
   // also holds system.settings here (the SQL file defers it to a superuser).
   grant(1, ['user.view', 'user.manage', 'user.assign_role', 'system.audit', 'system.settings']);
-  // Rangers are in charge of the plants only when a sensor raises an alert.
-  // Botanists own the ground-truthing, and nothing they register publishes
-  // until a reviewer - a second person - has checked it. Keep this in step
-  // with section 6 of Server/schema-extensions.sql.
-  grant(2, ['sensor.view', 'alert.resolve']);
-  grant(3, ['plant.view_all', 'plant.create', 'plant.edit', 'plant.archive',
-    'plant.history', 'species.manage', 'qr.print', 'qr.manage', 'report.view', 'report.resolve',
-    'sensor.view', 'sensor.manage']);
-  grant(4, ['plant.view_all', 'plant.edit', 'plant.approve', 'plant.history']);
+  // Rangers look after the sensors: they set them up and respond when one
+  // raises an alert. Sensor setup has no screen yet, so for now it is done in
+  // the database; sensor.manage is the permission that screen will check.
+  // For plant records a botanist only registers: they see their own records
+  // and may correct one a senior botanist returned to them (the API allows
+  // that without plant.edit). A senior botanist - a second person - reviews,
+  // corrects and approves every record, and archives or restores them.
+  // Keep this in step with section 6 of Server/schema-extensions.sql.
+  grant(2, ['sensor.view', 'alert.resolve', 'sensor.manage']);
+  grant(3, ['plant.create', 'species.manage', 'qr.print', 'qr.manage',
+    'report.view', 'report.resolve', 'sensor.view']);
+  grant(4, ['plant.view_all', 'plant.edit', 'plant.approve', 'plant.history', 'plant.archive']);
 
   /* ---------------------------------------------------------------- */
   /* Conservation statuses                                             */
@@ -108,17 +112,17 @@ export function seed() {
   /* Each account has its own password: the email's local part + 123. */
   /* ---------------------------------------------------------------- */
   const USERS = [
-    { role: 1, full_name: 'Neng Yi Chieng', email: 'nengyichieng@gmail.com', password: 'nengyichieng123', title: 'System Administrator' },
-    { role: 3, full_name: 'Dr Sue Han Lee', email: 'drsuehanlee@gmail.com', password: 'drsuehanlee123', title: 'Senior Botanist' },
-    { role: 3, full_name: 'Hans Jia Syn Yee', email: 'hansjiasynyee@gmail.com', password: 'hansjiasynyee123', title: 'Botanist' },
-    { role: 2, full_name: 'Edmund Guo Qian Yu', email: 'edmundguoqianyu@gmail.com', password: 'edmundguoqianyu123', title: 'Park Ranger' },
-    { role: 2, full_name: 'Lim Yon', email: 'limyon@gmail.com', password: 'limyon123', title: 'Park Ranger' },
-    { role: 2, full_name: 'Edward Ngie Jie Ling', email: 'edwardngiejieling@gmail.com', password: 'edwardngiejieling123', title: 'Field Ranger' },
-    { role: 2, full_name: 'Darren Chong Yue Yang', email: 'darrenyueyangchong@gmail.com', password: 'darrenyueyangchong123', title: 'Field Ranger' },
-    { role: 1, full_name: 'Jiaqi Hu', email: 'jiaqihu@gmail.com', password: 'jiaqihu123', title: 'Administrator' },
+    { role: 1, full_name: 'Farah Hamid', email: 'farah.hamid@florascan.test', password: 'farah.hamid123', title: 'System Administrator' },
+    { role: 3, full_name: 'Dr Grace Lim', email: 'grace.lim@florascan.test', password: 'grace.lim123', title: 'Field Botanist' },
+    { role: 3, full_name: 'Daniel Jugah', email: 'daniel.jugah@florascan.test', password: 'daniel.jugah123', title: 'Botanist' },
+    { role: 2, full_name: 'Ahmad Rosli', email: 'ahmad.rosli@florascan.test', password: 'ahmad.rosli123', title: 'Park Ranger' },
+    { role: 2, full_name: 'Nurul Aini', email: 'nurul.aini@florascan.test', password: 'nurul.aini123', title: 'Park Ranger' },
+    { role: 2, full_name: 'Jonathan Ngau', email: 'jonathan.ngau@florascan.test', password: 'jonathan.ngau123', title: 'Field Ranger' },
+    { role: 2, full_name: 'Mary Liew', email: 'mary.liew@florascan.test', password: 'mary.liew123', title: 'Field Ranger' },
+    { role: 1, full_name: 'Kevin Tan', email: 'kevin.tan@florascan.test', password: 'kevin.tan123', title: 'Administrator' },
     // Appended rather than inserted, so the indexes used further down for the
     // audit history still point at the same people.
-    { role: 4, full_name: 'Dr Mei Ling Wong', email: 'drmeilingwong@gmail.com', password: 'drmeilingwong123', title: 'Herbarium Curator' },
+    { role: 4, full_name: 'Dr Aisyah Rahman', email: 'aisyah.rahman@florascan.test', password: 'aisyah.rahman123', title: 'Senior Botanist' },
   ];
 
   USERS.forEach((u, i) => insert('users', {
@@ -175,8 +179,8 @@ export function seed() {
     // in Niah, so these are kept on the species as evidence of where the
     // species has actually been recorded in Sarawak - not as specimen coords.
     occurrence_points: s.occurrence_points || [],
-    photo_credits: (s.photos || []).filter((ph) => photoExists(ph.file)).map((ph) => ({
-      file: ph.file, credit: ph.attribution, license: ph.license, source: ph.source, url: ph.page,
+    photo_credits: (s.photos || []).map((ph) => ({
+      file: ph.file, remote_url: ph.url, credit: ph.attribution, license: ph.license, source: ph.source, url: ph.page,
     })),
     created_by: botanists[i % botanists.length].id,
     created_at: daysAgo(170 - i * 2),
@@ -358,34 +362,17 @@ export function seed() {
   });
 
   /* ---------------------------------------------------------------- */
-  /* Photos - procedural SVG, generated on demand by server/images.js  */
+  /* Photos - real photographs only                                    */
   /* ---------------------------------------------------------------- */
-  /**
-   * Which shots make sense for a given plant. A conifer has no flowers and
-   * Rafflesia has no leaves or bark, so those angles are left out rather than
-   * illustrated wrongly - a botanist reviewing the demo would spot it at once.
-   * The first shot is always the whole plant, since that is what the card
-   * thumbnail and the hero image on the plant page use.
-   */
-  function anglesFor(sp) {
-    if (!sp) return ['habit', 'habitat'];
-    const name = sp.scientific_name;
-    if (name.startsWith('Rafflesia')) return ['habit', 'flower', 'habitat'];
-    if (sp.family === 'Araucariaceae') return ['habit', 'leaf', 'bark', 'habitat']; // conifer: cones, not flowers
-    if (sp.growth_form === 'tree') return ['habit', 'leaf', 'bark', 'flower', 'fruit', 'habitat'];
-    if (sp.growth_form === 'palm') return ['habit', 'leaf', 'fruit', 'habitat'];
-    if (sp.growth_form === 'climber') return ['habit', 'leaf', 'flower', 'habitat'];
-    return ['habit', 'leaf', 'flower', 'habitat'];
-  }
-
-  db.plants.forEach((p) => {
-    const sp = db.species.find((s) => s.id === p.species_id);
-    const source = sp ? SPECIES.find((x) => x.scientific_name === sp.scientific_name) : null;
-    // Use a photograph whenever we have one. A locally cached copy is
-    // preferred (it works with no internet); otherwise point straight at the
-    // iNaturalist CDN, and the client falls back between the two.
-    const real = (source?.photos || []).filter((ph) => ph.url || photoExists(ph.file));
-
+  // A species with no photograph gets none: the app shows a placeholder
+  // rather than a generated drawing that could pass for the wrong plant.
+  const records = db.plants.map(p => ({
+    id: p.id, scientific_name: db.species.find(s => s.id === p.species_id)?.scientific_name,
+  }));
+  const references = referencesForPlants(records, SPECIES);
+  records.forEach(({ scientific_name, id }) => {
+    const p = db.plants.find(plant => plant.id === id);
+    const real = references.get(id);
     if (real.length) {
       // Real photographs from iNaturalist, under Creative Commons. The
       // photographer is credited on the plant page; we never alter the image.
@@ -399,7 +386,7 @@ export function seed() {
         mime_type: 'image/jpeg',
         size_bytes: 0,
         width_px: null, height_px: null,
-        caption: i === 0 ? 'Photographed in the field.' : null,
+        caption: ph.caption || 'Species reference: ' + scientific_name,
         credit: ph.attribution || null,
         license: ph.license || null,
         source_name: ph.source || null,
@@ -409,40 +396,6 @@ export function seed() {
         created_at: p.registered_at,
         deleted_at: null,
       }));
-      return;
-    }
-
-    // No photograph for this species: fall back to the generated illustration.
-    const base = (sp?.scientific_name || p.proposed_species_name || p.plant_code).replace(/s+/g, '-').toLowerCase();
-    const available = anglesFor(sp);
-    const n = Math.min(available.length, 3 + Math.floor(rnd() * 2));
-    for (let i = 0; i < n; i++) {
-      const angle = i === 0 ? available[0] : available[1 + ((p.id + i) % (available.length - 1))];
-      insert('plant_photos', {
-        plant_id: p.id,
-        file_path: '/api/photos/' + base + '--' + angle + '--' + p.id + '.svg',
-        thumbnail_path: '/api/photos/' + base + '--' + angle + '--' + p.id + '.svg',
-        file_name: base + '-' + angle + '.svg',
-        mime_type: 'image/svg+xml',
-        size_bytes: 0,
-        width_px: 1600, height_px: 1200,
-        caption: {
-          habit: 'Whole plant, showing overall habit and setting.',
-          leaf: 'Leaf detail, upper and lower surface.',
-          bark: 'Bark and trunk detail at breast height.',
-          flower: 'Inflorescence at the time of survey.',
-          fruit: 'Fruit, collected from beneath the specimen.',
-          habitat: 'Surrounding habitat and canopy position.',
-        }[angle],
-        credit: null,
-        license: null,
-        source_name: 'Generated illustration',
-        source_url: null,
-        is_primary: i === 0 ? 1 : 0,
-        uploaded_by: p.registered_by,
-        created_at: p.registered_at,
-        deleted_at: null,
-      });
     }
   });
 
@@ -506,7 +459,7 @@ export function seed() {
     ['qr_base_url', '/p/', 'string', 'Plant page address the QR codes encode, before the token'],
     ['public_base_url', '', 'string', 'Permanent public address of the site, e.g. https://florascan.example.org. Printed QR codes encode it, so set it before printing any tag for real. Blank uses this machine network address, which suits a demo'],
     ['plant_code_prefix', 'PLT', 'string', 'Prefix for generated Plant IDs'],
-    ['require_approval', 'true', 'bool', 'true = botanist entries wait for a reviewer; false = they publish immediately. A "species not listed" entry always waits'],
+    ['require_approval', 'true', 'bool', 'true = botanist entries wait for a senior botanist; false = they publish immediately. A "species not listed" entry always waits'],
     ['max_upload_mb', '8', 'int', 'Maximum photo upload size'],
     ['allowed_image_types', '["image/jpeg","image/png","image/webp"]', 'json', 'Accepted MIME types'],
     ['sensor_offline_minutes', '15', 'int', 'A sensor with no reading for this many minutes is shown as Offline'],
@@ -519,17 +472,33 @@ export function seed() {
   /* ---------------------------------------------------------------- */
   // The real kit in iot-kit/FloraScan_Node. Seeded so "npm run db:reset" and
   // "npm test" (which reseeds) keep it: without this row Server/mqtt.js
-  // ignores every reading as coming from an unknown device. DEVICE_CODE and
-  // DEVICE_KEY in the sketch must match. The safe ranges are the ones the
-  // sketch prints in the Serial Monitor.
+  // ignores every reading as coming from an unknown device. DEVICE_CODE in the
+  // sketch must match, and DEVICE_KEY in its secrets.h must equal IOT_DEVICE_KEY
+  // in .env. Without IOT_DEVICE_KEY the node gets a random key, so no value in
+  // the code can sign readings. The safe ranges are the ones the sketch prints
+  // in the Serial Monitor.
+  const deviceKey = process.env.IOT_DEVICE_KEY || crypto.randomBytes(16).toString('hex');
   insert('sensor_devices', {
     device_code: 'SN-001',
-    device_key_hash: crypto.createHash('sha256').update('demo-key-change-me').digest('hex'),
+    device_key_hash: crypto.createHash('sha256').update(deviceKey).digest('hex'),
     plant_id: null, label: 'Real kit', is_simulated: 0, is_active: 1,
     soil_moisture_min: 30, soil_moisture_max: 80,
     temperature_min: 18, temperature_max: 35,
     humidity_min: 40, humidity_max: 90,
+    distance_min: 10, distance_max: 500,  // cm: closer than 10 cm = something at the plant; 500 = never (the HC-SR04 tops out near 430)
+    sound_min: 0, sound_max: 60,          // % of the mic's swing, the sketch's "loud noise" level
     last_seen_at: null, created_by: null, updated_at: nowIso(), deleted_at: null,
+  });
+
+  // The AI camera (ai-vision-node). The node reads the same FLORAGUARD_CAMERA_KEY
+  // from this .env (or falls back to the same demo key), so a local demo needs
+  // no set-up. A real installation sets its own key in .env before seeding.
+  const cameraKey = process.env.FLORAGUARD_CAMERA_KEY || 'demo-camera-key-change-me';
+  insert('camera_devices', {
+    device_code: 'CAM-001',
+    device_key_hash: crypto.createHash('sha256').update(cameraKey).digest('hex'),
+    plant_id: null, label: 'AI camera (demo)', is_active: 1,
+    last_seen_at: null, updated_at: nowIso(), deleted_at: null,
   });
 
   /* ---------------------------------------------------------------- */

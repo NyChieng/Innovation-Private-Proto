@@ -121,7 +121,7 @@ export default function Recover({ onBack, initialEmail = '' }) {
             <span className="signin-label">{t('Email address')}</span>
             <span className="signin-control">
               <I.Mail />
-              <input type="email" inputMode="email" autoComplete="username" placeholder="name@gmail.com"
+              <input type="email" inputMode="email" autoComplete="username" placeholder="name@florascan.test"
                 value={form.email} onChange={(e) => up({ email: e.target.value })} aria-invalid={!!error} />
             </span>
           </label>

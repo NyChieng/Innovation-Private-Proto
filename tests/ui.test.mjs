@@ -83,10 +83,10 @@ const eq = (label, a, b) => check(label, a === b, `expected ${JSON.stringify(b)}
 /* ------------------------------------------------------------------ */
 
 const ACCOUNTS = {
-  admin: 'nengyichieng@gmail.com',
-  botanist: 'drsuehanlee@gmail.com',
-  reviewer: 'drmeilingwong@gmail.com',
-  ranger: 'edmundguoqianyu@gmail.com',
+  admin: 'farah.hamid@florascan.test',
+  botanist: 'grace.lim@florascan.test',
+  reviewer: 'aisyah.rahman@florascan.test',
+  ranger: 'ahmad.rosli@florascan.test',
 };
 
 // Seeded accounts use the email's local part + 123 (Server/seed.js).
@@ -295,19 +295,13 @@ section('4. Staff sign in');
   const page = await newPage();
   await go(page, '/');
 
-  check('the prototype controls are on screen', await page.evaluate(() => !!document.querySelector('.rs-fab')));
-  eq('it starts as the public visitor',
-    await page.evaluate(() => document.querySelector('.rs-fab').innerText.trim().split('\n')[0]), 'Visitor');
+  check('there is no prototype control panel', await page.evaluate(() => !document.querySelector('.rs-fab, .rs-panel')));
+  check('a visitor sees the staff sign-in link', await page.evaluate(() => !!document.querySelector('.topbar a[href="/login"]')));
 
-  await page.click('.rs-fab');
-  await sleep(250);
-  const roster = await page.evaluate(() => document.querySelectorAll('.rs-panel .rs-item').length);
-  eq('it no longer lists accounts to jump into', roster, 1);
-
-  // Its sign-in button leads to the real form.
-  await page.evaluate(() => [...document.querySelectorAll('.rs-panel button')].find((b) => /sign in/i.test(b.innerText)).click());
+  // The header link leads to the real form.
+  await page.click('.topbar a[href="/login"]');
   await sleep(500);
-  check('the controls lead to the sign-in page', page.url().endsWith('/login'), page.url());
+  check('the header link leads to the sign-in page', page.url().endsWith('/login'), page.url());
   check('sign in is full screen, outside the site header',
     await page.evaluate(() => !!document.querySelector('.signin') && !document.querySelector('.topbar, .m-header')));
 
@@ -348,17 +342,15 @@ section('4. Staff sign in');
       error: document.querySelector('.signin-error')?.innerText,
       fields: [...document.querySelectorAll('.signin input')].map((i) => i.value),
     })).catch(() => ''));
-  const after = await page.evaluate(() => document.querySelector('.rs-fab').innerText);
-  check('the controls show the new role', /Botanist/i.test(after), after);
-
-  // Keyboard shortcut, then sign out from the panel.
-  await page.keyboard.down('Control'); await page.keyboard.press('KeyK'); await page.keyboard.up('Control');
+  // Sign out from the account menu in the header.
+  await page.click('.acct-wrap > button');
   await sleep(250);
-  check('Ctrl+K opens the controls', await page.evaluate(() => !!document.querySelector('.rs-panel')));
-  await page.evaluate(() => [...document.querySelectorAll('.rs-panel button')].find((b) => /sign out/i.test(b.innerText)).click());
+  const menu = await page.evaluate(() => document.querySelector('.acct-wrap .card')?.innerText || '');
+  check('the account menu shows the new role', /Botanist/i.test(menu), menu);
+  await page.evaluate(() => [...document.querySelectorAll('.acct-wrap button')].find((b) => /sign out/i.test(b.innerText)).click());
   await sleep(800);
-  const back = await page.evaluate(() => document.querySelector('.rs-fab').innerText);
-  check('signing out returns to the public visitor', /Visitor/i.test(back), back);
+  check('signing out returns to the public visitor',
+    await page.evaluate(() => !document.querySelector('.acct-wrap') && !!document.querySelector('.topbar a[href="/login"]')));
 
   await expectNoErrors(page, 'no console errors from sign in');
   await page.close();
@@ -378,6 +370,10 @@ section('5. Staff routes under every role');
     let blocked = 0;
     for (const r of ROUTES) {
       await go(page, r);
+      // Screens load lazily: on a slow runner one can still be mounting 350 ms
+      // after the network goes quiet, so wait for it before calling it empty.
+      await page.waitForFunction(() => document.getElementById('root')?.children.length > 0, { timeout: 5000 })
+        .catch(() => { /* still empty: the check below reports it */ });
       const info = await page.evaluate(() => ({
         empty: document.getElementById('root').children.length === 0,
         denied: /cannot open this page/i.test(document.body.innerText),
@@ -423,8 +419,8 @@ section('6. Registration form - input validation');
   await page.type('input[placeholder*="Hoya"]', 'Testus uiensis (browser test)');
   await sleep(250);
   text = await bodyText(page);
-  check('an unidentified record is flagged as needing a reviewer',
-    /always goes to a reviewer|review queue/i.test(text), text.slice(0, 300));
+  check('an unidentified record is flagged as needing a senior botanist',
+    /always goes to a senior botanist|review queue/i.test(text), text.slice(0, 300));
 
   // Fill the location and submit.
   await page.type('#site', 'UI test plot, marker 9');
@@ -436,6 +432,8 @@ section('6. Registration form - input validation');
   await waitFor(() => /\/staff\/plants\/\d+/.test(page.url()));
 
   check('a valid submission navigates to the new record', /\/staff\/plants\/\d+/.test(page.url()), page.url());
+  // The URL changes before the record has loaded; wait for its content, not just the header.
+  await waitFor(async () => /Pending review/i.test(await bodyText(page)));
   text = await bodyText(page);
   check('...and the record shows as pending review', /Pending review/i.test(text), text.slice(0, 200));
   check('...carrying the name the botanist typed', /Testus uiensis/.test(text));
@@ -593,10 +591,22 @@ section('8. Review queue - approve and return');
 /* ------------------------------------------------------------------ */
 section('9. Plant record - tabs, QR tag and history');
 {
-  const token = await tokenFor(ACCOUNTS.botanist);
   const list = await (await fetch(BASE + '/api/public/plants')).json();
   // Same reason as section 2: pick a seeded record with photographs.
   const plant = list.results.find((x) => x.photo) || list.results[0];
+
+  // A botanist only registers plant records: a published one opens read-only.
+  {
+    const botPage = await newPage({ token: await tokenFor(ACCOUNTS.botanist) });
+    await go(botPage, '/staff/plants/' + plant.id);
+    const actions = await botPage.evaluate(() => [...document.querySelectorAll('button')].map((b) => b.textContent.trim()));
+    check('a botanist sees no Edit or Archive on a published record',
+      !actions.some((a) => /^(Edit|Archive)$/i.test(a)), actions.join(' | '));
+    await botPage.close();
+  }
+
+  // The senior botanist edits the register.
+  const token = await tokenFor(ACCOUNTS.reviewer);
 
   const page = await newPage({ token });
   await go(page, '/staff/plants/' + plant.id);
@@ -759,7 +769,8 @@ section('12. Phone layout');
   const text = await bodyText(page);
   check('the scanner explains why the camera is unavailable over plain HTTP',
     /HTTPS|camera/i.test(text), text.slice(0, 200));
-  check('...and still offers tags to open directly', /open a tag directly/i.test(text));
+  check('...and still lets you type a Plant ID', !!await page.$('#scan-code'));
+  check('...with no demo tag list', !/open a tag directly/i.test(text));
 
   await expectNoErrors(page, 'no console errors in the phone layout');
   await page.close();
@@ -770,13 +781,13 @@ section('13. Theme and layout switching');
 {
   const page = await newPage();
   await go(page, '/');
-  await page.click('.rs-fab');
-  await sleep(250);
+  // The theme switch in the header: Auto, Light, Dark (icon buttons, labelled).
+  const pickTheme = (re) => page.evaluate((src) => {
+    const seg = document.querySelector('.topbar .theme-switch');
+    [...seg.querySelectorAll('button')].find((b) => new RegExp(src, 'i').test(b.getAttribute('aria-label') || ''))?.click();
+  }, re);
 
-  await page.evaluate(() => {
-    const seg = [...document.querySelectorAll('.rs-panel .segmented')].pop();
-    [...seg.querySelectorAll('button')].find((b) => /Dark/i.test(b.textContent))?.click();
-  });
+  await pickTheme('Dark');
   await sleep(300);
   eq('dark mode applies', await page.evaluate(() => document.documentElement.dataset.theme), 'dark');
 
@@ -784,16 +795,15 @@ section('13. Theme and layout switching');
   check('the page background actually darkens', /rgb\((\d+), (\d+), (\d+)\)/.test(bg)
     && bg.match(/\d+/g).slice(0, 3).every((n) => Number(n) < 60), bg);
 
-  await page.evaluate(() => {
-    const seg = [...document.querySelectorAll('.rs-panel .segmented')].pop();
-    [...seg.querySelectorAll('button')].find((b) => /Light/i.test(b.textContent))?.click();
-  });
+  await pickTheme('Light');
   await sleep(300);
   eq('light mode applies', await page.evaluate(() => document.documentElement.dataset.theme), 'light');
 
+  // The layout setting lives on the "Open on phone" page.
+  await go(page, '/connect');
   await page.evaluate(() => {
-    const seg = document.querySelector('.rs-panel .segmented');
-    [...seg.querySelectorAll('button')].find((b) => /Phone app/i.test(b.textContent))?.click();
+    const btn = [...document.querySelectorAll('.segmented button')].find((b) => /Phone app/i.test(b.textContent));
+    btn?.click();
   });
   await sleep(500);
   check('forcing the phone layout on a desktop window works',
@@ -811,12 +821,12 @@ section('13. Theme and layout switching');
   await page.evaluate(() => localStorage.removeItem('florascan.theme'));
   await go(page, '/');
 
-  const radios = await page.$$('.m-header .theme-switch [role="radio"]');
-  eq('the phone header has auto, light and dark theme buttons', radios.length, 3);
+  const buttons = await page.$$('.m-header .theme-switch button[aria-pressed]');
+  eq('the phone header has auto, light and dark theme buttons', buttons.length, 3);
   const theme = () => page.evaluate(() => ({
     attr: document.documentElement.dataset.theme || null,
     saved: localStorage.getItem('florascan.theme'),
-    checked: document.querySelector('.theme-switch [aria-checked="true"]')?.getAttribute('aria-label'),
+    checked: document.querySelector('.theme-switch [aria-pressed="true"]')?.getAttribute('aria-label'),
     meta: [...document.querySelectorAll('meta[name="theme-color"]')].map((m) => m.content),
   }));
 
@@ -978,7 +988,8 @@ section('17. Reading a QR code from a photograph in the gallery');
   // a visitor picking a photo from their phone would.
   const plantsRes = await (await fetch(BASE + '/api/public/plants')).json();
   const plant = plantsRes.results.find((p) => p.qr_token);
-  const qr = await (await fetch(`${BASE}/api/qr/${plant.id}?origin=${encodeURIComponent(BASE)}`)).json();
+  const qrAuth = { headers: { Authorization: 'Bearer ' + (await tokenFor(ACCOUNTS.botanist)) } };
+  const qr = await (await fetch(`${BASE}/api/qr/${plant.id}?origin=${encodeURIComponent(BASE)}`, qrAuth)).json();
 
   const tmpDir = path.join(os.tmpdir(), 'florascan-tests');
   fs.mkdirSync(tmpDir, { recursive: true });
@@ -1067,9 +1078,10 @@ section('19. Photographs and their credits');
   const page = await newPage();
   await go(page, '/');
 
-  const heroImg = await page.evaluate(() => !!document.querySelector('.hero-photo img'));
+  const heroImg = await page.evaluate(() => !!document.querySelector('.home-photo img'));
   check('the home page leads with a photograph', heroImg);
 
+  await go(page, '/browse');
   const cards = await page.evaluate(() => document.querySelectorAll('.plant-card .smart-img img').length);
   check('plant cards use the fading image component', cards > 0, cards + ' found');
 
@@ -1170,7 +1182,7 @@ section('22. Motion respects prefers-reduced-motion');
   check('nothing stays invisible when motion is reduced', hidden === 0, hidden + ' still hidden');
 
   const drifting = await page.evaluate(() => {
-    const img = document.querySelector('.hero-photo img');
+    const img = document.querySelector('.home-photo img');
     return img ? getComputedStyle(img).animationName : 'none';
   });
   check('the hero photograph does not drift', drifting === 'none', drifting);
@@ -1353,7 +1365,8 @@ section('26. The welcome screen on a first visit');
   // A scanned tag must never be interrupted by an introduction.
   const list = await (await fetch(BASE + '/api/public/plants?limit=1')).json();
   const tagged = list.results[0];
-  const qr = await (await fetch(`${BASE}/api/qr/${tagged.id}`)).json();
+  const qrAuth = { headers: { Authorization: 'Bearer ' + (await tokenFor(ACCOUNTS.botanist)) } };
+  const qr = await (await fetch(`${BASE}/api/qr/${tagged.id}`, qrAuth)).json();
   const token = new URL(qr.target_url).pathname.split('/p/')[1];
 
   const scanner = await browser.newPage();
@@ -1454,26 +1467,7 @@ section('28. The layout survives awkward content and the floating pill');
     await page.close();
   }
 
-  // The role switcher is fixed to the bottom-right, so it sits over whatever
-  // the document ends with - which is the footer and its links.
   const page = await newPage({ token: null });
-  await page.setViewport({ width: 1280, height: 860 });
-  await page.goto(BASE + '/', { waitUntil: 'networkidle2' });
-  await page.evaluate(() => { document.scrollingElement.scrollTop = document.scrollingElement.scrollHeight; });
-  await new Promise((r) => setTimeout(r, 400));
-
-  const buried = await page.evaluate(() => {
-    const pill = document.querySelector('.rs-fab');
-    if (!pill) return ['no pill rendered'];
-    const b = pill.getBoundingClientRect();
-    return [...document.querySelectorAll('.site-foot a')].filter((a) => {
-      const r = a.getBoundingClientRect();
-      const down = Math.min(r.bottom, b.bottom) - Math.max(r.top, b.top);
-      const across = Math.min(r.right, b.right) - Math.max(r.left, b.left);
-      return down > 6 && across > 6;
-    }).map((a) => a.textContent.trim());
-  });
-  check('no footer link ends up under the floating switcher', buried.length === 0, buried.join(', '));
 
   // Mid-sentence controls still have to be tappable without the padding
   // pushing the line apart.
@@ -1499,8 +1493,8 @@ section('28b. English, Malay and Chinese (#5)');
   // so every language is checked for sideways scroll on a narrow phone, not
   // just for having changed.
   const SAMPLES = {
-    ms: { home: /Setiap tumbuhan di denai/, nav: /Layari tumbuhan|Imbas/, review: /Baris gilir semakan/, html: 'ms' },
-    zh: { home: /步道上的每一株植物/, nav: /浏览植物|扫描/, review: /审核队列/, html: 'zh-Hans' },
+    ms: { home: /Apakah yang tumbuh di sebelah anda/, nav: /Tumbuhan|Imbas/, review: /Baris gilir semakan/, html: 'ms' },
+    zh: { home: /你身边长着什么/, nav: /植物|扫描/, review: /审核队列/, html: 'zh-Hans' },
   };
   const revToken = await tokenFor(ACCOUNTS.reviewer);
   const botToken = await tokenFor(ACCOUNTS.botanist);
@@ -1541,10 +1535,10 @@ section('28b. English, Malay and Chinese (#5)');
   await go(page, '/');
   await page.select('.lang-switch select', 'zh');
   await sleep(300);
-  check('choosing 中文 in the header switches at once', /步道上的每一株植物/.test(await bodyText(page)));
+  check('choosing 中文 in the header switches at once', /你身边长着什么/.test(await bodyText(page)));
   await page.select('.lang-switch select', 'en');
   await sleep(300);
-  check('...and English comes back', /Every plant on the trail/.test(await bodyText(page)));
+  check('...and English comes back', /What is growing beside you/.test(await bodyText(page)));
   await expectNoErrors(page, 'no console errors while switching language');
   await page.close();
 }
@@ -1592,13 +1586,16 @@ section('28c. A reviewer corrects a record without returning it (#6)');
     .find((b) => /Save changes/i.test(b.textContent))?.click());
   await waitFor(() => page.evaluate(() => !document.querySelector('.modal')));
   check('the correction is saved and the dialog closes', await page.evaluate(() => !document.querySelector('.modal')));
+  // The queue reloads after the dialog closes; on a slow machine that is a
+  // moment later, so wait for it rather than read the page straight away.
+  await waitFor(async () => /review edit \(corrected\)/.test(await bodyText(page)));
   check('...and the card shows the new site', /review edit \(corrected\)/.test(await bodyText(page)));
 
   const hist = await (await fetch(`${BASE}/api/plants/${plant.id}/history`, {
     headers: { Authorization: 'Bearer ' + botToken },
   })).json();
   const rev = hist.revisions.find((r) => r.field_name === 'site_name');
-  check('the history records it against the reviewer', rev?.changed_by_name === 'Dr Mei Ling Wong', rev?.changed_by_name);
+  check('the history records it against the reviewer', rev?.changed_by_name === 'Dr Aisyah Rahman', rev?.changed_by_name);
   eq('...with the review reason', rev?.change_reason, 'Corrected at review');
   check('...and the record is still waiting for a decision',
     (await bodyText(page)).includes(plant.plant_code));
@@ -1629,7 +1626,7 @@ section('29. Tidying up after the run');
 {
   // The form tests register real plants. Archive them so the register is
   // demo-ready immediately after a test run, without restarting the server.
-  const token = await tokenFor(ACCOUNTS.botanist);
+  const token = await tokenFor(ACCOUNTS.reviewer);
   const headers = { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token };
 
   const all = await (await fetch(BASE + '/api/plants', { headers })).json();

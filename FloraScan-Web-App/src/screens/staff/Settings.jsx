@@ -57,11 +57,11 @@ export default function SettingsScreen() {
                 <span className="switch-track" />
                 <span style={{ flex: 1 }}>
                   <span className="strong" style={{ display: 'block' }}>
-                    {t('Botanist entries must be checked by a reviewer')}
+                    {t('Botanist entries must be checked by a senior botanist')}
                   </span>
                   <span className="small mute">
                     {approval.setting_value === 'true'
-                      ? t('On. A botanist’s new record goes to the review queue and stays off the public site until a reviewer approves it.')
+                      ? t('On. A botanist’s new record goes to the review queue and stays off the public site until a senior botanist approves it.')
                       : t('Off. A botanist’s new record is published immediately, so the system behaves as a straightforward register.')}
                   </span>
                 </span>
@@ -69,7 +69,7 @@ export default function SettingsScreen() {
 
               <div style={{ marginTop: 16 }}>
                 <Notice kind="plain">
-                  {t('A record with no confirmed species always goes to a reviewer, whichever way this is set, because the API refuses to approve one without a species. Nobody can approve a record they registered themselves. A small site with no separate reviewer may prefer this off.')}
+                  {t('A record with no confirmed species always goes to a senior botanist, whichever way this is set, because the API refuses to approve one without a species. Nobody can approve a record they registered themselves. A small site with no separate senior botanist may prefer this off.')}
                 </Notice>
               </div>
             </div>
@@ -129,9 +129,6 @@ export default function SettingsScreen() {
                 })}
               </tbody>
             </table>
-          </div>
-          <div className="card-foot tiny mute">
-            {t('In the shipped design these live behind the future superuser role; the prototype gives them to the administrator so the workflow can be demonstrated.')}
           </div>
         </div>
       </div>

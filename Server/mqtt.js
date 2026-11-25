@@ -1,6 +1,6 @@
 import mqtt from 'mqtt';
 import { createHash, timingSafeEqual } from 'node:crypto';
-import { q, insert, update, nowIso } from './db.js';
+import { q, insert, update, nowIso, notifyPermission } from './db.js';
 
 const MQTT_URL = process.env.MQTT_URL || 'mqtts://l11c8d1d.ala.asia-southeast1.emqxsl.com';
 
@@ -92,9 +92,14 @@ async function handleMessage(topic, message) {
     !data ||
     typeof data !== 'object' ||
     typeof data.device_code !== 'string' ||
-    typeof data.device_key !== 'string'
+    typeof data.device_key !== 'string' ||
+    typeof data.boot_id !== 'string' ||
+    !/^[0-9A-Fa-f]{16}$/.test(data.boot_id) ||
+    !Number.isInteger(data.sequence) ||
+    data.sequence < 1 ||
+    data.sequence > 0xFFFFFFFF
   ) {
-    console.warn('[MQTT] Ignored message: missing device credentials');
+    console.warn('[MQTT] Ignored message: missing or invalid reading sequence');
     return;
   }
 
@@ -107,7 +112,9 @@ async function handleMessage(topic, message) {
     `SELECT id, device_code, device_key_hash, plant_id,
             soil_moisture_min, soil_moisture_max,
             temperature_min, temperature_max,
-            humidity_min, humidity_max
+            humidity_min, humidity_max,
+            distance_min, distance_max,
+            sound_min, sound_max
      FROM sensor_devices
      WHERE device_code = ?
        AND is_active = 1
@@ -165,12 +172,23 @@ async function handleMessage(topic, message) {
   // Server time, not the ESP32's: the board has no real clock.
   const recordedAt = nowIso();
 
-  const saved = await insert('sensor_readings', {
-    device_id: device.id,
-    plant_id: device.plant_id,
-    recorded_at: recordedAt,
-    ...reading,
-  });
+  let saved;
+  try {
+    saved = await insert('sensor_readings', {
+      device_id: device.id,
+      plant_id: device.plant_id,
+      recorded_at: recordedAt,
+      boot_id: data.boot_id.toUpperCase(),
+      sequence_no: data.sequence,
+      ...reading,
+    });
+  } catch (err) {
+    if (err?.code === 'ER_DUP_ENTRY') {
+      console.warn(`[MQTT] Ignored duplicate reading from ${device.device_code}`);
+      return;
+    }
+    throw err;
+  }
 
   await update('sensor_devices', device.id, {
     last_seen_at: recordedAt,
@@ -196,6 +214,11 @@ const LIMIT_CHECKS = [
   { type: 'soil_moisture', field: 'soil_moisture_pct', min: 'soil_moisture_min', max: 'soil_moisture_max', label: 'Soil moisture', unit: ' %' },
   { type: 'temperature', field: 'temperature_c', min: 'temperature_min', max: 'temperature_max', label: 'Temperature', unit: ' °C' },
   { type: 'humidity', field: 'humidity_pct', min: 'humidity_min', max: 'humidity_max', label: 'Humidity', unit: ' %' },
+  // Something too close to the plant (HC-SR04), or a loud noise next to it
+  // (KY-037: % of the mic's calibrated swing, not decibels). distance_cm is
+  // null when no echo came back, so an empty space never raises an alert.
+  { type: 'distance', field: 'distance_cm', min: 'distance_min', max: 'distance_max', label: 'Distance', unit: ' cm' },
+  { type: 'sound', field: 'sound_peak_pct', min: 'sound_min', max: 'sound_max', label: 'Sound (peak)', unit: ' %' },
 ];
 
 // mysql2 returns DECIMAL columns as strings, so limits are converted first.
@@ -228,7 +251,7 @@ async function raiseAlerts(device, reading, readingId) {
     );
     if (open.length) continue;
 
-    await insert('sensor_alerts', {
+    const alert = await insert('sensor_alerts', {
       device_id: device.id,
       plant_id: device.plant_id,
       reading_id: readingId,
@@ -243,6 +266,17 @@ async function raiseAlerts(device, reading, readingId) {
       resolution_note: null,
     });
 
+    // Rangers respond to alerts, so only roles that can resolve one are told.
+    // Botanists still see every alert on the IoT dashboard. (First added in
+    // e58c3f4b on feature/iot-monitoring; lost when #15 merged another copy.)
+    const side = crossed === 'min' ? 'below' : 'above';
+    await notifyPermission('alert.resolve', {
+      type: 'sensor.alert',
+      title: `Sensor alert: ${device.device_code}`,
+      body: `${check.label} ${value}${check.unit} is ${side} the ${limit}${check.unit} limit.`,
+      related_type: 'sensor_alert', related_id: alert.id,
+    });
+
     console.log(
       `[MQTT] Alert: ${device.device_code} ${check.label} ${value}${check.unit} is ` +
       `${crossed === 'min' ? 'below' : 'above'} the ${limit}${check.unit} limit`
@@ -251,11 +285,21 @@ async function raiseAlerts(device, reading, readingId) {
 }
 
 export function startMqttSubscriber() {
+  // The broker login lives only in .env. The team broker refuses anyone
+  // without it, every 5 seconds, so when it is missing (and MQTT_URL does not
+  // point at a broker of your own) say so once and leave sensor readings off.
+  const username = process.env.MQTT_USERNAME || undefined;
+  const password = process.env.MQTT_PASSWORD || undefined;
+  if (!process.env.MQTT_URL && !(username && password)) {
+    console.log('[MQTT] Not connected: set MQTT_USERNAME and MQTT_PASSWORD in .env to receive sensor readings (see .env.example)');
+    return null;
+  }
+
   const client = mqtt.connect(MQTT_URL, {
     reconnectPeriod: 5000, // retry every 5 s if the broker drops us
     connectTimeout: 10000,
-    username: process.env.MQTT_USERNAME || 'backend_service',
-    password: process.env.MQTT_PASSWORD || 'BackendTesting1234',
+    username,
+    password,
   });
 
   client.on('connect', () => {

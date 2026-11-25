@@ -1,0 +1,446 @@
+{
+  "started": "2026-11-13T16:16:59.847Z",
+  "broker": "mqtts://l11c8d1d.ala.asia-southeast1.emqxsl.com",
+  "prefix": "florascan-demo-test",
+  "sections": [
+    {
+      "name": "1. The node connects to the broker like the ESP32",
+      "checks": [
+        {
+          "name": "connects with the device login (mqtts, 94 ms)",
+          "ok": true
+        },
+        {
+          "name": "the broker refuses a wrong broker password",
+          "ok": true
+        }
+      ]
+    },
+    {
+      "name": "2. A reading in the sketch's format is saved",
+      "checks": [
+        {
+          "name": "the reading reaches MySQL (116 ms after publishing)",
+          "ok": true
+        },
+        {
+          "name": "soil moisture",
+          "ok": true
+        },
+        {
+          "name": "temperature",
+          "ok": true
+        },
+        {
+          "name": "humidity",
+          "ok": true
+        },
+        {
+          "name": "rain",
+          "ok": true
+        },
+        {
+          "name": "is_raining stored as 0",
+          "ok": true
+        },
+        {
+          "name": "motion events",
+          "ok": true
+        },
+        {
+          "name": "sound peak",
+          "ok": true
+        },
+        {
+          "name": "distance",
+          "ok": true
+        },
+        {
+          "name": "Wi-Fi signal",
+          "ok": true
+        },
+        {
+          "name": "uptime",
+          "ok": true
+        },
+        {
+          "name": "boot id kept",
+          "ok": true
+        },
+        {
+          "name": "sequence kept",
+          "ok": true
+        },
+        {
+          "name": "time is the server's clock in UTC (within 60 s of now)",
+          "ok": true
+        },
+        {
+          "name": "the device's last_seen_at is updated",
+          "ok": true
+        }
+      ]
+    },
+    {
+      "name": "3. Sequence protection: retries, restarts and replays (newest commit)",
+      "checks": [
+        {
+          "name": "the same reading sent again 3 times (QoS 1 retries) adds no rows",
+          "ok": true
+        },
+        {
+          "name": "...so the boot still has exactly one row",
+          "ok": true
+        },
+        {
+          "name": "the same boot id in lower case is still a duplicate",
+          "ok": true
+        },
+        {
+          "name": "the next sequence number in the same boot is saved",
+          "ok": true
+        },
+        {
+          "name": "after a restart (new boot id) sequence 1 is accepted again",
+          "ok": true
+        },
+        {
+          "name": "an out-of-order sequence in the same boot is saved (only exact repeats are refused)",
+          "ok": true
+        },
+        {
+          "name": "the largest sequence (2^32 - 1) is accepted",
+          "ok": true
+        }
+      ]
+    },
+    {
+      "name": "4. Messages the server must refuse",
+      "checks": [
+        {
+          "name": "refused: wrong device key",
+          "ok": true
+        },
+        {
+          "name": "refused: no device key",
+          "ok": true
+        },
+        {
+          "name": "refused: unknown device",
+          "ok": true
+        },
+        {
+          "name": "refused: device_code does not match the topic",
+          "ok": true
+        },
+        {
+          "name": "refused: SQL in the device code",
+          "ok": true
+        },
+        {
+          "name": "refused: script tag and emoji in the device code",
+          "ok": true
+        },
+        {
+          "name": "refused: missing boot_id (the sketch before the newest commit)",
+          "ok": true
+        },
+        {
+          "name": "refused: missing sequence",
+          "ok": true
+        },
+        {
+          "name": "refused: boot_id 15 characters",
+          "ok": true
+        },
+        {
+          "name": "refused: boot_id not hexadecimal",
+          "ok": true
+        },
+        {
+          "name": "refused: sequence 0",
+          "ok": true
+        },
+        {
+          "name": "refused: sequence negative",
+          "ok": true
+        },
+        {
+          "name": "refused: sequence 1.5",
+          "ok": true
+        },
+        {
+          "name": "refused: sequence as text \"5\"",
+          "ok": true
+        },
+        {
+          "name": "refused: sequence 2^32 (too big for the column)",
+          "ok": true
+        },
+        {
+          "name": "refused: soil moisture 101 %",
+          "ok": true
+        },
+        {
+          "name": "refused: temperature -41 °C",
+          "ok": true
+        },
+        {
+          "name": "refused: humidity -1 %",
+          "ok": true
+        },
+        {
+          "name": "refused: distance 501 cm",
+          "ok": true
+        },
+        {
+          "name": "refused: motion events 1.5 (whole numbers only)",
+          "ok": true
+        },
+        {
+          "name": "refused: Wi-Fi signal +5 dBm",
+          "ok": true
+        },
+        {
+          "name": "refused: soil moisture as text \"50\"",
+          "ok": true
+        },
+        {
+          "name": "refused: is_raining as \"yes\"",
+          "ok": true
+        },
+        {
+          "name": "refused: only rain / motion / sound, no soil, temperature or humidity",
+          "ok": true
+        },
+        {
+          "name": "refused: not JSON",
+          "ok": true
+        },
+        {
+          "name": "refused: a JSON array",
+          "ok": true
+        },
+        {
+          "name": "refused: JSON null",
+          "ok": true
+        },
+        {
+          "name": "refused: an empty message",
+          "ok": true
+        },
+        {
+          "name": "refused: over 2 KB",
+          "ok": true
+        },
+        {
+          "name": "an unknown extra field under the 2 KB limit is ignored and the reading saved",
+          "ok": true
+        },
+        {
+          "name": "a failed DHT11 and no HC-SR04 echo (the sketch sends null) still saves the soil reading",
+          "ok": true
+        },
+        {
+          "name": "...with temperature, humidity and distance left empty",
+          "ok": true
+        },
+        {
+          "name": "refused: a switched-off device, even with the right key",
+          "ok": true
+        },
+        {
+          "name": "the server is still up after all of that",
+          "ok": true
+        }
+      ]
+    },
+    {
+      "name": "5. Alerts when a reading leaves the botanist's limits",
+      "checks": [
+        {
+          "note": "limits: soil 30-80 %, temperature 18-35 °C, humidity 40-90 %"
+        },
+        {
+          "name": "readings exactly on the limits raise no alert",
+          "ok": true
+        },
+        {
+          "name": "dry soil (10 %) opens a soil-moisture alert (110 ms)",
+          "ok": true
+        },
+        {
+          "name": "...marked as below the minimum",
+          "ok": true
+        },
+        {
+          "name": "...with the reading",
+          "ok": true
+        },
+        {
+          "name": "...and the limit",
+          "ok": true
+        },
+        {
+          "name": "...linked to the reading that caused it",
+          "ok": true
+        },
+        {
+          "name": "a second dry reading does not open a second alert",
+          "ok": true
+        },
+        {
+          "name": "40 °C opens a temperature alert marked above the maximum",
+          "ok": true
+        },
+        {
+          "name": "the ranger's dashboard API answers",
+          "ok": true
+        },
+        {
+          "name": "...shows SN-001 online",
+          "ok": true
+        },
+        {
+          "name": "...with the newest temperature",
+          "ok": true
+        },
+        {
+          "name": "...and 2 open alerts",
+          "ok": true
+        },
+        {
+          "name": "...readings come back as numbers, not strings",
+          "ok": true
+        },
+        {
+          "name": "the ranger resolves the soil alert",
+          "ok": true
+        },
+        {
+          "name": "...and the note is stored as typed",
+          "ok": true
+        },
+        {
+          "name": "resolving it twice is refused",
+          "ok": true
+        },
+        {
+          "name": "the resolution is in the audit log",
+          "ok": true
+        },
+        {
+          "name": "the next dry reading after resolving opens a new alert",
+          "ok": true
+        }
+      ]
+    },
+    {
+      "name": "6. Who may see sensors and resolve alerts",
+      "checks": [
+        {
+          "name": "anonymous GET /sensors is refused",
+          "ok": true
+        },
+        {
+          "name": "a botanist (sensor.view) can open the dashboard",
+          "ok": true
+        },
+        {
+          "name": "a reviewer (no sensor permission) cannot open the dashboard",
+          "ok": false,
+          "detail": "expected 403, got 200"
+        },
+        {
+          "name": "an administrator (no sensor permission) cannot open the dashboard",
+          "ok": false,
+          "detail": "expected 403, got 200"
+        },
+        {
+          "name": "a botanist (no alert.resolve) cannot resolve an alert",
+          "ok": false,
+          "detail": "expected 403, got 200"
+        },
+        {
+          "name": "a reviewer cannot resolve an alert",
+          "ok": false,
+          "detail": "expected 403, got 409"
+        },
+        {
+          "name": "anonymous cannot resolve an alert",
+          "ok": true
+        }
+      ]
+    },
+    {
+      "name": "7. Speed and load",
+      "checks": [
+        {
+          "name": "10 readings one after another all saved; publish -> MySQL median 108 ms, worst 111 ms",
+          "ok": true
+        },
+        {
+          "name": "a burst of 50 readings at once (like 50 nodes reporting together) is all saved in 4559 ms",
+          "ok": true
+        },
+        {
+          "name": "...with no duplicates",
+          "ok": true
+        }
+      ]
+    },
+    {
+      "name": "8. The IoT dashboard shows it",
+      "checks": [
+        {
+          "name": "the dashboard names SN-001",
+          "ok": true
+        },
+        {
+          "name": "...shows the 40 °C reading",
+          "ok": true
+        },
+        {
+          "name": "...shows the open alerts",
+          "ok": true
+        },
+        {
+          "name": "...with no browser errors",
+          "ok": true
+        },
+        {
+          "note": "screenshot: test-report/iot/iot-dashboard.png"
+        }
+      ]
+    }
+  ],
+  "timings": {
+    "connect_ms": 94,
+    "first_reading_ms": 116,
+    "alert_ms": 110,
+    "latency_ms": {
+      "samples": [
+        105,
+        107,
+        107,
+        107,
+        108,
+        108,
+        109,
+        109,
+        109,
+        111
+      ],
+      "median": 108,
+      "max": 111
+    },
+    "burst": {
+      "messages": 50,
+      "saved": 50,
+      "ms": 4559
+    }
+  },
+  "passed": 86,
+  "failed": 4,
+  "finished": "2026-11-13T16:17:25.169Z"
+}

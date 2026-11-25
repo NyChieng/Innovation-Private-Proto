@@ -61,6 +61,7 @@ const ORDER = [
   'plants', 'plant_photos', 'plant_photo_data', 'plant_submissions', 'plant_revisions',
   'plant_reports', 'qr_codes', 'qr_scans', 'notifications', 'audit_logs',
   'settings', 'sensor_devices', 'sensor_readings', 'sensor_alerts',
+  'camera_devices', 'camera_alerts',
 ];
 
 /** ISO-8601 in, MySQL DATETIME out. Anything unparseable becomes NULL. */

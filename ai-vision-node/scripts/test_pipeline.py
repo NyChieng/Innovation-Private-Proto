@@ -91,4 +91,48 @@ ok(len(w) == 3 and not any(e.snapshot for e in w), f"{len(w)} warnings in 30 s f
 ran = sum(info["ran_models"] for _, info, _ in run(10, 12, dets=[]))
 ok(ran >= 5, f"motion gate active in the test: models ran {ran}/20 frames")
 
+# 7-10. touch rules: the touch model is scripted, the pose model puts one wrist inside the plant
+PLANT_BOX, PERSON_BOX = B(600, 300, 800, 600), B(550, 100, 750, 700)
+kpts, kconf = np.zeros((17, 2)), np.zeros(17)
+kpts[9], kpts[7], kconf[[5, 6, 7, 9]] = (650, 400), (620, 350), 0.9  # left wrist on the plant, elbow above
+
+
+def touch_scene(probs, green, leaf=None, window=6, n=15):
+    """Tiers raised for one person whose hand rests on the plant for n frames (10 fps, still camera)."""
+    seq = (probs[i % len(probs)] for i in range(10 ** 6))
+    real = (g.models.touch, g.models.touch_probs, g.models.keypoints)
+    g.models.touch, g.models.touch_probs = True, lambda crops: [next(seq) for _ in crops]
+    g.models.keypoints = lambda frame, roi: [(PERSON_BOX, kpts, kconf)]
+    if leaf is not None:
+        g.leaf_motion = lambda *a: leaf
+    g.cfg["touch_window"] = window
+    script["dets"] = [(PLANT_BOX, 0.8, PLANT), (PERSON_BOX, 0.8, PERSON)]
+    img = still.copy()
+    if green:  # leaves round the hand
+        img[300:600, 560:800] = (40, 150, 50)
+    g.reset(); g.events.clear()
+    for i in range(n):
+        g.step(img, now=i / 10)
+    g.models.touch, g.models.touch_probs, g.models.keypoints = real
+    g.__dict__.pop("leaf_motion", None)
+    g.cfg["touch_window"] = load_config()["touch_window"]
+    return [e.tier for e in g.events]
+
+t = touch_scene([0.95], green=False)
+ok("ALERT" not in t and "WARNING" in t, f"touch model sure (0.95) but no plant evidence (grey, nothing moves): {t}, no ALERT")
+t = touch_scene([0.95], green=True)
+ok("ALERT" in t, f"touch model sure + hand among green leaves: {t}")
+t = touch_scene([0.95], green=False, leaf=0.05)
+ok("ALERT" in t, f"bare winter branches (no green) that move under the hand: {t}")
+need = load_config()["touch_frames"]
+t, old = touch_scene([0.9, 0.9, 0.1], green=True), touch_scene([0.9, 0.9, 0.1], green=True, window=0)
+ok("ALERT" in t and "ALERT" not in old,
+   f"one weak frame in three: {need} of last 6 -> {'ALERT' if 'ALERT' in t else 'none'}, old {need}-in-a-row -> "
+   f"{'ALERT' if 'ALERT' in old else 'none'}")
+# the debounce boundary: exactly `need` touch frames in every 6 alert; one fewer never does
+t = touch_scene([0.9] * need + [0.1] * (6 - need), green=True)
+ok("ALERT" in t, f"{need} touch frames in every 6 -> {'ALERT' if 'ALERT' in t else 'none'}")
+t = touch_scene([0.9] * (need - 1) + [0.1] * (7 - need), green=True)
+ok("ALERT" not in t, f"{need - 1} touch frames in every 6 -> {'ALERT' if 'ALERT' in t else 'none'} (stays a WARNING)")
+
 sys.exit(1 if fails else 0)

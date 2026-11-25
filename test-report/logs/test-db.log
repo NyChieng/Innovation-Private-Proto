@@ -1,0 +1,4 @@
+Reseeding florascan_demo on 127.0.0.1 for a clean test run...
+5832 rows loaded into florascan_demo.
+Restart the server if it is running, so it reads the fresh data.
+

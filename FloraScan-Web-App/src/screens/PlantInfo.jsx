@@ -2,15 +2,18 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../lib/api.js';
 import { useApp } from '../lib/store.jsx';
-import { SmartImage } from '../components/motion.jsx';
+import { Reveal, SmartImage } from '../components/motion.jsx';
 import {
   ConservationBadge, StatusBadge, Empty, LoadingBlock, Modal, Notice, CopyButton,
 } from '../components/ui.jsx';
+import PlantMap from '../components/PlantMap.jsx';
 import {
   CONSERVATION, GROWTH_FORM, HEALTH, LIFE_STAGE, STATUS, coords, formatDate, fromServer, measure, num, titleCase,
 } from '../lib/format.js';
 import * as I from '../lib/icons.jsx';
 import { t } from '../lib/i18n.js';
+import { isRealPhoto } from '../lib/photo.js';
+import { ForestBand, MarkerDot } from '../components/forest.jsx';
 
 /* ------------------------------------------------------------------ */
 
@@ -35,18 +38,33 @@ function Credit({ photo, className = 'credit' }) {
   );
 }
 
-function Gallery({ photos, alt }) {
+function Gallery({ photos: allPhotos, alt }) {
+  // Only real photographs: generated stand-in drawings are left out.
+  const photos = (allPhotos || []).filter((p) => isRealPhoto(p.file_path) || isRealPhoto(p.remote_url));
   const [idx, setIdx] = useState(0);
   const [zoom, setZoom] = useState(false);
 
-  if (!photos?.length) {
+  const count = photos?.length || 0;
+
+  useEffect(() => {
+    if (!zoom || count <= 1) return undefined;
+    const onKey = (e) => {
+      if (e.key === 'ArrowLeft') { e.preventDefault(); setIdx((i) => (i - 1 + count) % count); }
+      if (e.key === 'ArrowRight') { e.preventDefault(); setIdx((i) => (i + 1) % count); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [zoom, count]);
+
+  if (!count) {
     return (
-      <div className="card" style={{ aspectRatio: '4/3', display: 'grid', placeItems: 'center', background: 'var(--surface-3)' }}>
-        <I.Image style={{ width: 38, height: 38, color: 'var(--text-faint)' }} />
+      <div className="card" style={{ aspectRatio: '4/3', overflow: 'hidden', position: 'relative' }}>
+        <SmartImage src={null} alt={alt} />
       </div>
     );
   }
-  const current = photos[Math.min(idx, photos.length - 1)];
+  const safeIdx = Math.min(idx, count - 1);
+  const current = photos[safeIdx];
 
   return (
     <div>
@@ -56,7 +74,11 @@ function Gallery({ photos, alt }) {
         style={{ display: 'block', position: 'relative', width: '100%', padding: 0, border: 0, background: 'none', borderRadius: 'var(--r-md)', overflow: 'hidden', cursor: 'zoom-in' }}
         aria-label={t('Enlarge photograph')}
       >
-        <div style={{ aspectRatio: '4/3', borderRadius: 'var(--r-md)', overflow: 'hidden', border: '1px solid var(--border)' }}>
+        <div
+          key={current.id}
+          className="gallery-swap"
+          style={{ aspectRatio: '4/3', borderRadius: 'var(--r-md)', overflow: 'hidden', border: '1px solid var(--border)' }}
+        >
           <SmartImage src={current.file_path} fallback={current.remote_url} tint={current.tint} alt={alt} />
         </div>
         {current.credit && <span className="credit-overlay">{current.credit}</span>}
@@ -67,17 +89,18 @@ function Gallery({ photos, alt }) {
         <Credit photo={current} />
       </div>
 
-      {photos.length > 1 && (
+      {count > 1 && (
         <div className="row row-wrap" style={{ gap: 7, marginTop: 9 }}>
           {photos.map((p, i) => (
             <button
               key={p.id}
+              className="gallery-thumb"
               onClick={() => setIdx(i)}
               aria-label={t('Photograph {n}', { n: i + 1 })}
-              aria-current={i === idx}
+              aria-current={i === safeIdx}
               style={{
                 width: 62, height: 48, padding: 0, borderRadius: 8, overflow: 'hidden',
-                border: '2px solid ' + (i === idx ? 'var(--accent)' : 'var(--border)'),
+                border: '2px solid ' + (i === safeIdx ? 'var(--accent)' : 'var(--border)'),
                 background: 'var(--surface-3)', cursor: 'pointer',
               }}
             >
@@ -88,8 +111,31 @@ function Gallery({ photos, alt }) {
       )}
 
       {zoom && (
-        <Modal title={current.caption || alt} onClose={() => setZoom(false)} wide>
-          <img src={current.file_path} alt={alt} style={{ width: '100%', borderRadius: 'var(--r-sm)' }} />
+        <Modal
+          title={current.caption || alt}
+          onClose={() => setZoom(false)}
+          wide
+          footer={count > 1 ? (
+            <>
+              <span className="tiny mute grow">{t('Photograph {n}', { n: `${safeIdx + 1} / ${count}` })}</span>
+              <button type="button" className="btn btn-sm" onClick={() => setIdx((i) => (i - 1 + count) % count)}>
+                <I.ChevronLeft /> {t('Previous')}
+              </button>
+              <button type="button" className="btn btn-sm" onClick={() => setIdx((i) => (i + 1) % count)}>
+                {t('Next')} <I.ChevronRight />
+              </button>
+            </>
+          ) : undefined}
+        >
+          <SmartImage
+            key={current.id}
+            className="lightbox-img"
+            src={current.file_path || current.remote_url}
+            fallback={current.file_path ? current.remote_url : undefined}
+            tint={current.tint}
+            alt={alt}
+            eager
+          />
           <div style={{ marginTop: 10 }}><Credit photo={current} className="credit small" /></div>
         </Modal>
       )}
@@ -217,7 +263,40 @@ export default function PlantInfo({ byToken }) {
     [t('Distribution'), sp.distribution],
   ].filter(([, v]) => v);
 
+  // Everyday name on top for visitors; the scientific name sits right under it.
+  const title = plant.common_name || plant.local_name || name;
+  const bandPhoto = (plant.photos || []).map((p) => p.file_path).find((src) => isRealPhoto(src));
+
   return (
+    <div className="plant-page">
+      <ForestBand photo={bandPhoto} className="plant-band">
+        <div className="wrap-narrow plant-band-in">
+          {byToken && (
+            <div className="row row-wrap" style={{ gap: 8 }}>
+              <span className="badge badge-ok scan-pulse"><I.Check style={{ width: 12, height: 12 }} /> {t('Tag scanned')}</span>
+              <span className="tiny plant-band-mist">{t('Verified record from the park register')}</span>
+            </div>
+          )}
+          <div className="row row-wrap plant-band-tags">
+            {plant.conservation_code && <ConservationBadge code={plant.conservation_code} />}
+            {sp.growth_form && <span className="tag">{GROWTH_FORM[sp.growth_form] || titleCase(sp.growth_form)}</span>}
+            {user && <StatusBadge status={plant.status} />}
+          </div>
+          <h1 className="display plant-title">{title}</h1>
+          <div className="plant-band-sub">
+            {title !== name && <span className={plant.scientific_name ? 'sci' : ''}>{name}</span>}
+            {plant.common_name && plant.common_name !== title && <span>&middot; {plant.common_name}</span>}
+            {plant.local_name && plant.local_name !== title && <span>&middot; {plant.local_name}</span>}
+          </div>
+          {!plant.location_protected && plant.site_name && (
+            <div className="plant-band-site">
+              <MarkerDot site={plant.site_name} />
+              <span>{plant.site_name}</span>
+            </div>
+          )}
+        </div>
+      </ForestBand>
+
     <div className="page">
       <div className="wrap wrap-narrow">
         {plant.status !== 'approved' && (
@@ -228,99 +307,89 @@ export default function PlantInfo({ byToken }) {
           </div>
         )}
 
-        {byToken && (
-          <div className="row" style={{ gap: 8, marginBottom: 14 }}>
-            <span className="badge badge-ok"><I.Check style={{ width: 12, height: 12 }} /> {t('Tag scanned')}</span>
-            <span className="tiny mute">{t('Verified record from the park register')}</span>
+        {plant.species_not_listed && (
+          <div style={{ marginBottom: 18 }}>
+            <Notice kind="warn" title={t('Species not yet confirmed')}>
+              {t('A botanist recorded this specimen as {name}. The identification has not yet been confirmed.', { name: <>&ldquo;{plant.proposed_species_name}&rdquo;</> })}
+            </Notice>
           </div>
         )}
-
-        {/* Header */}
-        <div style={{ marginBottom: 20 }}>
-          <div className="row row-wrap" style={{ gap: 8, marginBottom: 10 }}>
-            {plant.conservation_code && <ConservationBadge code={plant.conservation_code} />}
-            {sp.growth_form && <span className="tag">{GROWTH_FORM[sp.growth_form] || titleCase(sp.growth_form)}</span>}
-            {user && <StatusBadge status={plant.status} />}
-          </div>
-          <h1 className={plant.scientific_name ? 'sci' : ''} style={{ fontSize: 'clamp(1.6rem, 5vw, 2.2rem)' }}>{name}</h1>
-          <div className="row row-wrap" style={{ gap: 10, marginTop: 6 }}>
-            {plant.common_name && <span style={{ fontSize: '1.02rem', color: 'var(--text-soft)' }}>{plant.common_name}</span>}
-            {plant.local_name && <span className="mute">&middot; {plant.local_name}</span>}
-          </div>
-          {plant.species_not_listed && (
-            <div style={{ marginTop: 12 }}>
-              <Notice kind="warn" title={t('Species not yet confirmed')}>
-                {t('A botanist recorded this specimen as {name}. The identification has not yet been confirmed.', { name: <>&ldquo;{plant.proposed_species_name}&rdquo;</> })}
-              </Notice>
-            </div>
-          )}
-        </div>
 
         <div style={{ display: 'grid', gap: 22, gridTemplateColumns: mobile ? '1fr' : '1.15fr 1fr', alignItems: 'start' }}>
           <Gallery photos={plant.photos} alt={name} />
 
           <div className="stack" style={{ '--gap': '16px' }}>
             {/* Taxonomy */}
-            <div className="card">
-              <div className="card-head"><h3>{t('Classification')}</h3></div>
-              <div className="card-body" style={{ paddingBlock: 6 }}>
-                <dl className="dl">
-                  <dt>{t('Family')}</dt>
-                  <dd>{sp.family ? <Link to={'/browse?family=' + encodeURIComponent(sp.family)}>{sp.family}</Link> : '--'}</dd>
-                  <dt>{t('Genus')}</dt>
-                  <dd>{sp.genus ? <Link className="sci" to={'/browse?genus=' + encodeURIComponent(sp.genus)}>{sp.genus}</Link> : '--'}</dd>
-                  <dt>{t('Scientific name')}</dt>
-                  <dd className="sci">{plant.scientific_name || '--'}</dd>
-                  {plant.local_name && <><dt>{t('Local name')}</dt><dd>{plant.local_name}</dd></>}
-                  <dt>{t('Conservation')}</dt>
-                  <dd>{meta ? meta.label : t('Not evaluated')}</dd>
-                </dl>
+            <Reveal index={0}>
+              <div className="card">
+                <div className="card-head"><h3>{t('Classification')}</h3></div>
+                <div className="card-body" style={{ paddingBlock: 6 }}>
+                  <dl className="dl">
+                    <dt>{t('Family')}</dt>
+                    <dd>{sp.family ? <Link to={'/browse?family=' + encodeURIComponent(sp.family)}>{sp.family}</Link> : '--'}</dd>
+                    <dt>{t('Genus')}</dt>
+                    <dd>{sp.genus ? <Link className="sci" to={'/browse?genus=' + encodeURIComponent(sp.genus)}>{sp.genus}</Link> : '--'}</dd>
+                    <dt>{t('Scientific name')}</dt>
+                    <dd className="sci">{plant.scientific_name || '--'}</dd>
+                    {plant.local_name && <><dt>{t('Local name')}</dt><dd>{plant.local_name}</dd></>}
+                    <dt>{t('Conservation')}</dt>
+                    <dd>{meta ? meta.label : t('Not evaluated')}</dd>
+                  </dl>
+                </div>
               </div>
-            </div>
+            </Reveal>
 
             {/* This specimen */}
-            <div className="card">
-              <div className="card-head"><h3>{t('This specimen')}</h3></div>
-              <div className="card-body" style={{ paddingBlock: 6 }}>
-                <dl className="dl">
-                  <dt>{t('Plant ID')}</dt>
-                  <dd className="mono">{plant.plant_code}</dd>
-                  <dt>{t('Location')}</dt>
-                  <dd>
-                    {plant.location_protected
-                      ? <span className="row" style={{ gap: 6 }}><I.Shield style={{ width: 14, height: 14, color: 'var(--warn-fg)' }} /> {t('Withheld')}</span>
-                      : plant.site_name}
-                  </dd>
-                  {!plant.location_protected && coords(plant.latitude, plant.longitude) && (
-                    <>
-                      <dt>{t('Coordinates')}</dt>
-                      <dd>
-                        <span className="mono tiny">{coords(plant.latitude, plant.longitude)}</span>
-                        <a
-                          href={`https://www.google.com/maps?q=${plant.latitude},${plant.longitude}`}
-                          target="_blank" rel="noreferrer"
-                          className="tiny nowrap" style={{ marginLeft: 8 }}
-                        >
-                          {t('Open map')} <I.External style={{ width: 11, height: 11, display: 'inline' }} />
-                        </a>
-                      </dd>
-                    </>
-                  )}
-                  {plant.height_m && <><dt>{t('Height')}</dt><dd>{measure(plant.height_m, 'm')}</dd></>}
-                  {plant.trunk_diameter_cm && <><dt>{t('Trunk diameter')}</dt><dd>{measure(plant.trunk_diameter_cm, 'cm')}</dd></>}
-                  {plant.life_stage && <><dt>{t('Life stage')}</dt><dd>{LIFE_STAGE[plant.life_stage]}</dd></>}
-                  {plant.health_status && <><dt>{t('Condition')}</dt><dd>{HEALTH[plant.health_status]}</dd></>}
-                  <dt>{t('Registered')}</dt>
-                  <dd>{formatDate(plant.registered_at)}{plant.registered_by_name && <span className="mute"> {t('by {name}', { name: plant.registered_by_name })}</span>}</dd>
-                  {plant.verified_at && (
-                    <>
-                      <dt>{t('Verified')}</dt>
-                      <dd>{formatDate(plant.verified_at)}{plant.verified_by_name && <span className="mute"> {t('by {name}', { name: plant.verified_by_name })}</span>}</dd>
-                    </>
-                  )}
-                </dl>
+            <Reveal index={1}>
+              <div className="card">
+                <div className="card-head"><h3>{t('This specimen')}</h3></div>
+                <div className="card-body" style={{ paddingBlock: 6 }}>
+                  <dl className="dl">
+                    <dt>{t('Plant ID')}</dt>
+                    <dd className="mono">{plant.plant_code}</dd>
+                    <dt>{t('Location')}</dt>
+                    <dd>
+                      {plant.location_protected
+                        ? <span className="row" style={{ gap: 6 }}><I.Shield style={{ width: 14, height: 14, color: 'var(--warn-fg)' }} /> {t('Withheld')}</span>
+                        : plant.site_name}
+                    </dd>
+                    {!plant.location_protected && coords(plant.latitude, plant.longitude) && (
+                      <>
+                        <dt>{t('Coordinates')}</dt>
+                        <dd>
+                          <span className="mono tiny">{coords(plant.latitude, plant.longitude)}</span>
+                          <a
+                            href={`https://www.google.com/maps?q=${plant.latitude},${plant.longitude}`}
+                            target="_blank" rel="noreferrer"
+                            className="tiny nowrap" style={{ marginLeft: 8 }}
+                          >
+                            {t('Open map')} <I.External style={{ width: 11, height: 11, display: 'inline' }} />
+                          </a>
+                        </dd>
+                      </>
+                    )}
+                    {plant.height_m && <><dt>{t('Height')}</dt><dd>{measure(plant.height_m, 'm')}</dd></>}
+                    {plant.trunk_diameter_cm && <><dt>{t('Trunk diameter')}</dt><dd>{measure(plant.trunk_diameter_cm, 'cm')}</dd></>}
+                    {plant.life_stage && <><dt>{t('Life stage')}</dt><dd>{LIFE_STAGE[plant.life_stage]}</dd></>}
+                    {plant.health_status && <><dt>{t('Condition')}</dt><dd>{HEALTH[plant.health_status]}</dd></>}
+                    <dt>{t('Registered')}</dt>
+                    <dd>{formatDate(plant.registered_at)}{plant.registered_by_name && <span className="mute"> {t('by {name}', { name: plant.registered_by_name })}</span>}</dd>
+                    {plant.verified_at && (
+                      <>
+                        <dt>{t('Verified')}</dt>
+                        <dd>{formatDate(plant.verified_at)}{plant.verified_by_name && <span className="mute"> {t('by {name}', { name: plant.verified_by_name })}</span>}</dd>
+                      </>
+                    )}
+                  </dl>
+                </div>
               </div>
-            </div>
+            </Reveal>
+
+            {!plant.location_protected && coords(plant.latitude, plant.longitude) && (
+              <Reveal index={2}>
+                <PlantMap plants={[plant]} single />
+              </Reveal>
+            )}
 
             {plant.location_protected && (
               <Notice kind="warn" title={t('Location withheld')}>
@@ -345,23 +414,25 @@ export default function PlantInfo({ byToken }) {
 
         {/* Long-form species content */}
         {sections.length > 0 && (
-          <div className="card card-pad" style={{ marginTop: 22 }}>
-            <div className="prose">
-              {sections.map(([title, text]) => (
-                <div key={title}>
-                  <h3>{title}</h3>
-                  <p>{text}</p>
-                </div>
-              ))}
-            </div>
-            {plant.species_id && (
-              <div style={{ marginTop: 16 }}>
-                <Link className="btn btn-sm" to={'/species/' + plant.species_id}>
-                  <I.Book /> All {sp.plant_count} specimen{sp.plant_count === 1 ? '' : 's'} of this species
-                </Link>
+          <Reveal index={3} style={{ marginTop: 22 }}>
+            <div className="card card-pad">
+              <div className="prose">
+                {sections.map(([title, text]) => (
+                  <div key={title}>
+                    <h3>{title}</h3>
+                    <p>{text}</p>
+                  </div>
+                ))}
               </div>
-            )}
-          </div>
+              {plant.species_id && (
+                <div style={{ marginTop: 16 }}>
+                  <Link className="btn btn-sm" to={'/species/' + plant.species_id}>
+                    <I.Book /> All {sp.plant_count} specimen{sp.plant_count === 1 ? '' : 's'} of this species
+                  </Link>
+                </div>
+              )}
+            </div>
+          </Reveal>
         )}
 
         {/* Footer actions */}
@@ -383,12 +454,11 @@ export default function PlantInfo({ byToken }) {
           </div>
         </div>
 
-        <div className="tiny faint" style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
-          {t('Photographs are contributed to iNaturalist under Creative Commons licences and credited to the photographer; where no photograph exists the page falls back to a generated illustration. Taxonomy and Red List categories come from GBIF.')}
-        </div>
+
       </div>
 
       {reporting && <ReportDialog plant={plant} onClose={() => setReporting(false)} />}
+    </div>
     </div>
   );
 }

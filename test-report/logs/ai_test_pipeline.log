@@ -1,0 +1,8 @@
+PASS old plant zone gone 3.9s after the move (cover memory 4 s)
+PASS plant that left a still scene forgotten after 1.8s
+PASS fast close-up person keeps one ID across a 0.8 s miss and weak frames: ids [1]
+PASS duplicate person boxes merged -> 1 person
+PASS two separate people kept -> 2 people
+PASS box of a person who left removed after 0.8s
+PASS 3 warnings in 30 s for one person, snapshots: 0
+PASS motion gate active in the test: models ran 17/20 frames

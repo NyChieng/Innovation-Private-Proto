@@ -6,6 +6,7 @@ import {
   ConfirmButton, ConservationBadge, CopyButton, Empty, LoadingBlock, Modal, Notice,
   PageHead, StatusBadge,
 } from '../../components/ui.jsx';
+import { SmartImage } from '../../components/motion.jsx';
 import PlantEditDialog from '../../components/PlantEdit.jsx';
 import { CONSERVATION, GROWTH_FORM, HEALTH, LIFE_STAGE, coords, formatDateTime, relativeTime, titleCase } from '../../lib/format.js';
 import * as I from '../../lib/icons.jsx';
@@ -48,12 +49,16 @@ function QrPanel({ plant }) {
 
       <div className="stack" style={{ '--gap': '14px' }}>
         <div>
-          <div className="label" style={{ marginBottom: 6 }}>{t('Printable tag preview')}</div>
-          <div className="qr-tag">
-            <img src={qr.png} alt="" style={{ width: 130, margin: '0 auto 8px' }} />
-            <div className="t-sci">{qr.scientific_name || plant.proposed_species_name}</div>
-            {qr.common_name && <div className="t-com">{qr.common_name}</div>}
-            <div className="t-code">{plant.plant_code}</div>
+          <div className="label no-print" style={{ marginBottom: 6 }}>{t('Printable tag preview')}</div>
+          <div className="print-region print-one">
+            <div className="qr-tag">
+              <img src={qr.png} alt="" style={{ width: 130, margin: '0 auto 8px' }} />
+              <div className="t-sci">{qr.scientific_name || plant.proposed_species_name}</div>
+              {qr.common_name && <div className="t-com">{qr.common_name}</div>}
+              {plant.local_name && <div className="t-com" style={{ opacity: 0.75 }}>{plant.local_name}</div>}
+              <div className="t-code">{plant.plant_code}</div>
+              <div className="t-foot">{t('Scan for details · Niah National Park')}</div>
+            </div>
           </div>
         </div>
 
@@ -158,7 +163,7 @@ function ResubmitDialog({ plant, onClose, onDone }) {
     >
       <div className="stack" style={{ '--gap': '14px' }}>
         {plant.review_comment && (
-          <Notice kind="warn" title={t('The reviewer asked for')}>{plant.review_comment}</Notice>
+          <Notice kind="warn" title={t('The senior botanist asked for')}>{plant.review_comment}</Notice>
         )}
         <div className="field">
           <label htmlFor="resub-note">{t('What did you change?')} <span className="hint">({t('optional')})</span></label>
@@ -205,13 +210,16 @@ export default function PlantDetail() {
 
   const act = async (fn, msg) => {
     setBusy(true);
-    try { await fn(); await load(); await refreshCounts(); toast(msg); }
+    try { const result = await fn(); await load(); await refreshCounts(); toast(typeof msg === 'function' ? msg(result) : msg); }
     catch (e) { toast(e.message, 'err'); }
     finally { setBusy(false); }
   };
 
   const sp = plant.species || {};
   const own = plant.registered_by === user?.id;
+  // Same rule as PATCH /plants/:id: editors edit anything; a botanist only
+  // their own record once a senior botanist has returned it.
+  const canEdit = can('plant.edit') || (own && plant.status === 'rejected');
 
   return (
     <div className="page">
@@ -230,7 +238,7 @@ export default function PlantDetail() {
           {plant.status === 'approved' && plant.qr_token && (
             <Link className="btn btn-sm" to={'/p/' + plant.qr_token}><I.External /> {t('View public page')}</Link>
           )}
-          {can('plant.edit') && (
+          {canEdit && (
             <button className="btn btn-sm" onClick={() => setEditing(true)} disabled={busy}><I.Edit /> {t('Edit')}</button>
           )}
           <span className="spacer" />
@@ -265,17 +273,19 @@ export default function PlantDetail() {
             />
           )}
           {can('plant.archive') && plant.status === 'archived' && (
-            <button className="btn btn-sm btn-primary" disabled={busy} onClick={() => act(() => api.restore(plant.id), t('{code} restored to public view.', { code: plant.plant_code }))}>
-              <I.Refresh /> {t('Restore to public view')}
+            <button className="btn btn-sm btn-primary" disabled={busy} onClick={() => act(() => api.restore(plant.id), (result) => result.plant.status === 'approved'
+              ? t('{code} restored to public view.', { code: plant.plant_code })
+              : t('{code} restored for corrections. Resubmit it when ready.', { code: plant.plant_code }))}>
+              <I.Refresh /> {plant.verified_at && plant.species_id ? t('Restore to public view') : t('Restore for corrections')}
             </button>
           )}
         </div>
 
         {plant.review_comment && (
           <div style={{ marginBottom: 18 }}>
-            <Notice kind="warn" title={t('Returned by the reviewer with this note')}>
+            <Notice kind="warn" title={t('Returned by the senior botanist with this note')}>
               {plant.review_comment}
-              {can('plant.edit') && (
+              {canEdit && (
                 <div className="tiny" style={{ marginTop: 6 }}>
                   {t('Make the changes with Edit, then resubmit it for review.')}
                 </div>
@@ -324,7 +334,7 @@ export default function PlantDetail() {
                 <div className="card-body" style={{ paddingBlock: 6 }}>
                   {plant.species_not_listed ? (
                     <Notice kind="warn" title={t('Species not confirmed')}>
-                      {t('Recorded in the field as {name}. A species must be set - with Edit, or by the reviewer - before this can be published.', {
+                      {t('Recorded in the field as {name}. A species must be set - with Edit, or by the senior botanist - before this can be published.', {
                         name: <>&ldquo;{plant.proposed_species_name}&rdquo;</>,
                       })}
                     </Notice>
@@ -364,7 +374,12 @@ export default function PlantDetail() {
               {plant.photos.map((p) => (
                 <div className="card" key={p.id} style={{ overflow: 'hidden' }}>
                   <div style={{ aspectRatio: '4/3', background: 'var(--surface-3)' }}>
-                    <img src={p.file_path} alt={p.caption || ''} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <SmartImage
+                      src={p.file_path || p.remote_url}
+                      fallback={p.file_path ? p.remote_url : undefined}
+                      tint={p.tint}
+                      alt={p.caption || ''}
+                    />
                   </div>
                   <div style={{ padding: 11 }}>
                     {p.is_primary ? <span className="badge badge-ok" style={{ marginBottom: 5 }}>{t('Main image')}</span> : null}

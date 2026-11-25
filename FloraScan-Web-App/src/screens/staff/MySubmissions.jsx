@@ -5,10 +5,11 @@ import { Empty, LoadingBlock, Notice, PageHead, StatusBadge } from '../../compon
 import { formatDateTime, relativeTime } from '../../lib/format.js';
 import * as I from '../../lib/icons.jsx';
 import { msg, t } from '../../lib/i18n.js';
+import { SmartImage } from '../../components/motion.jsx';
 
 const STEPS = [
   { key: 'submitted', label: msg('Submitted') },
-  { key: 'review', label: msg('Reviewer check') },
+  { key: 'review', label: msg('Senior botanist check') },
   { key: 'done', label: msg('Published') },
 ];
 
@@ -79,7 +80,7 @@ export default function MySubmissions() {
 
         {pending.length > 0 && (
           <>
-            <h2 style={{ fontSize: '1rem', marginBottom: 10 }}>{t('Waiting for a reviewer ({n})', { n: pending.length })}</h2>
+            <h2 style={{ fontSize: '1rem', marginBottom: 10 }}>{t('Waiting for a senior botanist ({n})', { n: pending.length })}</h2>
             <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 12, marginBottom: 26 }}>
               {pending.map((s) => <Card key={s.id} sub={s} />)}
             </div>
@@ -105,7 +106,7 @@ function Card({ sub }) {
     <div className="card card-pad">
       <div className="row row-wrap" style={{ gap: 14, alignItems: 'flex-start' }}>
         <div style={{ width: 74, height: 58, borderRadius: 8, overflow: 'hidden', background: 'var(--surface-3)', flex: 'none', border: '1px solid var(--border)' }}>
-          {p.photo && <img src={p.photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
+          <SmartImage src={p.photo} fallback={p.photo_remote} alt="" placeholderLabel={false} />
         </div>
         <div className="grow" style={{ minWidth: 150 }}>
           <div className="row row-wrap" style={{ gap: 8, marginBottom: 3 }}>
@@ -135,7 +136,7 @@ function Card({ sub }) {
       )}
       {sub.status === 'approved' && (
         <div style={{ marginTop: 14 }}>
-          <Notice kind="ok" title={t('Published by {name}', { name: sub.reviewed_by_name || t('a reviewer') })}>
+          <Notice kind="ok" title={t('Published by {name}', { name: sub.reviewed_by_name || t('a senior botanist') })}>
             {t('The record is live on the public site and its QR tag can be printed.')}
             {p.qr_token && <> <Link to={'/p/' + p.qr_token}>{t('Open the public page')}</Link>.</>}
           </Notice>

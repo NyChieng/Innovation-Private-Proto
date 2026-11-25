@@ -1,0 +1,99 @@
+
+  [1m[32mFloraScan[0m  Prototype X - Smart Ground-Truthing & Digital Biodiversity System
+  [2mCOS30049 Computing Technology Innovation Project - NeuonAI / Niah National Park[0m
+
+  [1mThis computer[0m   https://localhost:42791
+  [1mPhone / tablet[0m  [36mhttps://192.168.0.133:42791[0m   (same Wi-Fi or hotspot)
+  [1mFace ID / fingerprint[0m  https://ny-deskstop.local:42791   (phone must trust the certificate, see /connect)
+  [2mOpen https://localhost:42791/connect for a scannable QR code and mobile hand-off.[0m
+
+  [2mScan to open on your phone:[0m
+   ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+   █ ▄▄▄▄▄ █▄▀▀▄▄█▄█▄█ ▄▄▄▄▄ █
+   █ █   █ ███▄█  ▀▄▄█ █   █ █
+   █ █▄▄▄█ ██▄▀▄▀███▀█ █▄▄▄█ █
+   █▄▄▄▄▄▄▄█ █ ▀▄▀▄▀ █▄▄▄▄▄▄▄█
+   █▄ ▀ ▄█▄▀▀ ▄▄ ██▀ ▀▄█▀▀▀▀▄█
+   █▄ ▄▄▀ ▄▄▄▀  ▀▄ ▄▀▄▀▄▄ ▀▀ █
+   █▀▀▄▀ ▀▄▄█▄█ ▀▀▄▀█ ▄▀▀██▀▄█
+   █ ▄▄█▄▄▄█▄▀▄█▀██ ▄█▄▀▄  ▄ █
+   █▄█▄█▄█▄█▀ ██▀    ▄▄▄ █  ██
+   █ ▄▄▄▄▄ ██▄  █▀ █ █▄█ ██▀▄█
+   █ █   █ █ ▀▄▀▀██  ▄ ▄▄██▀▀█
+   █ █▄▄▄█ █▀  ▄ ██ █▄█▀ ▄   █
+   █▄▄▄▄▄▄▄█▄█▄▄██▄▄▄▄███▄██▄█
+   
+  [2mLocal certificate - every browser warns once, then remembers:[0m
+  [2m  Chrome / Android   Advanced  >  Proceed to ...[0m
+  [2m  Safari / iOS       Show Details  >  visit this website[0m
+  [2mAccept it once and the camera, GPS and home-screen install all work.[0m
+  [2mFor the iPhone home-screen icon, trust the certificate: see /connect.[0m
+  [2mPort 42791 is saved in proto.config.json - "npm run port" picks a new one.[0m
+  [2mDatabase: 130 plants and 80 species on 127.0.0.1[0m
+  [33mRate limits raised 1000x for the test suites (--test-limits). Do not demo or host like this.[0m
+
+[MQTT] Connected to mqtts://l11c8d1d.ala.asia-southeast1.emqxsl.com
+[MQTT] Listening on florascan-demo-test/+/readings
+
+  [33m----------------------------------------------------------------[0m
+  [1mEmail (not sent - no SMTP_USER / SMTP_PASS in .env)[0m
+  To:      test.admin.backup.1794586022629@example.com
+  Subject: Confirm your FloraScan recovery email
+
+  Hello Recovery Email Admin,
+  
+  Your code to confirm this as your FloraScan recovery email is:
+  
+      949 893
+  
+  It works for 15 minutes. If you did not ask for this, ignore this email.
+  [33m----------------------------------------------------------------[0m
+
+
+  [33m----------------------------------------------------------------[0m
+  [1mEmail (not sent - no SMTP_USER / SMTP_PASS in .env)[0m
+  To:      test.admin.backup.1794586022629@example.com
+  Subject: Your FloraScan password reset code
+
+  Hello Recovery Email Admin,
+  
+  Someone asked to reset the FloraScan password for test.admin.1794586022629@niah.sarawak.gov.my. Your code is:
+  
+      321 274
+  
+  It works for 15 minutes. If this was not you, ignore this email - your password stays as it is.
+  [33m----------------------------------------------------------------[0m
+
+(node:22512) ExperimentalWarning: The supports Web Crypto API method is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:22512) ExperimentalWarning: The ML-DSA-44 Web Crypto API algorithm is an experimental feature and might change at any time
+
+  [33m----------------------------------------------------------------[0m
+  [1mEmail (not sent - no SMTP_USER / SMTP_PASS in .env)[0m
+  To:      test.admin.backup.1794586309630@example.com
+  Subject: Confirm your FloraScan recovery email
+
+  Hello Recovery Email Admin,
+  
+  Your code to confirm this as your FloraScan recovery email is:
+  
+      045 479
+  
+  It works for 15 minutes. If you did not ask for this, ignore this email.
+  [33m----------------------------------------------------------------[0m
+
+
+  [33m----------------------------------------------------------------[0m
+  [1mEmail (not sent - no SMTP_USER / SMTP_PASS in .env)[0m
+  To:      test.admin.backup.1794586309630@example.com
+  Subject: Your FloraScan password reset code
+
+  Hello Recovery Email Admin,
+  
+  Someone asked to reset the FloraScan password for test.admin.1794586309630@niah.sarawak.gov.my. Your code is:
+  
+      254 336
+  
+  It works for 15 minutes. If this was not you, ignore this email - your password stays as it is.
+  [33m----------------------------------------------------------------[0m
+

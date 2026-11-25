@@ -17,6 +17,37 @@ const TABS = [
   { key: 'archived', label: msg('Archived') },
 ];
 
+const SORTS = [
+  { value: 'recent', label: msg('Newest') },
+  { value: 'name', label: msg('Scientific name') },
+  { value: 'code', label: msg('Plant ID') },
+];
+
+function exportPlantsCsv(rows) {
+  const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const head = ['Plant ID', 'Scientific Name', 'Common Name', 'Family', 'Location', 'Conservation', 'Status', 'Registered'];
+  const lines = [
+    head.map(esc).join(','),
+    ...rows.map((p) => [
+      p.plant_code,
+      p.scientific_name || p.proposed_species_name || '',
+      p.common_name || '',
+      p.family || '',
+      p.site_name || '',
+      p.conservation_code || '',
+      p.status || '',
+      p.registered_at || '',
+    ].map(esc).join(',')),
+  ];
+  const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'florascan-register.csv';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 export default function PlantRegister() {
   const { boot, can, counts, mobile } = useApp();
   const [params, setParams] = useSearchParams();
@@ -29,6 +60,7 @@ export default function PlantRegister() {
   const q = params.get('q') || '';
   const family = params.get('family') || '';
   const conservation = params.get('conservation') || '';
+  const sort = params.get('sort') || 'recent';
 
   const set = (k, v) => {
     const next = new URLSearchParams(params);
@@ -47,6 +79,16 @@ export default function PlantRegister() {
     return () => { live = false; clearTimeout(timer); };
   }, [status, q, family, conservation]);
 
+  const sortedResults = data?.results ? [...data.results].sort((a, b) => {
+    if (sort === 'name') {
+      const na = a.scientific_name || a.proposed_species_name || '';
+      const nb = b.scientific_name || b.proposed_species_name || '';
+      return na.localeCompare(nb);
+    }
+    if (sort === 'code') return (a.plant_code || '').localeCompare(b.plant_code || '');
+    return new Date(b.registered_at || 0) - new Date(a.registered_at || 0);
+  }) : [];
+
   const chooseLayout = (l) => { setLayout(l); localStorage.setItem('florascan.layout', l); };
 
   const scopeNote = can('plant.view_all')
@@ -57,6 +99,11 @@ export default function PlantRegister() {
     <div className="page">
       <div className="wrap wrap-wide">
         <PageHead title={t('Plant register')} sub={scopeNote}>
+          {sortedResults.length > 0 && (
+            <button type="button" className="btn" onClick={() => exportPlantsCsv(sortedResults)}>
+              <I.Download /> {t('Export CSV')}
+            </button>
+          )}
           {can('plant.create') && (
             <Link className="btn btn-primary" to="/staff/register"><I.Plus /> {t('Register a plant')}</Link>
           )}
@@ -82,6 +129,9 @@ export default function PlantRegister() {
           <select className="select" style={{ width: 'auto' }} value={conservation} onChange={(e) => set('conservation', e.target.value)} aria-label={t('Filter by conservation status')}>
             <option value="">{t('Any status')}</option>
             {(boot?.conservation_statuses || []).map((c) => <option key={c.code} value={c.code}>{c.code} &mdash; {CONSERVATION[c.code]?.label || c.label}</option>)}
+          </select>
+          <select className="select" style={{ width: 'auto' }} value={sort} onChange={(e) => set('sort', e.target.value)} aria-label={t('Sort by')}>
+            {SORTS.map((s) => <option key={s.value} value={s.value}>{t(s.label)}</option>)}
           </select>
           <span className="spacer" />
           {!mobile && (
@@ -112,7 +162,7 @@ export default function PlantRegister() {
 
             {mobile || layout === 'grid' ? (
               <div className="plant-grid">
-                {data.results.map((p) => (
+                {sortedResults.map((p) => (
                   <PlantCard key={p.id} plant={p} showStatus to={'/staff/plants/' + p.id} />
                 ))}
               </div>
@@ -126,7 +176,7 @@ export default function PlantRegister() {
                     </tr>
                   </thead>
                   <tbody>
-                    {data.results.map((p) => (
+                    {sortedResults.map((p) => (
                       <PlantRow key={p.id} plant={p} onClick={() => navigate('/staff/plants/' + p.id)}>
                         <td className="num"><I.ChevronRight style={{ width: 16, height: 16, color: 'var(--text-faint)' }} /></td>
                       </PlantRow>

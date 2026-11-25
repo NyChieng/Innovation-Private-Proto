@@ -7,6 +7,7 @@ import { installAdvice, onInstallChange, promptInstall, isStandalone, platform }
 import { markIntroSeen } from '../lib/intro.js';
 import * as I from '../lib/icons.jsx';
 import { t } from '../lib/i18n.js';
+import { plantPhoto, realPhoto } from '../lib/photo.js';
 
 /**
  * First run.
@@ -32,9 +33,13 @@ export default function Welcome() {
     api.publicStats().then(setStats).catch(() => {});
     api.publicPlants({ limit: 12, sort: 'popular' })
       .then((r) => {
-        const pick = r.results.find((p) => p.photo && ['tree', 'palm'].includes(p.growth_form))
-          || r.results.find((p) => p.photo);
-        setHero(pick?.photo || null);
+        const pick = r.results.find((p) => plantPhoto(p) && ['tree', 'palm'].includes(p.growth_form))
+          || r.results.find((p) => plantPhoto(p));
+        setHero(pick ? {
+          src: plantPhoto(pick),
+          fallback: realPhoto(pick.photo) ? realPhoto(pick.photo_remote) : undefined,
+          tint: pick.photo_tint,
+        } : null);
         setHeroCredit(pick?.photo_credit || null);
       })
       .catch(() => {});
@@ -93,7 +98,7 @@ export default function Welcome() {
             <I.Shield />
             <div>
               <strong>{t('Checked twice')}</strong>
-              <span>{t('Botanists record what they find; nothing is published until a reviewer has checked it.')}</span>
+              <span>{t('Botanists record what they find; nothing is published until a senior botanist has checked it.')}</span>
             </div>
           </li>
           <li>
@@ -177,7 +182,7 @@ export default function Welcome() {
 
       {hero && (
         <div className="welcome-photo">
-          <SmartImage src={hero} alt="" eager />
+          <SmartImage src={hero.src} fallback={hero.fallback} tint={hero.tint} alt="" eager />
           {/* These are other people’s photographs under Creative Commons,
               so the credit travels with the image even here. */}
           {heroCredit && <span className="welcome-credit">{heroCredit}</span>}

@@ -24,38 +24,47 @@
   Each reading includes the HC-SR04 distance as distance_cm (null when no
   echo comes back). There is no light sensor on the kit, so no light value.
 
-  MQTT, on the public HiveMQ broker (port 1883):
+  MQTT, on the team's EMQX broker (TLS port 8883, with a login):
     publishes   florascan-swinburne-demo/SN-001/readings   -> backend
 
   Arduino IDE setup:
     Board:   DOIT ESP32 DEVKIT V1 (Tools > Board > esp32)
     Library: PubSubClient by Nick O'Leary (Sketch > Include Library > Manage Libraries)
     Serial Monitor: 115200 baud
-  Before uploading, fill in WIFI_SSID and WIFI_PASSWORD below.
+  Before uploading, copy secrets.example.h to secrets.h in this folder and
+  fill it in: Wi-Fi, the node's broker login and its device key. secrets.h
+  is gitignored; never commit the real values.
 */
 
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <WiFiClientSecure.h>
+#include <esp_system.h>
 
 // Where a failed DHT read stopped, so the Serial Monitor can say why.
 // Keep this above every function: the Arduino IDE inserts function declarations just
 // before the first function, and readDHT's declaration needs this type to exist by then.
 enum DhtResult { DHT_OK, DHT_NO_RESPONSE, DHT_BITS_TIMEOUT, DHT_BAD_CHECKSUM };
 
-// ===== 1. Wi-Fi =========================================================
-const char *WIFI_SSID = "YOUR-WIFI-NAME";          // 2.4 GHz only, e.g. a phone hotspot
-const char *WIFI_PASSWORD = "YOUR-WIFI-PASSWORD";  // don't share or commit your real password
+// ===== 1. Secrets: Wi-Fi, broker login, device key ======================
+// WIFI_SSID, WIFI_PASSWORD, MQTT_USER, MQTT_PASS and DEVICE_KEY come from
+// secrets.h, which is gitignored. Copy secrets.example.h to start one.
+#if __has_include("secrets.h")
+#include "secrets.h"
+#else
+#error "Copy secrets.example.h to secrets.h in this folder and fill it in before uploading."
+#endif
 
-// How often a full reading is sent. 20 s suits a demo; use 5UL * 60 * 1000
-// (every 5 minutes) for a long trial.
-const unsigned long REPORT_INTERVAL_MS = 20UL * 1000;
+// How often a full reading is sent: once a minute. Use 20UL * 1000 for a
+// quick demo, or 5UL * 60 * 1000 (every 5 minutes) for a long trial.
+// Once NTP has set the clock, readings line up with it: every minute on the
+// :00 second (12:12:00, 12:13:00...), every 5 minutes at :00, :05, :10...
+// Pick an interval that divides evenly into an hour (20 s, 1, 2, 5, 10 min).
+const unsigned long REPORT_INTERVAL_MS = 60UL * 1000;
 
 // ===== 2. MQTT and the FloraScan backend ===============================
 const char *MQTT_HOST = "l11c8d1d.ala.asia-southeast1.emqxsl.com";
-const uint16_t MQTT_PORT = 8883;
-const char *MQTT_USER = "iot_service";
-const char *MQTT_PASS = "IotTesting1234";
+const uint16_t MQTT_PORT = 8883;  // MQTT_USER and MQTT_PASS are in secrets.h
 const char* EMQX_CA_CERT = R"EOF(-----BEGIN CERTIFICATE-----
 MIIDjjCCAnagAwIBAgIQAzrx5qcRqaC7KGSxHQn65TANBgkqhkiG9w0BAQsFADBh
 MQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYDVQQLExB3
@@ -79,8 +88,7 @@ pLiaWN0bfVKfjllDiIGknibVb63dDcY3fe0Dkhvld1927jyNxF1WW6LZZm6zNTfl
 MrY=
 -----END CERTIFICATE-----)EOF";
 const char *TOPIC_PREFIX = "florascan-swinburne-demo";  // the backend listens on <prefix>/+/readings
-const char *DEVICE_CODE = "SN-001";             // sensor_devices.device_code
-const char *DEVICE_KEY = "demo-key-change-me";  // the database keeps SHA2(key, 256)
+const char *DEVICE_CODE = "SN-001";  // sensor_devices.device_code; DEVICE_KEY is in secrets.h
 
 // The JSON field that carries DEVICE_KEY. It must be the name Server/mqtt.js reads.
 const char *KEY_FIELD = "device_key";
@@ -118,10 +126,20 @@ const int PINGS_PER_READING = 3;
 const float CM_PER_US = 0.0343f;              // speed of sound at about 20 C
 
 // Safe ranges for the Serial Monitor summary only. The backend does the real
-// check against the limits stored for the sensor in sensor_devices.
+// check against the limits stored for the sensor in sensor_devices, so keep
+// these the same as that row (see alert-test-limits.sql).
+// TEST_LIMITS 1 = tight ranges that normal room conditions break, for testing
+// alerts. Set it back to 0 (and restore the database limits) after testing.
+#define TEST_LIMITS 1
+#if TEST_LIMITS
+const float SOIL_MIN = 95, SOIL_MAX = 99;  // %   (any normal soil reads too dry)
+const float TEMP_MIN = 10, TEMP_MAX = 20;  // C   (a normal room reads too hot)
+const float HUM_MIN = 10, HUM_MAX = 30;    // %RH (normal air reads too humid)
+#else
 const float SOIL_MIN = 30, SOIL_MAX = 80;  // %
 const float TEMP_MIN = 18, TEMP_MAX = 35;  // degrees C
 const float HUM_MIN = 40, HUM_MAX = 90;    // % RH
+#endif
 
 // The HC-SR501 gives false triggers for up to a minute after power-up,
 // so motion isn't counted until then.
@@ -141,12 +159,21 @@ volatile uint32_t motionTotal = 0;  // PIR rising edges since it was armed (coun
 bool pirArmed = false;
 uint32_t motionAtLastReport = 0;
 uint32_t motionAtLastEvent = 0;
+String bootId;
+uint32_t readingSequence = 0;
 
 bool raining = false;
 int loudestP2P = 0;                 // biggest sound swing since the last reading
 unsigned long lastLoudEventMs = 0;
 unsigned long lastReportMs = 0;
+time_t lastReportSlot = 0;          // which clock-aligned interval the last reading went out in
 uint32_t readingNumber = 0;
+
+String hex32(uint32_t value) {
+  char text[9];
+  snprintf(text, sizeof(text), "%08lX", (unsigned long)value);
+  return String(text);
+}
 
 // static keeps the Arduino IDE from re-declaring it, which clashes with IRAM_ATTR.
 static void IRAM_ATTR onMotion() {
@@ -483,9 +510,12 @@ void sendReading() {
   // ---- JSON: field names match the sensor_readings columns ----
   // recorded_at is left out on purpose: the backend stamps server time.
   // distance_cm is null when none of the pings got an echo.
+  readingSequence++;
   String json = "{";
   json += "\"device_code\":\"" + String(DEVICE_CODE) + "\",";
   json += "\"" + String(KEY_FIELD) + "\":\"" + String(DEVICE_KEY) + "\",";
+  json += "\"boot_id\":\"" + bootId + "\",";
+  json += "\"sequence\":" + String(readingSequence) + ",";
   json += "\"soil_moisture_pct\":" + jsonNumber(soilPct, 1) + ",";
   json += "\"temperature_c\":" + jsonNumber(tempC, 1) + ",";
   json += "\"humidity_pct\":" + jsonNumber(humPct, 1) + ",";
@@ -514,7 +544,7 @@ void sendReading() {
 // ===== Arduino entry points =============================================
 void setup() {
   Serial.begin(115200);
-  delay(500);
+  delay(1000);
   pinMode(PIN_LED, OUTPUT);
   pinMode(PIN_PIR, INPUT);            // the HC-SR501 drives OUT itself: HIGH = motion
   pinMode(PIN_TRIG, OUTPUT);
@@ -523,6 +553,7 @@ void setup() {
   analogReadResolution(12);           // 0-4095
 
   topicReadings = String(TOPIC_PREFIX) + "/" + DEVICE_CODE + "/readings";
+  bootId = hex32(esp_random()) + hex32(esp_random());
 
   // The public broker drops a client when another one connects with the same
   // ID, so add part of this chip's MAC address to make the ID unique.
@@ -607,7 +638,18 @@ void loop() {
   }
 
   // ---- Full reading every REPORT_INTERVAL_MS (and once at start-up) ----
-  if (readingNumber == 0 || millis() - lastReportMs >= REPORT_INTERVAL_MS) {
+  // With the clock set by NTP, send when the clock enters a new interval, so a
+  // 60 s interval fires at hh:mm:00. Until then, fall back to the millis() timer.
+  bool due;
+  time_t nowS = time(nullptr);
+  if (nowS > 1700000000) {  // clock is set (any real date after Nov 2023)
+    time_t slot = nowS / (time_t)(REPORT_INTERVAL_MS / 1000);
+    due = (slot != lastReportSlot);
+    if (due) lastReportSlot = slot;
+  } else {
+    due = (readingNumber == 0 || millis() - lastReportMs >= REPORT_INTERVAL_MS);
+  }
+  if (due) {
     lastReportMs = millis();
     sendReading();
   }

@@ -21,7 +21,7 @@
 -- 1. Staff job titles
 -- ---------------------------------------------------------------------
 -- Shown beside a name wherever the app credits someone - "verified by
--- Dr Lee Sue Han, Senior Botanist" reads better than the name alone.
+-- Dr Grace Lim, Senior Botanist" reads better than the name alone.
 
 ALTER TABLE users
   ADD COLUMN title VARCHAR(120) NULL AFTER full_name;
@@ -139,50 +139,52 @@ CREATE TABLE IF NOT EXISTS plant_photo_data (
 -- ---------------------------------------------------------------------
 -- After the client consultation the roles were redrawn:
 --
---   ranger    in charge only when an IoT sensor raises an alert. No longer
---             registers, edits or tags plants.
---   botanist  owns the ground-truthing: registers, edits and archives plant
---             and species records and prints tags. No longer approves, so a
---             botanist cannot publish their own record.
---   reviewer  new. Double-checks every record a botanist submits, can correct
---             it during review, and approves it or returns it with a note.
+--   ranger    sets up the IoT sensors and is in charge when one raises an
+--             alert. No longer registers, edits or tags plants. Sensor setup
+--             has no screen yet, so for now it is done in the database.
+--   botanist  for plant records, only registers: sees their own records and
+--             corrects one that was returned to them. Still looks after the
+--             species list, QR tags and visitor reports. Cannot publish.
+--   senior_botanist  (was "reviewer") reviews every record a botanist
+--             submits, can correct it during review, approves it or returns
+--             it with a note, and archives or restores records.
 --
 -- The API checks permission codes, never role names, so this is data only -
--- no code depends on the role being called "reviewer".
+-- no code depends on what the roles are called.
 --
--- Safe to re-run: the role is upserted and the three roles' grants are
+-- Safe to re-run: role 4 is upserted (an existing "reviewer" row is renamed
+-- in place, so its staff keep their accounts) and the three roles' grants are
 -- rebuilt from scratch each time. That also means a grant changed by hand
 -- for these roles is put back on the next "npm run db:setup". Keep the lists
 -- in step with the grant() calls in Server/seed.js.
 
 INSERT INTO roles (id, name, label, description) VALUES
-  (4, 'reviewer', 'Reviewer',
-   'Double-checks every plant a botanist registers, then approves it for publication or returns it with a note')
-ON DUPLICATE KEY UPDATE label = VALUES(label), description = VALUES(description);
+  (4, 'senior_botanist', 'Senior Botanist',
+   'Reviews every plant a botanist registers: corrects it, approves it for publication or returns it with a note; archives and restores records')
+ON DUPLICATE KEY UPDATE name = VALUES(name), label = VALUES(label), description = VALUES(description);
 
-UPDATE roles SET description = 'Responds to IoT sensor alerts in the field. Does not register or edit plant records'
+UPDATE roles SET description = 'Sets up the IoT sensors and responds to their alerts in the field. Does not register or edit plant records'
  WHERE name = 'ranger';
-UPDATE roles SET description = 'Ground-truths plants: registers, edits and archives plant and species records, prints QR tags; sets up sensors'
+UPDATE roles SET description = 'Registers plants in the field and corrects their own returned records; looks after the species list, QR tags and visitor reports'
  WHERE name = 'botanist';
 
 DELETE rp FROM role_permissions rp
   JOIN roles r ON r.id = rp.role_id
- WHERE r.name IN ('ranger', 'botanist', 'reviewer');
+ WHERE r.name IN ('ranger', 'botanist', 'senior_botanist', 'reviewer');
 
 INSERT INTO role_permissions (role_id, permission_id)
 SELECT r.id, p.id
   FROM roles r
   JOIN permissions p
- WHERE (r.name = 'ranger'   AND p.code IN ('sensor.view', 'alert.resolve'))
+ WHERE (r.name = 'ranger'   AND p.code IN ('sensor.view', 'alert.resolve', 'sensor.manage'))
     OR (r.name = 'botanist' AND p.code IN (
-          'plant.view_all', 'plant.create', 'plant.edit', 'plant.archive', 'plant.history',
-          'species.manage', 'qr.print', 'qr.manage', 'report.view', 'report.resolve',
-          'sensor.view', 'sensor.manage'))
-    OR (r.name = 'reviewer' AND p.code IN (
-          'plant.view_all', 'plant.edit', 'plant.approve', 'plant.history'));
+          'plant.create', 'species.manage', 'qr.print', 'qr.manage',
+          'report.view', 'report.resolve', 'sensor.view'))
+    OR (r.name = 'senior_botanist' AND p.code IN (
+          'plant.view_all', 'plant.edit', 'plant.approve', 'plant.history', 'plant.archive'));
 
 UPDATE settings
-   SET description = 'true = botanist entries wait for a reviewer; false = they publish immediately. A "species not listed" entry always waits'
+   SET description = 'true = botanist entries wait for a senior botanist; false = they publish immediately. A "species not listed" entry always waits'
  WHERE setting_key = 'require_approval';
 
 
@@ -245,11 +247,24 @@ ALTER TABLE sensor_devices
 DELETE FROM sensor_alerts WHERE alert_type = 'light';
 
 ALTER TABLE sensor_alerts
-  MODIFY COLUMN alert_type ENUM('soil_moisture','temperature','humidity','offline') NOT NULL;
+  MODIFY COLUMN alert_type ENUM('soil_moisture','temperature','humidity','distance','sound','offline') NOT NULL;
 
 
 -- ---------------------------------------------------------------------
--- 9. Locking an account after repeated wrong passwords
+-- 9. Reading sequence identity
+-- ---------------------------------------------------------------------
+-- Each ESP32 generates a random boot_id at startup and increments sequence_no
+-- for every reading in that boot. The unique key makes MQTT retries harmless
+-- without writing the counter to flash on every 20-second reading.
+
+ALTER TABLE sensor_readings
+  ADD COLUMN boot_id CHAR(16) NULL AFTER recorded_at,
+  ADD COLUMN sequence_no INT UNSIGNED NULL AFTER boot_id,
+  ADD UNIQUE KEY uq_sr_device_sequence (device_id, boot_id, sequence_no);
+
+
+-- ---------------------------------------------------------------------
+-- 10. Locking an account after repeated wrong passwords
 -- ---------------------------------------------------------------------
 -- Without this, sign in could be tried as fast as the server answers. After
 -- five wrong passwords in a row the account is locked for fifteen minutes;
@@ -391,3 +406,81 @@ ALTER TABLE users
   ADD COLUMN totp_pending    VARCHAR(255)    NULL AFTER totp_secret,
   ADD COLUMN totp_enabled_at DATETIME        NULL AFTER totp_pending,
   ADD COLUMN totp_last_step  BIGINT UNSIGNED NULL AFTER totp_enabled_at;
+
+
+-- ---------------------------------------------------------------------
+-- 15. AI camera alerts with a snapshot
+-- ---------------------------------------------------------------------
+-- The AI vision node (ai-vision-node/, "FloraGuard") watches a plant zone.
+-- When someone touches the plant (ALERT) or is near it outside opening hours
+-- (AFTER-HOURS) it posts the event and the snapshot that shows why to
+-- POST /api/camera/alerts, signed with its own device key - the same scheme as
+-- the sensor nodes (SHA-256 of the key, shown once at set-up). Warnings carry
+-- no picture and stay on the camera.
+--
+-- Every account that can resolve alerts (the Ranger role) is notified, and the
+-- photograph is served only to roles with sensor.view. It is kept in the row
+-- itself, like plant_photo_data, so a backup of the database is complete.
+
+CREATE TABLE camera_devices (
+  id               INT UNSIGNED  NOT NULL AUTO_INCREMENT,
+  device_code      VARCHAR(30)   NOT NULL,   -- sent with every alert, e.g. 'CAM-001'
+  device_key_hash  CHAR(64)      NOT NULL,   -- SHA-256 of the secret key
+  plant_id         INT UNSIGNED  NULL,       -- the plant in view; NULL = not installed
+  label            VARCHAR(120)  NULL,
+  is_active        TINYINT(1)    NOT NULL DEFAULT 1,  -- 0 = alerts are refused
+  last_seen_at     DATETIME      NULL,
+  created_at       DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at       DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  deleted_at       DATETIME      NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_cam_code (device_code),
+  UNIQUE KEY uq_cam_key (device_key_hash),
+  CONSTRAINT fk_cam_plant
+    FOREIGN KEY (plant_id) REFERENCES plants(id) ON DELETE SET NULL
+);
+
+CREATE TABLE camera_alerts (
+  id               INT UNSIGNED  NOT NULL AUTO_INCREMENT,
+  camera_id        INT UNSIGNED  NOT NULL,
+  plant_id         INT UNSIGNED  NULL,
+  tier             ENUM('ALERT','AFTER-HOURS') NOT NULL,
+  track_id         INT UNSIGNED  NULL,       -- the camera's id for the person
+  detail           VARCHAR(255)  NULL,       -- e.g. 'touch 0.82 (pose+model)'
+  photo            MEDIUMBLOB    NOT NULL,   -- JPEG, at most 900 KB
+  photo_mime       VARCHAR(40)   NOT NULL DEFAULT 'image/jpeg',
+  photo_bytes      INT UNSIGNED  NOT NULL,
+  status           ENUM('open','resolved') NOT NULL DEFAULT 'open',
+  triggered_at     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,  -- server time
+  resolved_by      INT UNSIGNED  NULL,
+  resolved_at      DATETIME      NULL,
+  resolution_note  VARCHAR(500)  NULL,
+  PRIMARY KEY (id),
+  KEY idx_ca_status (status, triggered_at),
+  KEY idx_ca_camera (camera_id, triggered_at),
+  CONSTRAINT chk_ca_resolved CHECK (status = 'open' OR resolved_at IS NOT NULL),
+  CONSTRAINT fk_ca_camera FOREIGN KEY (camera_id) REFERENCES camera_devices(id) ON DELETE CASCADE,
+  CONSTRAINT fk_ca_plant  FOREIGN KEY (plant_id)  REFERENCES plants(id) ON DELETE SET NULL,
+  CONSTRAINT fk_ca_user   FOREIGN KEY (resolved_by) REFERENCES users(id) ON DELETE SET NULL
+);
+
+
+-- ---------------------------------------------------------------------
+-- 16. Distance and sound alerts
+-- ---------------------------------------------------------------------
+-- Something closer than distance_min to the plant (HC-SR04), or a sound
+-- peak above sound_max (KY-037, % of its calibrated swing - not decibels),
+-- opens an alert like soil, temperature and humidity. The ENUM above (end
+-- of section 8) already lists the two new alert types.
+
+ALTER TABLE sensor_devices
+  ADD COLUMN distance_min DECIMAL(6,1) NULL AFTER humidity_max,
+  ADD COLUMN distance_max DECIMAL(6,1) NULL AFTER distance_min,
+  ADD COLUMN sound_min    DECIMAL(5,2) NULL AFTER distance_max,
+  ADD COLUMN sound_max    DECIMAL(5,2) NULL AFTER sound_min;
+
+-- Default limits, set once: re-running setup leaves edited limits alone.
+UPDATE sensor_devices
+   SET distance_min = 10, distance_max = 500, sound_min = 0, sound_max = 60
+ WHERE distance_min IS NULL AND distance_max IS NULL
+   AND sound_min IS NULL AND sound_max IS NULL;

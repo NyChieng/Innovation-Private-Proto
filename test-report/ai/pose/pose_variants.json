@@ -1,0 +1,126 @@
+{
+  "stride": 5,
+  "kp_conf": 0.5,
+  "clips": {
+    "look plants 2": {
+      "yolo26n-pose": {
+        "frames": 55,
+        "person_rate": 1.0,
+        "wrist_rate": 0.7272727272727273
+      },
+      "yolo26s-pose (deployed)": {
+        "frames": 55,
+        "person_rate": 1.0,
+        "wrist_rate": 0.9636363636363636
+      }
+    },
+    "look plants": {
+      "yolo26n-pose": {
+        "frames": 60,
+        "person_rate": 1.0,
+        "wrist_rate": 0.0
+      },
+      "yolo26s-pose (deployed)": {
+        "frames": 60,
+        "person_rate": 1.0,
+        "wrist_rate": 0.0
+      }
+    },
+    "touch plants 2": {
+      "yolo26n-pose": {
+        "frames": 30,
+        "person_rate": 1.0,
+        "wrist_rate": 1.0
+      },
+      "yolo26s-pose (deployed)": {
+        "frames": 30,
+        "person_rate": 1.0,
+        "wrist_rate": 1.0
+      }
+    },
+    "touch plants 3": {
+      "yolo26n-pose": {
+        "frames": 45,
+        "person_rate": 1.0,
+        "wrist_rate": 1.0
+      },
+      "yolo26s-pose (deployed)": {
+        "frames": 45,
+        "person_rate": 1.0,
+        "wrist_rate": 1.0
+      }
+    },
+    "touch plants 4": {
+      "yolo26n-pose": {
+        "frames": 82,
+        "person_rate": 1.0,
+        "wrist_rate": 1.0
+      },
+      "yolo26s-pose (deployed)": {
+        "frames": 82,
+        "person_rate": 1.0,
+        "wrist_rate": 0.9634146341463414
+      }
+    },
+    "touch plants": {
+      "yolo26n-pose": {
+        "frames": 35,
+        "person_rate": 1.0,
+        "wrist_rate": 0.9428571428571428
+      },
+      "yolo26s-pose (deployed)": {
+        "frames": 35,
+        "person_rate": 1.0,
+        "wrist_rate": 1.0
+      }
+    },
+    "ivy_touch": {
+      "yolo26n-pose": {
+        "frames": 34,
+        "person_rate": 0.9705882352941176,
+        "wrist_rate": 0.9411764705882353
+      },
+      "yolo26s-pose (deployed)": {
+        "frames": 34,
+        "person_rate": 1.0,
+        "wrist_rate": 0.9117647058823529
+      }
+    },
+    "video2_4k": {
+      "yolo26n-pose": {
+        "frames": 72,
+        "person_rate": 1.0,
+        "wrist_rate": 1.0
+      },
+      "yolo26s-pose (deployed)": {
+        "frames": 72,
+        "person_rate": 1.0,
+        "wrist_rate": 1.0
+      }
+    }
+  },
+  "overall": {
+    "yolo26n-pose": {
+      "frames": 413,
+      "person_rate": 0.9975786924939467,
+      "wrist_rate": 0.8087167070217918,
+      "mean_wrist_conf": 0.7776161290258411,
+      "median_ms_gpu": 12.12479999230709,
+      "params_mb": 7.9
+    },
+    "yolo26s-pose (deployed)": {
+      "frames": 413,
+      "person_rate": 1.0,
+      "wrist_rate": 0.8353510895883777,
+      "mean_wrist_conf": 0.7899826511298076,
+      "median_ms_gpu": 11.66019999072887,
+      "params_mb": 24.2
+    }
+  },
+  "wrist_agreement": {
+    "pairs": 608,
+    "median_dist_pct_of_diag": 1.685330675681738,
+    "within_2pct": 0.5953947368421053,
+    "within_5pct": 0.881578947368421
+  }
+}

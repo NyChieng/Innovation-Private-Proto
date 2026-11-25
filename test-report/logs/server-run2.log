@@ -1,0 +1,210 @@
+
+  [1m[32mFloraScan[0m  Prototype X - Smart Ground-Truthing & Digital Biodiversity System
+  [2mCOS30049 Computing Technology Innovation Project - NeuonAI / Niah National Park[0m
+
+  [1mThis computer[0m   https://localhost:42791
+  [1mPhone / tablet[0m  [36mhttps://192.168.0.133:42791[0m   (same Wi-Fi or hotspot)
+  [1mFace ID / fingerprint[0m  https://ny-deskstop.local:42791   (phone must trust the certificate, see /connect)
+  [2mOpen https://localhost:42791/connect for a scannable QR code and mobile hand-off.[0m
+
+  [2mScan to open on your phone:[0m
+   ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+   █ ▄▄▄▄▄ █▄▀▀▄▄█▄█▄█ ▄▄▄▄▄ █
+   █ █   █ ███▄█  ▀▄▄█ █   █ █
+   █ █▄▄▄█ ██▄▀▄▀███▀█ █▄▄▄█ █
+   █▄▄▄▄▄▄▄█ █ ▀▄▀▄▀ █▄▄▄▄▄▄▄█
+   █▄ ▀ ▄█▄▀▀ ▄▄ ██▀ ▀▄█▀▀▀▀▄█
+   █▄ ▄▄▀ ▄▄▄▀  ▀▄ ▄▀▄▀▄▄ ▀▀ █
+   █▀▀▄▀ ▀▄▄█▄█ ▀▀▄▀█ ▄▀▀██▀▄█
+   █ ▄▄█▄▄▄█▄▀▄█▀██ ▄█▄▀▄  ▄ █
+   █▄█▄█▄█▄█▀ ██▀    ▄▄▄ █  ██
+   █ ▄▄▄▄▄ ██▄  █▀ █ █▄█ ██▀▄█
+   █ █   █ █ ▀▄▀▀██  ▄ ▄▄██▀▀█
+   █ █▄▄▄█ █▀  ▄ ██ █▄█▀ ▄   █
+   █▄▄▄▄▄▄▄█▄█▄▄██▄▄▄▄███▄██▄█
+   
+  [2mLocal certificate - every browser warns once, then remembers:[0m
+  [2m  Chrome / Android   Advanced  >  Proceed to ...[0m
+  [2m  Safari / iOS       Show Details  >  visit this website[0m
+  [2mAccept it once and the camera, GPS and home-screen install all work.[0m
+  [2mFor the iPhone home-screen icon, trust the certificate: see /connect.[0m
+  [2mPort 42791 is saved in proto.config.json - "npm run port" picks a new one.[0m
+  [2mDatabase: 146 plants and 80 species on 127.0.0.1[0m
+  [33mRate limits raised 1000x for the test suites (--test-limits). Do not demo or host like this.[0m
+
+[MQTT] Connected to mqtts://l11c8d1d.ala.asia-southeast1.emqxsl.com
+[MQTT] Listening on florascan-demo-test/+/readings
+
+  [33m----------------------------------------------------------------[0m
+  [1mEmail (not sent - no SMTP_USER / SMTP_PASS in .env)[0m
+  To:      test.admin.backup.1794586588632@example.com
+  Subject: Confirm your FloraScan recovery email
+
+  Hello Recovery Email Admin,
+  
+  Your code to confirm this as your FloraScan recovery email is:
+  
+      819 272
+  
+  It works for 15 minutes. If you did not ask for this, ignore this email.
+  [33m----------------------------------------------------------------[0m
+
+
+  [33m----------------------------------------------------------------[0m
+  [1mEmail (not sent - no SMTP_USER / SMTP_PASS in .env)[0m
+  To:      test.admin.backup.1794586588632@example.com
+  Subject: Your FloraScan password reset code
+
+  Hello Recovery Email Admin,
+  
+  Someone asked to reset the FloraScan password for test.admin.1794586588632@niah.sarawak.gov.my. Your code is:
+  
+      313 236
+  
+  It works for 15 minutes. If this was not you, ignore this email - your password stays as it is.
+  [33m----------------------------------------------------------------[0m
+
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Ignored duplicate reading from SN-001
+[MQTT] Ignored duplicate reading from SN-001
+[MQTT] Ignored duplicate reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Ignored duplicate reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Ignored message: unknown device or invalid key (SN-001)
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Ignored message: missing or invalid reading sequence
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Ignored message: unknown device or invalid key (SN-999)
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Ignored message: device_code does not match the topic
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Ignored message: unknown device or invalid key (SN-001' OR '1'='1)
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Ignored message: unknown device or invalid key (<script>🌿)
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Ignored message: missing or invalid reading sequence
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Ignored message: missing or invalid reading sequence
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Ignored message: missing or invalid reading sequence
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Ignored message: missing or invalid reading sequence
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Ignored message: missing or invalid reading sequence
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Ignored message: missing or invalid reading sequence
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Ignored message: missing or invalid reading sequence
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Ignored message: missing or invalid reading sequence
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Ignored message: missing or invalid reading sequence
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Ignored message: invalid soil_moisture_pct
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Ignored message: invalid temperature_c
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Ignored message: invalid humidity_pct
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Ignored message: invalid distance_cm
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Ignored message: invalid motion_events
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Ignored message: invalid wifi_rssi_dbm
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Ignored message: invalid soil_moisture_pct
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Ignored message: invalid is_raining
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Ignored message: no supported readings
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Ignored message on florascan-demo-test/SN-001/readings: not valid JSON
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Ignored message: missing or invalid reading sequence
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Ignored message: missing or invalid reading sequence
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Ignored message on florascan-demo-test/SN-001/readings: not valid JSON
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Ignored message on florascan-demo-test/SN-001/readings: too large
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Ignored message: unknown device or invalid key (SN-T01)
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Alert: SN-001 Soil moisture 10 % is below the 30 % limit
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Alert: SN-001 Temperature 40 °C is above the 35 °C limit
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Alert: SN-001 Soil moisture 11 % is below the 30 % limit
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[MQTT] Saved sensor reading from SN-001
+[2m12:18:15 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/Shell.jsx[22m
+[2m12:18:15 AM[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/screens/staff/IoT.jsx[22m

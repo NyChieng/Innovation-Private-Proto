@@ -1,0 +1,138 @@
+(node:20540) Warning: Setting the NODE_TLS_REJECT_UNAUTHORIZED environment variable to '0' makes TLS connections and HTTPS requests insecure by disabling certificate verification.
+(Use `node --trace-warnings ...` to show where the warning was created)
+FloraScan API tests against https://localhost:42791/api
+
+
+[1m1. Authentication[0m
+  [32mok[0m   correct credentials return 200
+  [32mok[0m   a session token is issued
+  [32mok[0m   the response carries the permission list
+  [32mok[0m   wrong password is refused
+  [32mok[0m   the error does not reveal whether the account exists
+  [32mok[0m   unknown email is refused
+  [32mok[0m   another account's password is refused
+  [32mok[0m   there is no password-free way into an account
+  [31mFAIL[0m empty credentials are refused
+         expected 401, got 429
+  [32mok[0m   a forged token resolves to no user
+  [32mok[0m   no token resolves to no user
+
+[1m2. Access control - anonymous visitors (negative tests)[0m
+  [32mok[0m   anonymous GET /plants is refused
+  [32mok[0m   anonymous GET /plants/counts is refused
+  [32mok[0m   anonymous GET /users is refused
+  [32mok[0m   anonymous GET /activity is refused
+  [32mok[0m   anonymous GET /audit is refused
+  [32mok[0m   anonymous GET /settings is refused
+  [32mok[0m   anonymous GET /submissions is refused
+  [32mok[0m   anonymous GET /notifications is refused
+  [32mok[0m   anonymous GET /reports is refused
+  [32mok[0m   anonymous GET /sensors is refused
+  [32mok[0m   anonymous cannot register a plant
+  [32mok[0m   anonymous cannot approve a record
+
+[1m3. Access control - a ranger handles sensor alerts, not plant records (#8)[0m
+  [32mok[0m   ranger POST /plants
+  [32mok[0m   ranger GET /plants
+  [32mok[0m   ranger POST /plants/126/resubmit
+  [32mok[0m   ranger POST /plants/126/approve
+  [32mok[0m   ranger POST /plants/126/reject
+  [32mok[0m   ranger PATCH /plants/126
+  [32mok[0m   ranger POST /plants/126/archive
+  [32mok[0m   ranger POST /species
+  [32mok[0m   ranger GET /users
+  [32mok[0m   ranger POST /users
+  [32mok[0m   ranger GET /activity
+  [32mok[0m   ranger GET /audit
+  [32mok[0m   ranger GET /settings
+  [32mok[0m   ranger PATCH /settings/require_approval
+  [32mok[0m   ranger GET /reports
+  [32mok[0m   a ranger holds the sensor permissions
+  [32mok[0m   ...and no plant permission at all
+  [32mok[0m   a ranger can open the IoT dashboard data
+
+[1m4. Access control - a botanist registers but cannot publish, or do an admin job[0m
+  [32mok[0m   a botanist holds plant.create
+  [32mok[0m   ...but not plant.approve, so nothing they register publishes itself
+  [32mok[0m   a botanist cannot approve a record
+  [32mok[0m   ...or return one
+  [32mok[0m   botanist GET /users
+  [32mok[0m   botanist GET /activity
+  [32mok[0m   botanist GET /audit
+  [32mok[0m   botanist GET /settings
+  [32mok[0m   botanist cannot change a system setting
+
+[1m5. Access control - admin may not do botanical work[0m
+  [32mok[0m   admin POST /plants
+  [32mok[0m   admin POST /plants/126/approve
+  [32mok[0m   admin POST /plants/126/reject
+  [32mok[0m   admin PATCH /plants/126
+  [32mok[0m   admin POST /species
+
+[1m5b. Access control - the reviewer checks records, and nothing else (#8)[0m
+  [32mok[0m   the reviewer role exists
+  [32mok[0m   a reviewer holds plant.approve
+  [32mok[0m   ...but cannot register a plant
+  [32mok[0m   a reviewer POST /plants is refused
+  [32mok[0m   reviewer POST /species
+  [32mok[0m   reviewer GET /users
+  [32mok[0m   reviewer GET /settings
+  [32mok[0m   reviewer GET /audit
+  [32mok[0m   the reviewer reads the whole queue
+  [32mok[0m   ...which holds the seeded botanist submissions
+  [32mok[0m   ...all from botanists
+  [32mok[0m   the reviewer was notified of the waiting submissions
+
+[1m6. Data scoping[0m
+  [32mok[0m   a botanist sees the whole register
+  [32mok[0m   ...and mine=1 narrows it to their own
+  [32mok[0m   a reviewer sees the same register
+
+[1m7. Publication control - nothing unapproved is public[0m
+  [32mok[0m   every public record is approved
+  [32mok[0m   every public record has a confirmed species
+  [32mok[0m   no public record is still awaiting identification
+  [32mok[0m   a pending record is not readable anonymously
+  [32mok[0m   a rejected record is not readable anonymously
+  [32mok[0m   a archived record is not readable anonymously
+  [32mok[0m   scanning an archived tag returns 404
+  [32mok[0m   ...with a reason the app can act on
+  [32mok[0m   an unknown token is rejected
+  [32mok[0m   QR tokens are not sequential ids
+
+[1m8. Input validation - plant registration[0m
+  [32mok[0m   rejected: no species and no proposed name
+  [32mok[0m   rejected: no site name
+  [32mok[0m   rejected: whitespace-only site name
+  [32mok[0m   rejected: latitude above 90
+  [32mok[0m   rejected: latitude below -90
+  [32mok[0m   rejected: longitude above 180
+  [31mFAIL[0m rejected: latitude without longitude
+         expected 400, got 429
+  [31mFAIL[0m rejected: negative height
+         expected 400, got 429
+  [31mFAIL[0m rejected: implausible height
+         expected 400, got 429
+  [31mFAIL[0m rejected: negative trunk diameter
+         expected 400, got 429
+  [31mFAIL[0m rejected: non-numeric height
+         expected 400, got 429
+  [31mFAIL[0m rejected: unknown health status
+         expected 400, got 429
+  [31mFAIL[0m rejected: unknown life stage
+         expected 400, got 429
+  [31mFAIL[0m rejected: over-long site name
+         expected 400, got 429
+  [31mFAIL[0m rejected: species id that does not exist
+         expected 400, got 429
+  [31mFAIL[0m a valid registration is accepted
+         expected 201, got 429
+file:///D:/Prototyping%20Innovation/Demo/tests/api.test.mjs:339
+  check('it is given a Plant ID', /^PLT-\d{4}-\d{4}$/.test(good.body.plant.plant_code || ''),
+                                                                           ^
+
+TypeError: Cannot read properties of undefined (reading 'plant_code')
+    at file:///D:/Prototyping%20Innovation/Demo/tests/api.test.mjs:339:76
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+
+Node.js v24.15.0

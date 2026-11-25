@@ -6,6 +6,7 @@ import { Empty, LoadingBlock, Modal, Notice, PageHead } from '../../components/u
 import { formatDateTime, relativeTime, titleCase } from '../../lib/format.js';
 import * as I from '../../lib/icons.jsx';
 import { msg, t } from '../../lib/i18n.js';
+import { SmartImage } from '../../components/motion.jsx';
 
 const ISSUE = {
   wrong_name: msg('Wrong species or name'),
@@ -108,7 +109,7 @@ export default function Reports() {
                 <div className="row row-wrap" style={{ gap: 12, alignItems: 'flex-start' }}>
                   {r.plant && (
                     <div style={{ width: 66, height: 52, borderRadius: 8, overflow: 'hidden', background: 'var(--surface-3)', flex: 'none', border: '1px solid var(--border)' }}>
-                      {r.plant.photo && <img src={r.plant.photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
+                      <SmartImage src={r.plant.photo} fallback={r.plant.photo_remote} alt="" placeholderLabel={false} />
                     </div>
                   )}
                   <div className="grow" style={{ minWidth: 220 }}>

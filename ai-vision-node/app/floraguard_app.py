@@ -2,8 +2,8 @@
 
     .venv\\Scripts\\python app\\floraguard_app.py      -> http://127.0.0.1:7860
 
-1. Plant zone tab (optional): grab a frame, click 6-10 points around the plant, save.
-   Without a zone, the plants the detector finds are protected.
+1. Plant zone tab (required): grab a frame, click 6-10 points around the plant, save.
+   Live does not start without one (require_zone in app/config.json; false = protect detected plants).
 2. Live tab: pick the webcam (or a video file), Start. People go SAFE -> WARNING (close to the plant)
    -> ALERT (touching it); animals are labelled only. Alerts appear on the right with snapshots.
 3. Record touch / no_touch hand crops while you demo in front of your own camera, then rebuild and
@@ -20,6 +20,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from engine import available_backends  # noqa: E402
+from notifier import summary as alerts_summary  # noqa: E402
 from pipeline import FloraGuard, load_config, model_info, save_config  # noqa: E402
 
 _guard = None
@@ -35,7 +36,7 @@ def guard(backend="auto", threads=4):
     if _guard is None or (backend, threads) != (_guard.cfg["backend"], _guard.cfg["threads"]):
         cfg = load_config()
         cfg.update(backend=backend, threads=threads)
-        _guard = FloraGuard(cfg)
+        _guard = FloraGuard(cfg, find_server=True)  # alerts reach the local server with no set-up
     return _guard
 
 
@@ -145,7 +146,7 @@ def clear_points(frame):
 
 def save_zone(frame, pts):
     if 0 < len(pts) < 3 or (pts and frame is None):
-        raise gr.Error("Grab a frame and click at least 3 points around the plant (or none to use detected plants).")
+        raise gr.Error("Grab a frame and click at least 3 points around the plant.")
     cfg = load_config()
     if pts:
         h, w = frame.shape[:2]
@@ -155,7 +156,8 @@ def save_zone(frame, pts):
     save_config(cfg)
     if _guard is not None:
         _guard.cfg["zone"] = cfg["zone"]
-    return f"Saved plant zone with {len(pts)} points." if pts else "Zone cleared: every detected plant is protected."
+    return f"Saved plant zone with {len(pts)} points." if pts else ("Zone cleared. Live needs a zone; set require_zone to false in app/config.json "
+                                                                "to protect every detected plant instead.")
 
 
 # ---- live ---------------------------------------------------------------------------------------
@@ -185,6 +187,7 @@ def status_md(info, fps, g, saved, cam_fps=None, cpu=None):
             f"| Leaf motion | {info['leaf'] * 100:.2f}% (baseline {info.get('leaf_base', 0) * 100:.2f}%) |\n"
             f"| Detector | {run_name(spec['det'])} {spec['det']['imgsz'][0]}x{spec['det']['imgsz'][1]} |\n"
             f"| Touch model | {run_name(spec.get('touch')) or 'none yet (wrist + leaf motion rule)'} |\n"
+            f"| Alerts to rangers | {g.sender.describe()} |\n"
             f"| Recorded crops this run | {saved} |")
 
 
@@ -204,6 +207,8 @@ def run_live(kind, cam_index, video, conf_person, conf_animal, warn_s, touch_con
     _stop = False
     g = guard(backend, int(threads))
     g.cfg.update(load_config())
+    if g.cfg["require_zone"] and len(g.cfg.get("zone") or []) < 3:
+        raise gr.Error("Draw the plant zone first: Plant zone tab, click 3 or more points around the plant, Save zone.")
     g.cfg.update(conf_person=conf_person, conf_animal=conf_animal, warn_seconds=warn_s, touch_conf=touch_conf,
                  touch_frames=int(touch_frames), after_hours=after_hours, backend=backend, threads=int(threads),
                  max_fps=max_fps)
@@ -287,7 +292,10 @@ def build():
     with gr.Blocks(title="FloraGuard") as demo:
         gr.Markdown("# FloraGuard: live plant-protection detection\n"
                     f"Detector: `{m['det']['weights']}` · Pose: `{m['pose']['weights']}` · "
-                    f"Touch: `{m['touch']['weights'] if m.get('touch') else 'none yet (wrist + leaf motion rule)'}`")
+                    f"Touch: `{m['touch']['weights'] if m.get('touch') else 'none yet (wrist + leaf motion rule)'}`\n\n"
+                    f"**Alerts to rangers:** {alerts_summary(cfg)}"
+                    + ("" if len(cfg.get("zone") or []) >= 3 or not cfg["require_zone"]
+                       else " · **Plant zone:** draw it once in the Plant zone tab before Live (it is remembered)"))
         with gr.Row():
             kind = gr.Radio(["Webcam", "Video file"], value="Webcam", label="Source")
             cam = gr.Number(value=0, precision=0, label="Webcam index")
@@ -332,8 +340,7 @@ def build():
                     rec_msg = gr.Markdown()
             with gr.Tab("Plant zone"):
                 gr.Markdown("Grab a frame, then click 6-10 points around the plant's outline and **Save zone**. "
-                            "The orange buffer zone is drawn automatically around it. **Clear** then **Save zone** "
-                            "with no points to go back to protecting every plant the detector finds.")
+                            "The orange buffer zone is drawn automatically around it. Live needs a saved zone.")
                 frame_state = gr.State(None)
                 pts_state = gr.State([])
                 with gr.Row():
@@ -358,4 +365,5 @@ def build():
 
 
 if __name__ == "__main__":
+    print(f"[alerts] {alerts_summary(load_config())}")
     build().queue().launch(server_name="127.0.0.1", inbrowser=True)

@@ -1,0 +1,79 @@
+{
+  "video": "ivy_touch.mp4",
+  "slug": "ivy_touch",
+  "resolution": "1920x1080",
+  "fps": 23.98,
+  "frames": 168,
+  "duration_s": 7.01,
+  "expected": "ALERT",
+  "alert_raised": false,
+  "passed": false,
+  "first_seen": {
+    "SAFE": 0.0,
+    "WARNING": 0.46
+  },
+  "stage_frames": {
+    "SAFE": 141,
+    "WARNING": 27,
+    "ALERT": 0
+  },
+  "stage_seconds": {
+    "SAFE": 5.88,
+    "WARNING": 1.13,
+    "ALERT": 0.0
+  },
+  "max_people": 1,
+  "max_animals": 1,
+  "max_plants": 1,
+  "frames_with_plant": 36,
+  "frames_with_hand": 27,
+  "peak_touch_p": 0.925,
+  "peak_touch_t": 0.46,
+  "frames_touch_ge_06": 8,
+  "zone": [],
+  "events": [
+    {
+      "t": 0.46,
+      "tier": "WARNING",
+      "track_id": 1,
+      "detail": "hand inside the plant buffer",
+      "snapshot": ""
+    }
+  ],
+  "keyframes": [
+    {
+      "t": 0.0,
+      "stage": "SAFE",
+      "file": "keyframes/0000_SAFE.jpg",
+      "why": "first frame"
+    },
+    {
+      "t": 0.46,
+      "stage": "WARNING",
+      "file": "keyframes/0011_WARNING.jpg",
+      "why": "SAFE -> WARNING"
+    },
+    {
+      "t": 1.58,
+      "stage": "SAFE",
+      "file": "keyframes/0038_SAFE.jpg",
+      "why": "WARNING -> SAFE"
+    },
+    {
+      "t": 0.46,
+      "stage": "peak",
+      "file": "keyframes/peak_touch.jpg",
+      "why": "highest touch probability 0.92"
+    }
+  ],
+  "backend": "openvino",
+  "codec": "avc1",
+  "processing": {
+    "wall_s": 6.0,
+    "avg_ms": 29.2,
+    "p95_ms": 77.0,
+    "avg_model_ms": 52.9,
+    "model_frames": 87,
+    "effective_fps": 28.0
+  }
+}

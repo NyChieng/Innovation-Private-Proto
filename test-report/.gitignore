@@ -1,0 +1,11 @@
+# Large video evidence stays on the machine that ran the test; scripts/eval_videos.py
+# rebuilds it. Committed per clip: summary.json, frames.csv, contact_sheet.jpg, timeline.png.
+ai/videos*/**/*.mp4
+ai/videos*/**/keyframes/
+ai/videos*/**/snapshots/
+# The logs are part of the report, although *.log is ignored at the repo root.
+!logs/*.log
+# Open Images photos for the hand-on-plant test: re-downloaded by eval_touch_oi_plants.py make
+ai/touch_oi_plants/images/
+ai/touch_oi_plants/sheet_*.jpg
+ai/touch_oi_plants/crops/

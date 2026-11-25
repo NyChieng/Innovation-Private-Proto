@@ -200,9 +200,17 @@ export function PasskeyOffer({ user, onDone }) {
   const [error, setError] = useState(null);
 
   // Fetched before the tap, as with signing in: iOS wants Face ID straight out of the tap.
+  // A failed request used to skip straight on to the app, so the passkey the
+  // person was about to make was silently never offered (the intermittent
+  // "...and the passkey is saved" test failure). Try once more, then say so
+  // and leave "Not now" as the way on.
   useEffect(() => {
-    api.passkeyRegisterOptions().then((o) => setOptions(o.options)).catch(() => onDone());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    let alive = true;
+    const fetchOptions = () => api.passkeyRegisterOptions().then((o) => { if (alive) setOptions(o.options); });
+    fetchOptions()
+      .catch(() => new Promise((r) => setTimeout(r, 800)).then(fetchOptions))
+      .catch((err) => { if (alive) setError(err?.message || t('Something went wrong.')); });
+    return () => { alive = false; };
   }, []);
 
   const yes = async () => {

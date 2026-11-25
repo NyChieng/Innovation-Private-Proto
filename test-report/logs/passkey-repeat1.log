@@ -1,0 +1,38 @@
+Passkey tests against https://localhost:42791
+
+(node:33844) Warning: Setting the NODE_TLS_REJECT_UNAUTHORIZED environment variable to '0' makes TLS connections and HTTPS requests insecure by disabling certificate verification.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[1mServer refuses what it should[0m
+  [32mok[0m   signed-out users cannot add a passkey
+  [32mok[0m   a made-up passkey cannot sign in
+
+[1mTurning it on[0m
+  [32mok[0m   the passkey is saved for the account
+  [32mok[0m   ...under the localhost address
+  [32mok[0m   ...and the device holds the private key
+
+[1mSigning in with it[0m
+  [32mok[0m   signed in from the sign-in page without typing anything
+  [32mok[0m   Face ID / fingerprint signs the user in
+  [32mok[0m   ...as the right person
+  [32mok[0m   ...and lands on their dashboard
+  [32mok[0m   the passkey records when it was last used
+
+[1mTurning it off[0m
+  [32mok[0m   another user cannot remove it
+  [32mok[0m   the owner can
+  [32mok[0m   a removed passkey no longer signs in
+
+[1mAn administrator reset removes passkeys[0m
+  [32mok[0m   set up again
+  [32mok[0m   after the reset the account has none
+
+[1mOffered straight after a password sign-in[0m
+  [32mok[0m   the sign-in page offers fingerprint / face
+  [32mok[0m   ...one tap sets it up and carries on to the dashboard
+  [32mok[0m   ...and the passkey is saved
+  [32mok[0m   ...and it is not offered again on this device
+  [32mok[0m   no uncaught errors in the page
+
+============================================================
+[32mAll 20 passkey checks passed.[0m

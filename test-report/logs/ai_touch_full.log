@@ -1,0 +1,46 @@
+3034 test crops, 1466 touch / 1568 no_touch
+YOLO26s-cls summary (fused): 47 layers, 5,436,690 parameters, 0 gradients, 12.1 GFLOPs
+cuda         acc 0.7874  0.74 ms/crop
+openvino     acc 0.7881  5.01 ms/crop
+onnxruntime  acc 0.7881  5.94 ms/crop
+YOLO26s-cls summary (fused): 47 layers, 5,436,690 parameters, 0 gradients, 12.1 GFLOPs
+  original                           acc 0.7874  f1 0.7628  auc 0.8683
+  dark (dusk, gamma 1.8)             acc 0.7831  f1 0.7570  auc 0.8639
+  bright (sun, gamma 0.55)           acc 0.7821  f1 0.7558  auc 0.8688
+  motion/focus blur (7 px)           acc 0.7709  f1 0.7533  auc 0.8536
+  sensor noise (sigma 15)            acc 0.5873  f1 0.2813  auc 0.7122
+  low resolution (56 px, upscaled)   acc 0.7350  f1 0.7081  auc 0.8189
+  JPEG quality 20                    acc 0.6882  f1 0.6015  auc 0.7744
+  mirrored                           acc 0.7891  f1 0.7651  auc 0.8682
+  greyscale (night IR)               acc 0.7063  f1 0.6013  auc 0.8145
+{
+  "metrics": {
+    "tp": 1038,
+    "fp": 215,
+    "fn": 428,
+    "tn": 1353,
+    "accuracy": 0.7880685563612393,
+    "precision": 0.8284118116520351,
+    "recall": 0.7080491132332879,
+    "f1": 0.763515998528871,
+    "specificity": 0.8628826530612245,
+    "balanced_accuracy": 0.7854658831472562,
+    "false_touch_rate": 0.1371173469387755,
+    "roc_auc": 0.8681843729988584,
+    "pr_auc": 0.8663865922160892,
+    "crops": 3034,
+    "touch": 1466
+  },
+  "best_f1_threshold": {
+    "threshold": 0.45,
+    "f1": 0.77796667800068,
+    "precision": 0.775593220338983,
+    "recall": 0.7803547066848567
+  },
+  "robustness_summary": {
+    "accuracy_mean": 0.7366146634439317,
+    "accuracy_std": 0.06349880969771848,
+    "worst": "sensor noise (sigma 15)"
+  },
+  "calibration_ece": 0.07029616659941941
+}

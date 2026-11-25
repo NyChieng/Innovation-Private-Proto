@@ -20,9 +20,11 @@ import { msg, t } from './i18n.js';
   msg('A location or site name is required.'),
   msg('Choose a species, or type a name under "species not listed".'),
   msg('This record has no confirmed species. Set the species first, then approve it.'),
-  msg('You cannot review a record you submitted yourself. Another reviewer must check it.'),
+  msg('You cannot review a record you submitted yourself. Another senior botanist must check it.'),
   msg('A note is required when returning a record, so the botanist knows what to change.'),
   msg('Only the person who registered this record can resubmit it.'),
+  msg('Only an archived record can be restored.'),
+  msg('A published record must have a confirmed species.'),
   msg('No QR code has been issued for this record yet.'),
   msg('Your current password is not correct.'),
   msg('The new password must be at least 8 characters.'),
@@ -90,6 +92,20 @@ async function request(method, path, body) {
     throw new ApiError(data?.error ? t(data.error) : t('Request failed ({status})', { status: res.status }), res.status, data);
   }
   return data;
+}
+
+/**
+ * A protected image (an AI camera snapshot) as an object URL. An <img src>
+ * cannot send the Authorization header, so it is fetched here instead. The
+ * caller revokes the URL when it is done with it.
+ */
+export async function protectedImageUrl(path) {
+  const token = getToken();
+  const res = await fetch(path.startsWith('/api/') ? path : '/api' + path, {
+    headers: token ? { Authorization: 'Bearer ' + token } : {},
+  });
+  if (!res.ok) throw new ApiError(t('Request failed ({status})', { status: res.status }), res.status, null);
+  return URL.createObjectURL(await res.blob());
 }
 
 const qs = (params) => {

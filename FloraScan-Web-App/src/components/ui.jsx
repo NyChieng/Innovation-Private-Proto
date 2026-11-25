@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { CONSERVATION, STATUS, fromServer, initials, relativeTime, titleCase } from '../lib/format.js';
 import { useApp } from '../lib/store.jsx';
-import { SmartImage } from './motion.jsx';
+import { SmartImage, useCardTilt } from './motion.jsx';
 import { t } from '../lib/i18n.js';
 import * as I from '../lib/icons.jsx';
 
@@ -108,9 +108,32 @@ export function LoadingBlock({ label }) {
 
 export function Modal({ title, onClose, children, footer, wide }) {
   const ref = useRef(null);
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
 
   useEffect(() => {
-    const onKey = (e) => { if (e.key === 'Escape') onClose?.(); };
+    const prevFocus = document.activeElement;
+    const onKey = (e) => {
+      if (e.key === 'Escape') {
+        closeRef.current?.();
+        return;
+      }
+      if (e.key === 'Tab' && ref.current) {
+        const nodes = [...ref.current.querySelectorAll(
+          'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        )];
+        if (!nodes.length) return;
+        const first = nodes[0];
+        const last = nodes[nodes.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    };
     document.addEventListener('keydown', onKey);
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -119,8 +142,9 @@ export function Modal({ title, onClose, children, footer, wide }) {
     return () => {
       document.removeEventListener('keydown', onKey);
       document.body.style.overflow = prev;
+      if (prevFocus && typeof prevFocus.focus === 'function') prevFocus.focus();
     };
-  }, [onClose]);
+  }, []);
 
   // Rendered into document.body rather than in place. The backdrop is
   // position: fixed, and an ancestor carrying a transform or will-change:
@@ -198,14 +222,16 @@ export function Toasts() {
 /* Plant card                                                          */
 /* ------------------------------------------------------------------ */
 
-export function PlantCard({ plant, to, showStatus, eager = false }) {
-  const name = plant.scientific_name || plant.proposed_species_name || t('Unidentified specimen');
+export function PlantCard({ plant, to, showStatus, eager = false, hideSite = false }) {
+  const sci = plant.scientific_name || plant.proposed_species_name || t('Unidentified specimen');
+  // Visitors know plants by their everyday name; the scientific name sits under it.
+  const title = plant.common_name || plant.local_name || sci;
+  const showSci = title !== sci;
+  const tilt = useCardTilt();
   return (
-    <Link className="plant-card" to={to || `/plant/${plant.id}`}>
+    <Link className="plant-card" to={to || `/plant/${plant.id}`} {...tilt}>
       <div className="plant-photo">
-        {plant.photo
-          ? <SmartImage src={plant.photo} fallback={plant.photo_remote} tint={plant.photo_tint} alt="" eager={eager} />
-          : <div style={{ width: '100%', height: '100%', display: 'grid', placeItems: 'center' }}><I.Leaf style={{ width: 34, height: 34, color: 'var(--text-faint)' }} /></div>}
+        <SmartImage src={plant.photo} fallback={plant.photo_remote} tint={plant.photo_tint} alt="" eager={eager} />
         <div className="overlay-tl">
           {showStatus && <StatusBadge status={plant.status} />}
           {plant.species_not_listed && <span className="badge badge-info">{t('Species not listed')}</span>}
@@ -213,16 +239,15 @@ export function PlantCard({ plant, to, showStatus, eager = false }) {
         {plant.conservation_code && (
           <div className="overlay-tr"><ConservationBadge code={plant.conservation_code} showLabel={false} /></div>
         )}
-        <div className="overlay-b">
-          <I.MapPin style={{ width: 13, height: 13 }} />
-          <span className="truncate">{fromServer(plant.site_name)}</span>
-        </div>
       </div>
       <div className="plant-card-body">
-        <div className="plant-card-name" style={plant.scientific_name ? undefined : { fontStyle: 'normal', fontFamily: 'var(--font)', fontSize: '0.94rem' }}>
-          {name}
-        </div>
-        {plant.common_name && <div className="plant-card-common">{plant.common_name}</div>}
+        <div className="plant-card-title">{title}</div>
+        {showSci && <div className="plant-card-name">{sci}</div>}
+        {!hideSite && (
+          <div className="plant-card-site truncate">
+            {plant.location_protected ? t('Location withheld') : fromServer(plant.site_name)}
+          </div>
+        )}
         <div className="plant-card-foot">
           <span className="mono tiny faint">{plant.plant_code}</span>
           <span className="spacer" />
@@ -241,7 +266,7 @@ export function PlantRow({ plant, onClick, children }) {
     <tr onClick={onClick} style={onClick ? { cursor: 'pointer' } : undefined}>
       <td style={{ width: 54 }}>
         <div style={{ width: 42, height: 42, borderRadius: 8, overflow: 'hidden', background: 'var(--surface-3)' }}>
-          {plant.photo && <img src={plant.photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} loading="lazy" />}
+          <SmartImage src={plant.photo} fallback={plant.photo_remote} tint={plant.photo_tint} alt="" placeholderLabel={false} />
         </div>
       </td>
       <td>

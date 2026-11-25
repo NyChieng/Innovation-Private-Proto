@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import { realPhoto } from '../lib/photo.js';
+import { t } from '../lib/i18n.js';
 
 /**
  * Motion helpers.
@@ -116,17 +118,38 @@ function tintFor(src) {
   return `hsl(${hue} 22% 26%)`;
 }
 
+/**
+ * Shown when there is no real photograph, or it would not load: a leaf on the
+ * tint, never a generated drawing or another plant's picture.
+ */
+function PhotoPlaceholder({ label = true }) {
+  return (
+    <span className="photo-placeholder" role="img" aria-label={t('No photo yet')}>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z" />
+        <path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12" />
+      </svg>
+      {label && <span className="photo-placeholder-text">{t('No photo yet')}</span>}
+    </span>
+  );
+}
+
 export function SmartImage({
-  src, alt = '', fallback, tint, className = '', ratio, style, eager = false, ...rest
+  src: rawSrc, alt = '', fallback: rawFallback, tint, className = '', ratio, style, eager = false,
+  placeholderLabel = true, ...rest
 }) {
-  const [state, setState] = useState('loading'); // loading | ready | failed
+  // Generated stand-in drawings are not photographs: drop them, and use the
+  // fallback (a remote photo) or the placeholder instead.
+  const src = realPhoto(rawSrc) || realPhoto(rawFallback);
+  const fallback = src === rawFallback ? null : realPhoto(rawFallback);
+  const [state, setState] = useState(src ? 'loading' : 'failed'); // loading | ready | failed
   const [current, setCurrent] = useState(src);
   const triedFallback = useRef(false);
   const imgRef = useRef(null);
 
   useEffect(() => {
     setCurrent(src);
-    setState('loading');
+    setState(src ? 'loading' : 'failed');
     triedFallback.current = false;
   }, [src]);
 
@@ -179,7 +202,8 @@ export function SmartImage({
       // better than a grey box.
       style={{ aspectRatio: ratio, '--tint': tint || tintFor(current), ...style }}
     >
-      {current && (
+      {state === 'failed' && <PhotoPlaceholder label={placeholderLabel} />}
+      {current && state !== 'failed' && (
         <img
           ref={imgRef}
           src={current}
@@ -212,9 +236,356 @@ export function PageTransition({ k, children }) {
     if (k === key) return undefined;
     if (reduced()) { setKey(k); return undefined; }
     setPhase('out');
-    const t = setTimeout(() => { setKey(k); setPhase('in'); }, 110);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => { setKey(k); setPhase('in'); }, 125);
+    return () => clearTimeout(timer);
   }, [k, key]);
 
   return <div className={`page-fade page-fade-${phase}`} key={key}>{children}</div>;
+}
+
+/* ------------------------------------------------------------------ */
+
+/**
+ * Top forest-green progress shimmer bar that sweeps across on every route
+ * change so page navigation feels responsive and tactile.
+ */
+export function RouteProgress({ k }) {
+  const [phase, setPhase] = useState('idle'); // idle | run | done
+  const first = useRef(true);
+
+  useEffect(() => {
+    if (first.current) { first.current = false; return undefined; }
+    if (reduced()) return undefined;
+    setPhase('run');
+    const t1 = setTimeout(() => setPhase('done'), 240);
+    const t2 = setTimeout(() => setPhase('idle'), 560);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, [k]);
+
+  if (phase === 'idle') return null;
+  return <div className={`route-progress is-${phase} no-print`} aria-hidden="true" />;
+}
+
+/* ------------------------------------------------------------------ */
+
+/**
+ * Thin GPU-accelerated reading progress bar pinned under the sticky header.
+ * Tracks vertical scroll position cleanly via transform: scaleX().
+ */
+export function ScrollProgress() {
+  const barRef = useRef(null);
+
+  useEffect(() => {
+    if (reduced()) return undefined;
+    let raf = 0;
+    const update = () => {
+      raf = 0;
+      const el = barRef.current;
+      if (!el) return;
+      const max = document.documentElement.scrollHeight - window.innerHeight;
+      const ratio = max > 40 ? Math.min(1, Math.max(0, window.scrollY / max)) : 0;
+      el.style.transform = `scaleX(${ratio.toFixed(4)})`;
+      el.style.opacity = ratio > 0.005 ? '1' : '0';
+    };
+    const onScroll = () => { if (!raf) raf = requestAnimationFrame(update); };
+    update();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll, { passive: true });
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onScroll);
+    };
+  }, []);
+
+  return <div className="scroll-progress no-print" ref={barRef} aria-hidden="true" />;
+}
+
+/* ------------------------------------------------------------------ */
+
+/**
+ * Subtle vertical parallax offset for hero artwork while scrolling down.
+ * Bounded so the background never exposes empty gaps or causes overflow.
+ */
+export function useParallax(ref, factor = 0.18, maxPx = 70) {
+  useEffect(() => {
+    if (reduced()) return undefined;
+    let raf = 0;
+    const update = () => {
+      raf = 0;
+      const el = ref.current;
+      if (!el) return;
+      const y = Math.min(maxPx, Math.max(0, window.scrollY * factor));
+      el.style.transform = `translate3d(0, ${y.toFixed(1)}px, 0)`;
+    };
+    const onScroll = () => { if (!raf) raf = requestAnimationFrame(update); };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener('scroll', onScroll);
+    };
+  }, [ref, factor, maxPx]);
+}
+
+/* ------------------------------------------------------------------ */
+
+/**
+ * Subtle 3D tilt + pointer-following specular glare for interactive plant cards.
+ * Active only on hover-capable pointers and disabled under reduced motion.
+ */
+export function useCardTilt() {
+  const canHover = () =>
+    typeof window !== 'undefined'
+    && !reduced()
+    && window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+
+  const onPointerMove = (e) => {
+    if (!canHover()) return;
+    const el = e.currentTarget;
+    const r = el.getBoundingClientRect();
+    if (!r.width || !r.height) return;
+    const px = (e.clientX - r.left) / r.width;
+    const py = (e.clientY - r.top) / r.height;
+    const rx = ((0.5 - py) * 5.5).toFixed(2);
+    const ry = ((px - 0.5) * 6.5).toFixed(2);
+    el.style.setProperty('--rx', `${rx}deg`);
+    el.style.setProperty('--ry', `${ry}deg`);
+    el.style.setProperty('--mx', `${(px * 100).toFixed(1)}%`);
+    el.style.setProperty('--my', `${(py * 100).toFixed(1)}%`);
+  };
+
+  const onPointerLeave = (e) => {
+    const el = e.currentTarget;
+    el.style.removeProperty('--rx');
+    el.style.removeProperty('--ry');
+    el.style.removeProperty('--mx');
+    el.style.removeProperty('--my');
+  };
+
+  return { onPointerMove, onPointerLeave };
+}
+
+/* ------------------------------------------------------------------ */
+
+function preloadImageUrl(url) {
+  return new Promise((resolve) => {
+    if (!url) { resolve(null); return; }
+    const img = new Image();
+    img.decoding = 'async';
+    let settled = false;
+    const finish = (ok) => {
+      if (settled) return;
+      settled = true;
+      resolve(ok ? url : null);
+    };
+    img.onload = () => {
+      if (img.decode) img.decode().then(() => finish(true), () => finish(true));
+      else finish(true);
+    };
+    img.onerror = () => finish(false);
+    img.src = url;
+    if (img.complete && img.naturalWidth > 0) {
+      if (img.decode) img.decode().then(() => finish(true), () => finish(true));
+      else finish(true);
+    }
+  });
+}
+
+async function resolveSlide(item) {
+  if (!item) return null;
+  const primary = realPhoto(item.src || item.photo) || null;
+  const fallback = realPhoto(item.fallback || item.photo_remote) || null;
+  if (primary) {
+    const ok = await preloadImageUrl(primary);
+    if (ok) return { ...item, resolvedUrl: ok };
+  }
+  if (fallback && fallback !== primary) {
+    const ok = await preloadImageUrl(fallback);
+    if (ok) return { ...item, resolvedUrl: ok };
+  }
+  return null;
+}
+
+/**
+ * Double-buffered, GPU-composited crossfading slideshow for collected plant
+ * photographs. Preloads and decodes each upcoming photo (automatically falling
+ * back from local `src` to `fallback`) before crossfading, so transitions stay
+ * completely fluid with zero blink or stutter.
+ */
+export function PhotoSlideshow({
+  items,
+  interval = 6500,
+  fadeMs = 1400,
+  className = '',
+  onChange,
+  jumpTo = null,
+}) {
+  const [layers, setLayers] = useState([]);
+  const onChangeRef = useRef(onChange);
+  const ctrlRef = useRef(null);
+  // Lives outside the effect: the effect re-runs when `items` changes, but the
+  // previous top layer stays in `layers`, so a counter reset to 0 would hand the
+  // next slide the same React key as the layer it fades over.
+  const uidRef = useRef(0);
+  onChangeRef.current = onChange;
+
+  useEffect(() => {
+    if (!items?.length) {
+      ctrlRef.current = null;
+      return undefined;
+    }
+
+    let cancelled = false;
+    let cursor = 0;
+    let gen = 0;
+    let activeId = null;
+    let cycleTimer = 0;
+    let cleanupTimer = 0;
+    let raf1 = 0;
+    let raf2 = 0;
+    let visHandler = null;
+
+    const clearPendingCycle = () => {
+      clearTimeout(cycleTimer);
+      if (visHandler) {
+        document.removeEventListener('visibilitychange', visHandler);
+        visHandler = null;
+      }
+    };
+
+    const nextReadySlide = async () => {
+      const total = items.length;
+      for (let tries = 0; tries < total; tries++) {
+        if (cancelled) return null;
+        const idx = cursor % total;
+        cursor += 1;
+        const candidate = items[idx];
+        if (!candidate) continue;
+        if (total > 1 && activeId !== null && candidate.id === activeId) continue;
+        const resolved = await resolveSlide(candidate);
+        if (cancelled) return null;
+        if (resolved) return resolved;
+      }
+      return null;
+    };
+
+    const showSlide = (slide) => {
+      if (cancelled || !slide) return;
+      activeId = slide.id ?? slide.resolvedUrl;
+      const myUid = ++uidRef.current;
+      const immediate = reduced();
+      const newLayer = { uid: myUid, url: slide.resolvedUrl, item: slide, visible: immediate };
+
+      setLayers((prev) => {
+        const currentTop = prev.length ? prev[prev.length - 1] : null;
+        return currentTop && !immediate ? [currentTop, newLayer] : [newLayer];
+      });
+      onChangeRef.current?.(slide);
+
+      if (immediate) return;
+
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
+      raf1 = requestAnimationFrame(() => {
+        raf2 = requestAnimationFrame(() => {
+          if (cancelled) return;
+          setLayers((prev) => prev.map((l) => (l.uid === myUid ? { ...l, visible: true } : l)));
+        });
+      });
+
+      clearTimeout(cleanupTimer);
+      cleanupTimer = setTimeout(() => {
+        if (cancelled) return;
+        setLayers((prev) => (prev.length > 1 ? [prev[prev.length - 1]] : prev));
+      }, fadeMs + 220);
+    };
+
+    const scheduleNext = () => {
+      clearPendingCycle();
+      if (cancelled || items.length < 2 || reduced() || !interval) return;
+      const myGen = gen;
+      // Preload and decode the upcoming slide in the background so the swap
+      // starts on the exact frame with zero network or decode jank.
+      const preloadedPromise = nextReadySlide();
+
+      const advance = async () => {
+        const ready = await preloadedPromise;
+        if (cancelled || myGen !== gen) return;
+        if (ready) showSlide(ready);
+        scheduleNext();
+      };
+
+      cycleTimer = setTimeout(() => {
+        if (cancelled || myGen !== gen) return;
+        if (document.hidden) {
+          visHandler = () => {
+            if (!document.hidden) {
+              document.removeEventListener('visibilitychange', visHandler);
+              visHandler = null;
+              if (!cancelled && myGen === gen) advance();
+            }
+          };
+          document.addEventListener('visibilitychange', visHandler);
+          return;
+        }
+        advance();
+      }, interval);
+    };
+
+    ctrlRef.current = {
+      jump: async (targetIndex) => {
+        if (cancelled || !items.length) return;
+        const idx = ((targetIndex % items.length) + items.length) % items.length;
+        const myGen = ++gen;
+        clearPendingCycle();
+        cursor = (idx + 1) % items.length;
+        const resolved = await resolveSlide(items[idx]);
+        if (cancelled || myGen !== gen) return;
+        if (resolved) showSlide(resolved);
+        scheduleNext();
+      },
+    };
+
+    nextReadySlide().then((first) => {
+      if (cancelled || !first || gen !== 0) return;
+      showSlide(first);
+      scheduleNext();
+    });
+
+    return () => {
+      cancelled = true;
+      ctrlRef.current = null;
+      clearPendingCycle();
+      clearTimeout(cleanupTimer);
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
+    };
+  }, [items, interval, fadeMs]);
+
+  useEffect(() => {
+    if (jumpTo && typeof jumpTo.index === 'number') {
+      ctrlRef.current?.jump(jumpTo.index);
+    }
+  }, [jumpTo]);
+
+  return (
+    <div
+      className={`slideshow${className ? ' ' + className : ''}`}
+      style={{ '--slide-fade': `${fadeMs}ms` }}
+      aria-hidden="true"
+    >
+      {layers.map((layer) => (
+        <div
+          key={layer.uid}
+          // Alternate the drift direction by the layer's own id, not by its
+          // position: a layer is the 2nd child while it fades in and the 1st
+          // once the old one is removed, and a position-based direction then
+          // flipped mid-animation and the photo jumped 6% in one frame.
+          className={`slideshow-layer${layer.uid % 2 ? '' : ' is-alt'}${layer.visible ? ' is-visible' : ''}`}
+        >
+          <img src={layer.url} alt="" decoding="async" />
+        </div>
+      ))}
+    </div>
+  );
 }

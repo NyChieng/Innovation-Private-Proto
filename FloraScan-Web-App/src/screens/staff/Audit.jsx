@@ -47,16 +47,6 @@ const ENTITY_LABEL = {
 const actionLabel = (a) => (ACTION_LABEL[a] ? t(ACTION_LABEL[a]) : titleCase(a));
 const entityLabel = (e) => (ENTITY_LABEL[e] ? t(ENTITY_LABEL[e]) : titleCase(e));
 
-/** The questions an administrator actually comes here to answer, each one a filter. */
-const QUESTIONS = [
-  { label: msg('Who approved a plant?'), entity: 'plants', action: 'approve' },
-  { label: msg('Who returned a plant?'), entity: 'plants', action: 'reject' },
-  { label: msg('Who edited a plant?'), entity: 'plants', action: 'update' },
-  { label: msg('Who archived a plant?'), entity: 'plants', action: 'archive' },
-  { label: msg("Who changed a staff member's role?"), entity: 'users', action: 'role_change' },
-  { label: msg('Who changed a system setting?'), entity: 'settings', action: 'update' },
-];
-
 /** Only plain objects have fields; anything else is shown as one value. */
 const asFields = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : (v == null ? {} : { value: v }));
 
@@ -102,6 +92,31 @@ function RecordCell({ entry }) {
   return <>{label}{entry.entity_id && <span className="mono tiny faint"> #{entry.entity_id}</span>}</>;
 }
 
+function exportAuditCsv(rows) {
+  const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const head = ['ID', 'Actor', 'Action', 'Entity Type', 'Entity ID', 'Old Values', 'New Values', 'Timestamp'];
+  const lines = [
+    head.map(esc).join(','),
+    ...rows.map((r) => [
+      r.id,
+      r.user_name || '',
+      r.action || '',
+      r.entity_type || '',
+      r.entity_id ?? '',
+      r.old_values ? JSON.stringify(r.old_values) : '',
+      r.new_values ? JSON.stringify(r.new_values) : '',
+      r.created_at || '',
+    ].map(esc).join(',')),
+  ];
+  const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'florascan-audit.csv';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 export default function Audit() {
   const { boot } = useApp();
   const [data, setData] = useState(null);
@@ -114,17 +129,22 @@ export default function Audit() {
 
   if (!data) return <LoadingBlock label={t('Loading the audit trail')} />;
 
-  const ask = (q) => { setEntity(q.entity); setAction(q.action); };
-
   return (
     <div className="page">
       <div className="wrap" style={{ maxWidth: 1060 }}>
         <PageHead
           title={t('Audit trail')}
           sub={t('A record of every change to plants, species, staff accounts and settings: who made it, when, and what it was before.')}
-        />
+        >
+          {data.results.length > 0 && (
+            <button type="button" className="btn" onClick={() => exportAuditCsv(data.results)}>
+              <I.Download /> {t('Export CSV')}
+            </button>
+          )}
+        </PageHead>
 
-        <div style={{ marginBottom: 18 }}>
+        <details className="audit-help">
+          <summary>{t('Audit trail help')}</summary>
           <Notice kind="plain" title={t('Use this page to:')}>
             <ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>
               <li>{t('Check who approved a plant before it went public.')}</li>
@@ -135,25 +155,7 @@ export default function Audit() {
               {t('Entries are added automatically. Nobody can edit or delete them.')}
             </div>
           </Notice>
-        </div>
-
-        <div className="small strong" style={{ marginBottom: 8 }}>{t('Quick questions')}</div>
-        <div className="row row-wrap" style={{ gap: 8, marginBottom: 16 }}>
-          <button type="button" className="chip" aria-pressed={!entity && !action} onClick={() => ask({ entity: '', action: '' })}>
-            {t('Show everything')}
-          </button>
-          {QUESTIONS.map((q) => (
-            <button
-              key={q.label}
-              type="button"
-              className="chip"
-              aria-pressed={entity === q.entity && action === q.action}
-              onClick={() => ask(q)}
-            >
-              {t(q.label)}
-            </button>
-          ))}
-        </div>
+        </details>
 
         <div className="row row-wrap" style={{ gap: 10, marginBottom: 16 }}>
           <select className="select" style={{ width: 'auto' }} value={entity} onChange={(e) => setEntity(e.target.value)} aria-label={t('Filter by record type')}>

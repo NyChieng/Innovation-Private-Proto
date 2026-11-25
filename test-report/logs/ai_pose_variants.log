@@ -1,0 +1,34 @@
+look plants 2 {'yolo26n-pose': (1.0, 0.73), 'yolo26s-pose (deployed)': (1.0, 0.96)}
+look plants {'yolo26n-pose': (1.0, 0.0), 'yolo26s-pose (deployed)': (1.0, 0.0)}
+touch plants 2 {'yolo26n-pose': (1.0, 1.0), 'yolo26s-pose (deployed)': (1.0, 1.0)}
+touch plants 3 {'yolo26n-pose': (1.0, 1.0), 'yolo26s-pose (deployed)': (1.0, 1.0)}
+touch plants 4 {'yolo26n-pose': (1.0, 1.0), 'yolo26s-pose (deployed)': (1.0, 0.96)}
+touch plants {'yolo26n-pose': (1.0, 0.94), 'yolo26s-pose (deployed)': (1.0, 1.0)}
+ivy_touch {'yolo26n-pose': (0.97, 0.94), 'yolo26s-pose (deployed)': (1.0, 0.91)}
+video2_4k {'yolo26n-pose': (1.0, 1.0), 'yolo26s-pose (deployed)': (1.0, 1.0)}
+{
+  "overall": {
+    "yolo26n-pose": {
+      "frames": 413,
+      "person_rate": 0.9975786924939467,
+      "wrist_rate": 0.8087167070217918,
+      "mean_wrist_conf": 0.7776161290258411,
+      "median_ms_gpu": 12.12479999230709,
+      "params_mb": 7.9
+    },
+    "yolo26s-pose (deployed)": {
+      "frames": 413,
+      "person_rate": 1.0,
+      "wrist_rate": 0.8353510895883777,
+      "mean_wrist_conf": 0.7899826511298076,
+      "median_ms_gpu": 11.66019999072887,
+      "params_mb": 24.2
+    }
+  },
+  "agreement": {
+    "pairs": 608,
+    "median_dist_pct_of_diag": 1.685330675681738,
+    "within_2pct": 0.5953947368421053,
+    "within_5pct": 0.881578947368421
+  }
+}
