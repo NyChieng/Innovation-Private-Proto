@@ -21,7 +21,7 @@ const allowed = (can, item) =>
 export function staffNav(can, counts, user) {
   const groups = [];
   // The audit trail is for administrators by role, not just by permission.
-  const isAdmin = user?.role === 'admin';
+  const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
 
   const plants = [
     { to: '/staff/plants', label: t('Plant register'), icon: I.Leaf, count: counts?.all, needAny: ['plant.view_all', 'plant.create'] },

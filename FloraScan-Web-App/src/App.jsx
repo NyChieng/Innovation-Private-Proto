@@ -58,7 +58,7 @@ function Guard({ need, needAny, adminOnly, children }) {
     return <Navigate to="/staff/password" replace />;
   }
   // By role, not only by permission: the API refuses everyone else too.
-  if (adminOnly && user.role !== 'admin') {
+  if (adminOnly && user.role !== 'admin' && user.role !== 'superadmin') {
     return (
       <div className="page"><div className="wrap wrap-narrow">
         <Empty icon={I.Shield} title={t('Only an administrator can open this page')} />

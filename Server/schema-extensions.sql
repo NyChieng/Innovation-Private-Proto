@@ -503,3 +503,29 @@ CREATE TABLE login_lockouts (
   KEY idx_lockout_until (locked_until),
   CONSTRAINT chk_lockout_scope CHECK (scope IN ('ip', 'device'))
 );
+
+
+-- ---------------------------------------------------------------------
+-- 17. Super admin
+-- ---------------------------------------------------------------------
+-- One more role, holding every permission: it can open, check and change
+-- anything, including the audit trail. Ordinary administrators cannot
+-- edit, reset, unlock, approve a reset for or deactivate a super admin, so
+-- a breached administrator account cannot lock the super admin out. Only a
+-- super admin - or "npm run superadmin" on the server itself - can give
+-- this role.
+--
+-- Safe to re-run: the grants are rebuilt from the full permission list, so
+-- a permission added later reaches the super admin on the next db:setup.
+
+INSERT INTO roles (id, name, label, description) VALUES
+  (5, 'superadmin', 'Super Admin',
+   'Holds every permission: can open, check and change anything, including administrator accounts and the audit trail')
+ON DUPLICATE KEY UPDATE label = VALUES(label), description = VALUES(description);
+
+DELETE rp FROM role_permissions rp
+  JOIN roles r ON r.id = rp.role_id
+ WHERE r.name = 'superadmin';
+
+INSERT INTO role_permissions (role_id, permission_id)
+SELECT r.id, p.id FROM roles r JOIN permissions p WHERE r.name = 'superadmin';

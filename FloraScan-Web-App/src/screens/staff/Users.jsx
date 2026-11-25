@@ -49,8 +49,10 @@ function TempPasswordDialog({ issued, onClose }) {
   );
 }
 
-function NewUserDialog({ roles, onClose, onDone, onIssued }) {
-  const { toast } = useApp();
+function NewUserDialog({ roles: allRoles, onClose, onDone, onIssued }) {
+  const { toast, user: me } = useApp();
+  // Only a super admin can make another; the API refuses anyone else.
+  const roles = allRoles.filter((r) => r.name !== 'superadmin' || me?.role === 'superadmin');
   const [form, setForm] = useState({ full_name: '', email: '', title: '', phone: '', role_id: 2 });
   const [busy, setBusy] = useState(false);
   const up = (p) => setForm((f) => ({ ...f, ...p }));
@@ -123,7 +125,11 @@ function UserDrawer({ user, roles, onClose, onDone, onIssued }) {
   const [busy, setBusy] = useState(false);
   const [checkCode, setCheckCode] = useState('');
   const isMe = me?.id === user.id;
-  const canManage = can('user.manage');
+  const meSuper = me?.role === 'superadmin';
+  // Only a super admin may change a super admin account; the API refuses too.
+  const shielded = user.role === 'superadmin' && !meSuper;
+  const canManage = can('user.manage') && !shielded;
+  const roleChoices = roles.filter((r) => r.name !== 'superadmin' || meSuper || r.id === user.role_id);
 
   const act = async (fn, msg) => {
     setBusy(true);
@@ -178,7 +184,13 @@ function UserDrawer({ user, roles, onClose, onDone, onIssued }) {
           </Notice>
         )}
 
-        {user.locked_until && (
+        {shielded && (
+          <Notice kind="info" title={t('Super admin account')}>
+            {t('Only a super admin can reset, unlock, change or deactivate this account. That way a breached administrator account cannot lock the super admin out.')}
+          </Notice>
+        )}
+
+        {user.locked_until && canManage && (
           <Notice kind="warn" title={t('Locked after too many wrong passwords')}>
             {t('Sign in is refused until {time}. Unlock it now if you know this was the account holder.', { time: formatDateTime(user.locked_until) })}
             <div style={{ marginTop: 10 }}>
@@ -204,10 +216,10 @@ function UserDrawer({ user, roles, onClose, onDone, onIssued }) {
         <div className="field">
           <label htmlFor="d-role">{t('Role')}</label>
           <select
-            id="d-role" className="select" value={user.role_id} disabled={busy || isMe}
+            id="d-role" className="select" value={user.role_id} disabled={busy || isMe || shielded}
             onChange={(e) => act(() => api.updateUser(user.id, { role_id: Number(e.target.value) }), t('Role updated.'))}
           >
-            {roles.map((r) => <option key={r.id} value={r.id}>{roleLabel(r.label)}</option>)}
+            {roleChoices.map((r) => <option key={r.id} value={r.id}>{roleLabel(r.label)}</option>)}
           </select>
           {isMe && <div className="hint">{t('You cannot change your own role.')}</div>}
         </div>
@@ -219,7 +231,7 @@ function UserDrawer({ user, roles, onClose, onDone, onIssued }) {
           </div>
         </div>
 
-        <div className="row row-wrap" style={{ gap: 9 }}>
+        {canManage && <div className="row row-wrap" style={{ gap: 9 }}>
           <ConfirmButton
             className="btn btn-sm"
             icon={I.Refresh}
@@ -260,7 +272,7 @@ function UserDrawer({ user, roles, onClose, onDone, onIssued }) {
               </button>
             )
           )}
-        </div>
+        </div>}
       </div>
     </Modal>
   );

@@ -135,3 +135,18 @@ test('administrator account management does not imply review or IoT permissions'
   assert.equal((await call('/sensors/alerts/30/resolve', { role: 1 })).status, 403);
   assert.equal((await call('/users/3', { role: 1, method: 'PATCH', body: { role_id: 4 } })).status, 200);
 });
+test('an administrator cannot touch a super admin account or hand out the role', async () => {
+  assert.equal((await call('/users/5', { role: 1, method: 'PATCH', body: { is_active: false } })).status, 403);
+  assert.equal((await call('/users/5', { role: 1, method: 'PATCH', body: { role_id: 1 } })).status, 403);
+  assert.equal((await call('/users/5/reset-password', { role: 1 })).status, 403);
+  assert.equal((await call('/users/5/unlock', { role: 1 })).status, 403);
+  assert.equal((await call('/users/2', { role: 1, method: 'PATCH', body: { role_id: 5 } })).status, 403);
+  assert.equal(state.users[4].is_active, 1);
+  assert.equal(state.users[1].role_id, 2);
+});
+test('a super admin holds every permission and can manage administrators, but not demote itself', async () => {
+  assert.equal((await call('/plants/10/approve', { role: 5 })).status, 200);
+  assert.equal((await call('/users/1', { role: 5, method: 'PATCH', body: { full_name: 'Admin renamed' } })).status, 200);
+  assert.equal((await call('/users/5', { role: 5, method: 'PATCH', body: { role_id: 1 } })).status, 400);
+  assert.equal(state.users[4].role_id, 5);
+});

@@ -69,6 +69,13 @@ is the part of the email before `@`, followed by `123`.
 | Reviewer | `drmeilingwong@gmail.com` | Approve or return records |
 | Ranger | `edmundguoqianyu@gmail.com` | View and resolve alerts |
 | Administrator | `nengyichieng@gmail.com` | Manage staff and audit logs |
+| Super Admin | `superadmin@gmail.com` | Open everything, including administrator accounts |
+
+Only a super admin can reset, unlock, change or deactivate a super admin, or
+give someone the role, so a breached administrator cannot lock it out. To
+create or promote one on an existing database, run this on the server:
+`npm run superadmin -- <email> ["Full Name"]`. Run `npm run db:setup` first
+if the database predates the role.
 
 The demo uses real species and credited reference photos with fictional
 individual plant records. The API withholds sensitive locations from visitors

@@ -29,6 +29,7 @@
     "test:iot": "node tests/iot-mqtt.test.mjs",
     "db:setup": "node scripts/db-setup.mjs",
     "db:seed": "node scripts/seed-mysql.mjs",
+    "superadmin": "node scripts/superadmin.mjs",
     "db:reset": "node scripts/db-setup.mjs --reset && node scripts/seed-mysql.mjs --reset",
     "pretest": "node scripts/test-db.mjs",
     "db:test": "node scripts/test-db.mjs"

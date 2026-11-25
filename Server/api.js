@@ -249,6 +249,25 @@ const EMAIL_CODE_MINUTES = 15;
 const MAX_EMAIL_CODE_TRIES = 5;
 const emailSentAt = new Map(); // "user:purpose" -> when a code last went out
 const isAdmin = (u) => permissionsForRole(u.role_id).includes('user.manage');
+
+/*
+ * Super admin - section 17 of Server/schema-extensions.sql. It holds every
+ * permission, so ordinary permission checks already let it in everywhere.
+ * What it adds is a ceiling for everyone else: only a super admin may touch a
+ * super admin account or hand the role out, so a breached administrator
+ * cannot lock the super admin out or make themselves one.
+ */
+const isSuperAdmin = (u) => roleById(u?.role_id)?.name === 'superadmin';
+const SUPER_ONLY = 'Only a super admin can change a super admin account.';
+const SUPER_GRANT = 'Only a super admin can give the super admin role.';
+
+/** Why `actor` may not act on `target` (or give it `roleId`), or null when they may. */
+function superAdminBlock(actor, target, roleId) {
+  if (isSuperAdmin(actor)) return null;
+  if (target && isSuperAdmin(target)) return SUPER_ONLY;
+  if (roleId != null && roleById(roleId)?.name === 'superadmin') return SUPER_GRANT;
+  return null;
+}
 const hashEmailCode = (code) => crypto.createHash('sha256').update(String(code || '').replace(/\D/g, '')).digest('hex');
 
 /** At most one code a minute per account and purpose, so nobody can flood an inbox. */
@@ -807,7 +826,7 @@ export function createApi() {
    */
   const adminOnly = (req, res, next) => {
     if (!req.user) return res.status(401).json({ error: 'Sign in required' });
-    if (roleById(req.user.role_id)?.name !== 'admin') {
+    if (!['admin', 'superadmin'].includes(roleById(req.user.role_id)?.name)) {
       return res.status(403).json({ error: 'Only an administrator can open the audit trail.' });
     }
     next();
@@ -2251,6 +2270,8 @@ export function createApi() {
     const dupe = await one('SELECT id FROM users WHERE LOWER(email) = ? LIMIT 1', [b.email.trim().toLowerCase()]);
     if (dupe) return res.status(409).json({ error: 'An account with that email address already exists.' });
     if (!roleById(b.role_id)) return res.status(400).json({ error: 'Choose a role.' });
+    const blocked = superAdminBlock(req.user, null, b.role_id);
+    if (blocked) return res.status(403).json({ error: blocked });
 
     const temporary = temporaryPassword();
     const row = await insert('users', {
@@ -2270,6 +2291,13 @@ export function createApi() {
     const before = await byId('users', req.params.id);
     if (!before) return res.status(404).json({ error: 'Not found' });
     const body = req.body || {};
+    const blocked = superAdminBlock(req.user, before, 'role_id' in body ? body.role_id : null);
+    if (blocked) return res.status(403).json({ error: blocked });
+    // The screen already greys these out for your own account; the API holds the same line.
+    if (before.id === req.user.id
+      && (('role_id' in body && Number(body.role_id) !== before.role_id) || ('is_active' in body && !body.is_active))) {
+      return res.status(400).json({ error: 'You cannot change your own role or deactivate yourself.' });
+    }
     const patch = {};
 
     if ('role_id' in body) {
@@ -2304,6 +2332,7 @@ export function createApi() {
   api.post('/users/:id/reset-password', need('user.manage'), route(async (req, res) => {
     const u = await byId('users', req.params.id);
     if (!u) return res.status(404).json({ error: 'Not found' });
+    if (superAdminBlock(req.user, u)) return res.status(403).json({ error: SUPER_ONLY });
     const temporary = temporaryPassword();
     // This used to flag the account and report a temporary password without
     // ever setting one - the old password went on working.
@@ -2340,6 +2369,7 @@ export function createApi() {
   api.post('/users/:id/reset-request/approve', need('user.manage'), route(async (req, res) => {
     const u = await byId('users', req.params.id);
     if (!u) return res.status(404).json({ error: 'Not found' });
+    if (superAdminBlock(req.user, u)) return res.status(403).json({ error: SUPER_ONLY });
     const row = await pendingResetRequest(u.id);
     if (!row) return res.status(404).json({ error: 'There is no reset request waiting for this account.' });
 
@@ -2366,6 +2396,7 @@ export function createApi() {
   api.post('/users/:id/reset-request/deny', need('user.manage'), route(async (req, res) => {
     const u = await byId('users', req.params.id);
     if (!u) return res.status(404).json({ error: 'Not found' });
+    if (superAdminBlock(req.user, u)) return res.status(403).json({ error: SUPER_ONLY });
     const row = await pendingResetRequest(u.id);
     if (!row) return res.status(404).json({ error: 'There is no reset request waiting for this account.' });
     await update('password_reset_requests', row.id, { status: 'denied', decided_by: req.user.id, decided_at: nowIso() });
@@ -2379,6 +2410,7 @@ export function createApi() {
   api.post('/users/:id/unlock', need('user.manage'), route(async (req, res) => {
     const u = await byId('users', req.params.id);
     if (!u) return res.status(404).json({ error: 'Not found' });
+    if (superAdminBlock(req.user, u)) return res.status(403).json({ error: SUPER_ONLY });
     const after = await update('users', u.id, { failed_login_count: 0, locked_until: null, updated_at: nowIso() });
     audit({ user_id: req.user.id, action: 'account_unlocked', entity_type: 'users', entity_id: u.id, old_values: { locked_until: u.locked_until }, new_values: { locked_until: null } });
     activity({ user_id: req.user.id, action: 'account_unlocked', detail: 'Unlocked ' + u.email });
@@ -2561,7 +2593,8 @@ export function createApi() {
             return 'You cannot change your own role or deactivate yourself.';
           }
           if (!roleById(candidate.role_id)) return 'The earlier role no longer exists.';
-          return null;
+          // Same ceiling as the Staff accounts screen: restoring is no way round it.
+          return superAdminBlock(user, current, candidate.role_id);
         },
         // Deactivated again: their open sessions end at once, as with the Deactivate button.
         afterWrite: async (before, after) => { if (Number(after.is_active) === 0) await revokeAllFor(after.id); },

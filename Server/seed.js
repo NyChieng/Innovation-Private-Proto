@@ -48,6 +48,7 @@ export function seed() {
     { id: 2, name: 'ranger', label: 'Ranger', description: 'Sets up the IoT sensors and responds to their alerts in the field. Does not register or edit plant records' },
     { id: 3, name: 'botanist', label: 'Botanist / Officer', description: 'Ground-truths plants: registers, edits and archives plant and species records, prints QR tags' },
     { id: 4, name: 'reviewer', label: 'Reviewer', description: 'Double-checks every plant a botanist registers, then approves it for publication or returns it with a note' },
+    { id: 5, name: 'superadmin', label: 'Super Admin', description: 'Holds every permission: can open, check and change anything, including administrator accounts and the audit trail' },
   ];
   roles.forEach((r) => db.roles.push({ ...r, created_at: nowIso() }));
 
@@ -95,6 +96,9 @@ export function seed() {
     'plant.history', 'species.manage', 'qr.print', 'qr.manage', 'report.view', 'report.resolve',
     'sensor.view']);
   grant(4, ['plant.view_all', 'plant.edit', 'plant.approve', 'plant.history']);
+  // The super admin holds every permission there is - section 17 of
+  // Server/schema-extensions.sql does the same for MySQL.
+  grant(5, PERMS.map(([code]) => code));
 
   /* ---------------------------------------------------------------- */
   /* Conservation statuses                                             */
@@ -122,6 +126,7 @@ export function seed() {
     // Appended rather than inserted, so the indexes used further down for the
     // audit history still point at the same people.
     { role: 4, full_name: 'Dr Mei Ling Wong', email: 'drmeilingwong@gmail.com', password: 'drmeilingwong123', title: 'Herbarium Curator' },
+    { role: 5, full_name: 'Super Admin', email: 'superadmin@gmail.com', password: 'superadmin123', title: 'Super Administrator' },
   ];
 
   USERS.forEach((u, i) => insert('users', {
