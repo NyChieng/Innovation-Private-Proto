@@ -107,7 +107,7 @@ async function call(method, p, { token, body } = {}) {
   try { json = await r.json(); } catch { /* not JSON */ }
   return { status: r.status, body: json };
 }
-const passwordFor = (email) => (email.endsWith('@florascan.test') ? email.split('@')[0] + '123' : null);
+const passwordFor = (email) => (email.endsWith('@gmail.com') ? email.split('@')[0] + '123' : null);
 async function login(email) {
   const r = await call('POST', '/auth/login', { body: { email, password: passwordFor(email) } });
   if (!r.body?.token) throw new Error(`Could not sign in as ${email}: ${r.status} ${JSON.stringify(r.body)}`);
@@ -330,7 +330,7 @@ section('4. Messages the server must refuse');
 }
 
 section('5. Alerts when a reading leaves the botanist\'s limits');
-const rangerT = await login('ahmad.rosli@florascan.test');
+const rangerT = await login('edmundguoqianyu@gmail.com');
 {
   await db.query("UPDATE sensor_alerts SET status = 'resolved', resolved_at = UTC_TIMESTAMP() WHERE device_id = ? AND status = 'open'", [deviceId]);
   const openAlerts = () => rows("SELECT * FROM sensor_alerts WHERE device_id = ? AND status = 'open' ORDER BY id", [deviceId]);
@@ -354,17 +354,23 @@ const rangerT = await login('ahmad.rosli@florascan.test');
     eq('...with the reading', Number(a.reading_value), 10);
     eq('...and the limit', Number(a.limit_value), Number(lim.soil_moisture_min));
     check('...linked to the reading that caused it', !!a.reading_id);
-    // Only roles that can resolve an alert (rangers) are told about it. The
-    // server writes them one by one after the alert row, so wait for them all.
-    const [rc] = await rows("SELECT COUNT(*) n FROM users u JOIN roles r ON r.id = u.role_id WHERE r.name = 'ranger' AND u.is_active = 1 AND u.deleted_at IS NULL");
+    // Only people whose role can resolve an alert are told about it: the
+    // rangers, and the super admin, who holds every permission. The server
+    // writes them one by one after the alert row, so wait for them all.
+    const [rc] = await rows(
+      `SELECT COUNT(*) n FROM users u
+         JOIN role_permissions rp ON rp.role_id = u.role_id JOIN permissions p ON p.id = rp.permission_id
+        WHERE p.code = 'alert.resolve' AND u.is_active = 1 AND u.deleted_at IS NULL`);
+    const [rr] = await rows("SELECT COUNT(*) n FROM users u JOIN roles r ON r.id = u.role_id WHERE r.name = 'ranger' AND u.is_active = 1 AND u.deleted_at IS NULL");
     const toldNow = () => rows(
       `SELECT r.name AS role FROM notifications n JOIN users u ON u.id = n.user_id JOIN roles r ON r.id = u.role_id
         WHERE n.type = 'sensor.alert' AND n.related_type = 'sensor_alert' AND n.related_id = ?`, [a.id]);
     let told = [];
     const end = Date.now() + 8000;
     while (Date.now() < end && (told = await toldNow()).length < Number(rc.n)) await sleep(50);
-    check('...every ranger gets a notification', told.length > 0 && told.every((x) => x.role === 'ranger'), JSON.stringify(told));
-    eq('...one per active ranger, and nobody else', told.length, Number(rc.n));
+    eq('...every ranger gets a notification', told.filter((x) => x.role === 'ranger').length, Number(rr.n));
+    check('...and nobody who cannot resolve alerts', told.every((x) => x.role === 'ranger' || x.role === 'superadmin'), JSON.stringify(told));
+    eq('...one per person who can resolve alerts', told.length, Number(rc.n));
   }
   await send({ soil_moisture_pct: 12 });
   await sleep(300);
@@ -398,7 +404,7 @@ const rangerT = await login('ahmad.rosli@florascan.test');
 section('6. Who may see sensors and resolve alerts');
 {
   const [botT, revT, adminT] = await Promise.all([
-    login('grace.lim@florascan.test'), login('aisyah.rahman@florascan.test'), login('farah.hamid@florascan.test'),
+    login('drsuehanlee@gmail.com'), login('drmeilingwong@gmail.com'), login('nengyichieng@gmail.com'),
   ]);
   const [open] = await rows("SELECT id FROM sensor_alerts WHERE device_id = ? AND status = 'open' ORDER BY id LIMIT 1", [deviceId]);
   eq('anonymous GET /sensors is refused', (await call('GET', '/sensors')).status, 401);

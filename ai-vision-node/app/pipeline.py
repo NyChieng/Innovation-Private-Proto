@@ -95,7 +95,11 @@ def load_config():
 
 
 def save_config(cfg):
-    CONFIG.write_text(json.dumps({k: cfg[k] for k in DEFAULTS if k in cfg}, indent=2))
+    """Writes the zone and only the settings that differ from DEFAULTS. Writing them all froze the
+    defaults of the day into config.json: a camera that saved its zone before touch_frames went
+    from 4 to 3 kept raising ALERT on 4 of 6 frames."""
+    keep = {k: cfg[k] for k in DEFAULTS if k in cfg and (k == "zone" or cfg[k] != DEFAULTS[k])}
+    CONFIG.write_text(json.dumps(keep, indent=2))
 
 
 def green_share(crop):

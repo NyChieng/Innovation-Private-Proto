@@ -106,6 +106,26 @@ export function LoadingBlock({ label }) {
 /* Modal                                                               */
 /* ------------------------------------------------------------------ */
 
+/*
+ * Page scrolling is locked while any dialog is open, counted rather than
+ * saved and restored per dialog. A confirm opened from inside another dialog
+ * (Deactivate, inside an account) closes in the same render as its parent,
+ * and React tears the parent down first: with save-and-restore, the confirm
+ * then put back the "hidden" it had seen, and the page stayed frozen.
+ */
+let scrollLocks = 0;
+let scrollBefore = '';
+function lockScroll() {
+  if (scrollLocks++ === 0) {
+    scrollBefore = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+  }
+}
+function unlockScroll() {
+  scrollLocks = Math.max(0, scrollLocks - 1);
+  if (scrollLocks === 0) document.body.style.overflow = scrollBefore;
+}
+
 export function Modal({ title, onClose, children, footer, wide }) {
   const ref = useRef(null);
   const closeRef = useRef(onClose);
@@ -135,14 +155,13 @@ export function Modal({ title, onClose, children, footer, wide }) {
       }
     };
     document.addEventListener('keydown', onKey);
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    lockScroll();
     // Move focus into the dialog so keyboard and screen-reader users land here.
     ref.current?.querySelector('input, textarea, select, button')?.focus();
     return () => {
       document.removeEventListener('keydown', onKey);
-      document.body.style.overflow = prev;
-      if (prevFocus && typeof prevFocus.focus === 'function') prevFocus.focus();
+      unlockScroll();
+      if (prevFocus && prevFocus.isConnected && typeof prevFocus.focus === 'function') prevFocus.focus();
     };
   }, []);
 

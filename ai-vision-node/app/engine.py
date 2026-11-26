@@ -14,7 +14,11 @@ Measured on the dev laptop (Ryzen AI 7, 4 threads), detector at 640x384: PyTorch
 ONNX Runtime 104 ms, OpenVINO 37 ms. On the RTX 5060 the per-layer launch cost of eager PyTorch
 (26 ms) dominates the GPU work, and a CUDA graph replays the whole network in 5 ms.
 """
+import importlib.util
 import json
+import re
+import shutil
+import subprocess
 from pathlib import Path
 
 import cv2
@@ -22,13 +26,49 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 EXPORT = ROOT / "models" / "export"
+GPU_SETUP = ("pip install torch torchvision --index-url https://download.pytorch.org/whl/cu130, "
+             "then pip install -r requirements-train.txt")
+
+
+def nvidia_gpu():
+    """Name of the first NVIDIA GPU as the driver reports it, or None (no GPU or no driver).
+    Asks nvidia-smi, so it works before PyTorch is installed."""
+    exe = shutil.which("nvidia-smi")
+    if not exe:
+        return None
+    try:
+        out = subprocess.run([exe, "-L"], capture_output=True, text=True, timeout=5).stdout
+    except (OSError, subprocess.SubprocessError):
+        return None
+    m = re.search(r"GPU \d+: (.+?) \(UUID", out)
+    return m.group(1).strip() if m else None
+
+
+def cuda_status():
+    """(ready, text). Ready: text is the GPU's name. Not ready: text says why, and how to fix it."""
+    gpu = nvidia_gpu()
+    try:
+        import torch
+    except ImportError:
+        if not gpu:
+            return False, "no NVIDIA GPU found, so the models run on the CPU"
+        return False, f"{gpu} found, but PyTorch is not installed in this Python environment. To use it: {GPU_SETUP}"
+    if not torch.cuda.is_available():
+        if torch.version.cuda is None:
+            return False, f"PyTorch {torch.__version__} is the CPU-only build. To use the GPU: {GPU_SETUP}"
+        return False, (f"PyTorch {torch.__version__} (CUDA {torch.version.cuda}) cannot reach "
+                       f"{gpu or 'an NVIDIA GPU'}: update the NVIDIA driver, or install a build for this GPU")
+    if importlib.util.find_spec("ultralytics") is None:
+        return False, "PyTorch sees the GPU, but ultralytics is not installed: pip install -r requirements-train.txt"
+    return True, torch.cuda.get_device_name(0)
 
 
 def available_backends():
     out = []
     try:
         import torch
-        if torch.cuda.is_available():
+        # the cuda backend loads the .pt weights through ultralytics (Net._init_cuda)
+        if torch.cuda.is_available() and importlib.util.find_spec("ultralytics") is not None:
             out.append("cuda")
     except ImportError:
         pass

@@ -43,8 +43,18 @@ export function TwoFactorStep({ ticket, email, onSignedIn, onBack }) {
       return;
     } catch (err) {
       setCode('');
-      if (err.status === 423) {
-        setError(t('Too many wrong attempts. This account is locked for {minutes} min. Try again later, or ask an administrator to unlock it.', { minutes: err.body?.minutes ?? 15 }));
+      const b = err.body || {};
+      // Name the lock that actually closed, or is about to: account, network or device.
+      if (err.status === 423 && b.scope === 'ip') {
+        setError(t('Too many failed sign-ins from this network. Sign-in from here is paused for {minutes} min.', { minutes: b.minutes ?? 15 }));
+      } else if (err.status === 423 && b.scope === 'device') {
+        setError(t('Too many failed sign-ins from this device. Sign-in from it is paused for {minutes} min.', { minutes: b.minutes ?? 15 }));
+      } else if (err.status === 423) {
+        setError(t('Too many wrong attempts. This account is locked for {minutes} min. Try again later, or ask an administrator to unlock it.', { minutes: b.minutes ?? 15 }));
+      } else if (b.attempts_left && b.attempts_scope === 'ip') {
+        setError(t('That code is not right. {count} attempts left before sign-in from this network is paused.', { count: b.attempts_left }));
+      } else if (b.attempts_left && b.attempts_scope === 'device') {
+        setError(t('That code is not right. {count} attempts left before sign-in from this device is paused.', { count: b.attempts_left }));
       } else if (err.body?.attempts_left) {
         setError(t('That code is not right. {count} attempts left before the account is locked.', { count: err.body.attempts_left }));
       } else {

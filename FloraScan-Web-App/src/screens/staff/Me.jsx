@@ -13,7 +13,7 @@ import { LANGUAGES, t } from '../../lib/i18n.js';
 export default function Me() {
   const { user, can, counts, signOut, theme, setTheme, viewPref, setView, lang, setLang } = useApp();
   const navigate = useNavigate();
-  const groups = staffNav(can, counts);
+  const groups = staffNav(can, counts, user);
 
   return (
     <div className="page" style={{ paddingTop: 18 }}>

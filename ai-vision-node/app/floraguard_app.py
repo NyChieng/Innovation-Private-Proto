@@ -4,6 +4,7 @@
 
 1. Plant zone tab (required): grab a frame, click 6-10 points around the plant, save.
    Live does not start without one (require_zone in app/config.json; false = protect detected plants).
+   "Clear saved zone" removes it in one click, also from a running Live view.
 2. Live tab: pick the webcam (or a video file), Start. People go SAFE -> WARNING (close to the plant)
    -> ALERT (touching it); animals are labelled only. Alerts appear on the right with snapshots.
 3. Record touch / no_touch hand crops while you demo in front of your own camera, then rebuild and
@@ -19,15 +20,15 @@ import gradio as gr
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from engine import available_backends  # noqa: E402
+from engine import available_backends, cuda_status  # noqa: E402
 from notifier import summary as alerts_summary  # noqa: E402
 from pipeline import FloraGuard, load_config, model_info, save_config  # noqa: E402
+import theme  # noqa: E402
 
 _guard = None
 _stop = False
 _record = "Off"
 USER_DATA = Path(__file__).resolve().parents[1] / "data" / "touch_user"
-STAGE_ICON = {"SAFE": "🟢 SAFE", "WARNING": "🟠 WARNING", "ALERT": "🔴 ALERT"}
 
 
 def guard(backend="auto", threads=4):
@@ -141,23 +142,51 @@ def undo_point(frame, pts):
 
 
 def clear_points(frame):
+    """Clears the points being drawn; the saved zone stays until Save zone or Clear saved zone."""
     return [], draw_zone(frame, [])
 
 
-def save_zone(frame, pts):
-    if 0 < len(pts) < 3 or (pts and frame is None):
-        raise gr.Error("Grab a frame and click at least 3 points around the plant.")
+def zone_status(cfg):
+    n = len(cfg.get("zone") or [])
+    if n >= 3:
+        return f"**Saved zone:** {n} points. Live protects the plant inside it."
+    if cfg["require_zone"]:
+        return "**Saved zone:** none. Draw one and **Save zone** before Live."
+    return "**Saved zone:** none. Live protects every plant the detector finds."
+
+
+def write_zone(zone):
     cfg = load_config()
-    if pts:
-        h, w = frame.shape[:2]
-        cfg["zone"] = [[round(x / w, 4), round(y / h, 4)] for x, y in pts]
-    else:
-        cfg["zone"] = []
+    cfg["zone"] = zone
     save_config(cfg)
-    if _guard is not None:
-        _guard.cfg["zone"] = cfg["zone"]
-    return f"Saved plant zone with {len(pts)} points." if pts else ("Zone cleared. Live needs a zone; set require_zone to false in app/config.json "
-                                                                "to protect every detected plant instead.")
+    if _guard is not None:  # a running Live view reads the zone every frame
+        _guard.cfg["zone"] = zone
+    return cfg
+
+
+def save_zone(frame, pts):
+    if len(pts) < 3 or frame is None:
+        raise gr.Error("Grab a frame and click at least 3 points around the plant. "
+                       "To remove the saved zone, use Clear saved zone.")
+    h, w = frame.shape[:2]
+    cfg = write_zone([[round(x / w, 4), round(y / h, 4)] for x, y in pts])
+    return f"Saved plant zone with {len(pts)} points.", zone_status(cfg)
+
+
+def clear_saved_zone(frame):
+    cfg = write_zone([])
+    msg = "Saved zone removed. "
+    msg += ("A running Live view now protects every detected plant; Start needs a new zone."
+            if cfg["require_zone"] else "Live now protects every plant the detector finds.")
+    return [], draw_zone(frame, []), msg, zone_status(cfg)
+
+
+def backend_note():
+    ready, text = cuda_status()
+    have = ", ".join(available_backends()) or "none"
+    if ready:
+        return f"Backends here: auto, {have}. **cuda** runs on the {text}; **auto** picks it."
+    return f"Backends here: auto, {have}. **cuda is not in the list:** {text}."
 
 
 # ---- live ---------------------------------------------------------------------------------------
@@ -173,7 +202,7 @@ def run_name(entry):
 def status_md(info, fps, g, saved, cam_fps=None, cpu=None):
     cam = f" · camera {cam_fps:.0f} fps" if cam_fps else ""
     spec = g.models.spec
-    return (f"### {STAGE_ICON[info['stage']]}\n"
+    return (f"{theme.stage_html(info['stage'])}\n\n"
             f"| | |\n|---|---|\n"
             f"| Processed FPS / frame time | {fps:.1f} / {info.get('total_ms', 0):.0f} ms ({info['profile']}){cam} |\n"
             f"| Last model frame: detect / pose / touch | {info.get('det_ms', 0):.0f} / {info.get('pose_ms', 0):.0f} / "
@@ -220,6 +249,7 @@ def run_live(kind, cam_index, video, conf_person, conf_animal, warn_s, touch_con
         cap = Camera(cap)  # video files stay sequential so no frame is skipped
     snaps, t_last, fps = [], time.perf_counter(), 0.0
     banner, saved, session, frame_i = "", 0, time.strftime("%Y%m%d%H%M%S"), 0
+    banner_tier = "WARNING"  # a WARNING banner never replaces an ALERT one
     # only the frame goes out every time: re-encoding the gallery and table each frame cost up to 270 ms
     t_status, sent_banner, events_dirty = 0.0, None, True
     cpu_t, cpu_wall, cpu = time.process_time(), time.perf_counter(), None
@@ -245,10 +275,9 @@ def run_live(kind, cam_index, video, conf_person, conf_animal, warn_s, touch_con
                 if e.snapshot:
                     snaps.insert(0, (e.snapshot, f"{e.tier} {time.strftime('%H:%M:%S', time.localtime(e.t))}"))
                 stamp = time.strftime("%H:%M:%S", time.localtime(e.t))
-                if e.tier in ("ALERT", "AFTER-HOURS"):
-                    banner = f"## 🔴 {e.tier} {stamp}: person #{e.track_id} {e.detail}"
-                elif e.tier == "WARNING" and not banner.startswith("## 🔴"):
-                    banner = f"## 🟠 WARNING {stamp}: person #{e.track_id} {e.detail}"
+                if e.tier in ("ALERT", "AFTER-HOURS") or (e.tier == "WARNING" and banner_tier == "WARNING"):
+                    banner_tier = e.tier
+                    banner = theme.banner_html(e.tier, f"{stamp} · person #{e.track_id} {e.detail}")
             status = gr.skip()
             if now - t_status > 0.25 or new:
                 if now - cpu_wall > 2:  # this process's CPU use (models, drawing, encoding), in % of one core
@@ -289,13 +318,17 @@ def build():
     m = model_info()
     if not m:
         raise SystemExit("No exported models: run  python scripts/export_models.py")
+    models = (f"Detector {m['det']['weights']} · Pose {m['pose']['weights']} · "
+              f"Touch {m['touch']['weights'] if m.get('touch') else 'none yet (wrist + leaf motion rule)'}")
+
+    def header():  # re-read after Save zone / Clear saved zone, so the zone chip is never stale
+        c = load_config()
+        alerts = alerts_summary(c).replace("`", "")
+        return theme.header_html(alerts, alerts.startswith("on"),
+                                 c["require_zone"] and len(c.get("zone") or []) < 3, models)
+
     with gr.Blocks(title="FloraGuard") as demo:
-        gr.Markdown("# FloraGuard: live plant-protection detection\n"
-                    f"Detector: `{m['det']['weights']}` · Pose: `{m['pose']['weights']}` · "
-                    f"Touch: `{m['touch']['weights'] if m.get('touch') else 'none yet (wrist + leaf motion rule)'}`\n\n"
-                    f"**Alerts to rangers:** {alerts_summary(cfg)}"
-                    + ("" if len(cfg.get("zone") or []) >= 3 or not cfg["require_zone"]
-                       else " · **Plant zone:** draw it once in the Plant zone tab before Live (it is remembered)"))
+        hdr = gr.HTML(header())
         with gr.Row():
             kind = gr.Radio(["Webcam", "Video file"], value="Webcam", label="Source")
             cam = gr.Number(value=0, precision=0, label="Webcam index")
@@ -312,7 +345,7 @@ def build():
                             stop = gr.Button("Stop", variant="stop")
                             clear = gr.Button("Clear alerts")
                     with gr.Column(scale=2):
-                        status = gr.Markdown("Press **Start**.")
+                        status = gr.Markdown("Press **Start**.", elem_id="fg-status")
                         log = gr.Dataframe(headers=["Time", "Stage", "ID", "Detail"], label="Warnings and alerts",
                                            interactive=False, wrap=True, max_height=260)
                         gallery = gr.Gallery(label="Snapshots", columns=3, height=220)
@@ -326,7 +359,8 @@ def build():
                         ah = gr.Checkbox(cfg["after_hours"], label=f"After-hours alert ({cfg['open_hours']})")
                 with gr.Accordion("Performance (applies on Start)", open=False):
                     gr.Markdown("**openvino** runs on the CPU alone, as on a device without a GPU; **cuda** uses "
-                                "the NVIDIA GPU. Fewer threads and a lower FPS cap leave more of a small device free.")
+                                "the NVIDIA GPU. Fewer threads and a lower FPS cap leave more of a small device free.\n\n"
+                                + backend_note())
                     with gr.Row():
                         be = gr.Dropdown(["auto"] + available_backends(), value=cfg["backend"], label="Backend")
                         th = gr.Slider(1, 8, cfg["threads"], step=1, label="CPU threads for the models")
@@ -340,14 +374,17 @@ def build():
                     rec_msg = gr.Markdown()
             with gr.Tab("Plant zone"):
                 gr.Markdown("Grab a frame, then click 6-10 points around the plant's outline and **Save zone**. "
-                            "The orange buffer zone is drawn automatically around it. Live needs a saved zone.")
+                            "The orange buffer zone is drawn automatically around it. Live needs a saved zone. "
+                            "**Clear points** starts the drawing again; **Clear saved zone** removes the saved one.")
+                zone_saved = gr.Markdown(zone_status(cfg))
                 frame_state = gr.State(None)
                 pts_state = gr.State([])
                 with gr.Row():
                     grab = gr.Button("Grab frame", variant="primary")
                     undo = gr.Button("Undo point")
-                    clr = gr.Button("Clear")
+                    clr = gr.Button("Clear points")
                     save = gr.Button("Save zone", variant="primary")
+                    clr_saved = gr.Button("Clear saved zone", variant="stop")
                 zone_img = gr.Image(label="Click to add points", type="numpy", interactive=False)
                 zone_msg = gr.Markdown()
 
@@ -360,10 +397,13 @@ def build():
         zone_img.select(add_point, [frame_state, pts_state], [pts_state, zone_img])
         undo.click(undo_point, [frame_state, pts_state], [pts_state, zone_img])
         clr.click(clear_points, [frame_state], [pts_state, zone_img])
-        save.click(save_zone, [frame_state, pts_state], [zone_msg])
+        save.click(save_zone, [frame_state, pts_state], [zone_msg, zone_saved]).success(header, None, hdr)
+        clr_saved.click(clear_saved_zone, [frame_state], [pts_state, zone_img, zone_msg, zone_saved]).then(header, None, hdr)
+        demo.load(header, None, hdr)  # a page opened later shows the zone and alert state of now
     return demo
 
 
 if __name__ == "__main__":
     print(f"[alerts] {alerts_summary(load_config())}")
-    build().queue().launch(server_name="127.0.0.1", inbrowser=True)
+    print(f"[backend] {backend_note().replace('**', '')}")
+    build().queue().launch(server_name="127.0.0.1", inbrowser=True, **theme.LAUNCH)
