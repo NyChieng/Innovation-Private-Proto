@@ -83,10 +83,10 @@ const eq = (label, a, b) => check(label, a === b, `expected ${JSON.stringify(b)}
 /* ------------------------------------------------------------------ */
 
 const ACCOUNTS = {
-  admin: 'farah.hamid@florascan.test',
-  botanist: 'grace.lim@florascan.test',
-  reviewer: 'aisyah.rahman@florascan.test',
-  ranger: 'ahmad.rosli@florascan.test',
+  admin: 'nengyichieng@gmail.com',
+  botanist: 'drsuehanlee@gmail.com',
+  reviewer: 'drmeilingwong@gmail.com',
+  ranger: 'edmundguoqianyu@gmail.com',
 };
 
 // Seeded accounts use the email's local part + 123 (Server/seed.js).
@@ -376,7 +376,8 @@ section('5. Staff routes under every role');
         .catch(() => { /* still empty: the check below reports it */ });
       const info = await page.evaluate(() => ({
         empty: document.getElementById('root').children.length === 0,
-        denied: /cannot open this page/i.test(document.body.innerText),
+        // The audit trail is administrator-only by role, and says so in its own words.
+        denied: /cannot open this page|only an administrator can open this page/i.test(document.body.innerText),
       }));
       if (info.denied) blocked++;
       check(`[${role}] ${r}`, !info.empty, 'rendered nothing');
@@ -1046,6 +1047,9 @@ section('18. Threatened locations are hidden in the interface');
   if (target) {
     const page = await newPage();
     await go(page, '/plant/' + target.id);
+    // The plant screen loads lazily; on a slow runner the text can arrive after
+    // the network goes quiet. Wait for it (the checks below still fail if it never comes).
+    await page.waitForFunction(() => /withheld/i.test(document.body.innerText), { timeout: 8000 }).catch(() => {});
     const text = await bodyText(page);
 
     check('the page says the location is withheld', /withheld/i.test(text), text.slice(0, 240));
@@ -1296,6 +1300,7 @@ section('25. App icons');
 
   const page = await newPage();
   await go(page, '/');
+  await page.waitForSelector('.brand-mark svg', { timeout: 8000 }).catch(() => {});
   check('the header shows the brand mark',
     await page.evaluate(() => !!document.querySelector('.brand-mark svg')));
   await page.close();
@@ -1599,7 +1604,7 @@ section('28c. A reviewer corrects a record without returning it (#6)');
     headers: { Authorization: 'Bearer ' + botToken },
   })).json();
   const rev = hist.revisions.find((r) => r.field_name === 'site_name');
-  check('the history records it against the reviewer', rev?.changed_by_name === 'Dr Aisyah Rahman', rev?.changed_by_name);
+  check('the history records it against the reviewer', rev?.changed_by_name === 'Dr Mei Ling Wong', rev?.changed_by_name);
   eq('...with the review reason', rev?.change_reason, 'Corrected at review');
   check('...and the record is still waiting for a decision',
     (await bodyText(page)).includes(plant.plant_code));
