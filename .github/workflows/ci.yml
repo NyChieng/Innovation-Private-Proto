@@ -16,14 +16,23 @@
 name: CI
 
 on:
+  # Every branch, whatever it is called. Before, only fix/** and feature/** were
+  # checked on push, so a branch such as fix-cyber (or premerge/*) got no CI at
+  # all until someone opened a pull request.
   push:
-    branches: [main, demo, 'fix/**', 'feature/**']
+    branches: ['**']
   pull_request:
     branches: [main, demo]
   workflow_dispatch:
 
+# One run per branch at a time. A push to a branch with an open pull request
+# fires both a push and a pull_request run for the same commit; keyed on the
+# branch name (head_ref is only set for pull requests), they share this group,
+# so the later one replaces the earlier instead of both spending runner minutes
+# (this repository is private, so minutes are limited). A newer push still
+# cancels an older run of the same branch, as before.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 permissions:
