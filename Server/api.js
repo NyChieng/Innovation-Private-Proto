@@ -2437,6 +2437,8 @@ export function createApi() {
                 d.soil_moisture_min, d.soil_moisture_max,
                 d.temperature_min, d.temperature_max,
                 d.humidity_min, d.humidity_max,
+                d.distance_min, d.distance_max,
+                d.sound_min, d.sound_max,
                 d.last_seen_at,
                 (d.last_seen_at IS NOT NULL
                   AND d.last_seen_at >= UTC_TIMESTAMP() - INTERVAL ${offlineMinutes} MINUTE) AS online,
@@ -2516,6 +2518,8 @@ export function createApi() {
           soil_moisture: { min: num(d.soil_moisture_min), max: num(d.soil_moisture_max) },
           temperature: { min: num(d.temperature_min), max: num(d.temperature_max) },
           humidity: { min: num(d.humidity_min), max: num(d.humidity_max) },
+          distance: { min: num(d.distance_min), max: num(d.distance_max) },
+          sound: { min: num(d.sound_min), max: num(d.sound_max) },
         },
         latest: latestByDevice.get(d.id) || null,
         open_alerts: shapedAlerts.filter((a) => a.device_id === d.id && a.status === 'open').length,

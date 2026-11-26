@@ -485,6 +485,8 @@ export function seed() {
     soil_moisture_min: 30, soil_moisture_max: 80,
     temperature_min: 18, temperature_max: 35,
     humidity_min: 40, humidity_max: 90,
+    distance_min: 10, distance_max: 500,  // cm: closer than 10 cm = something at the plant; 500 = never (the HC-SR04 tops out near 430)
+    sound_min: 0, sound_max: 60,          // % of the mic's swing, the sketch's "loud noise" level
     last_seen_at: null, created_by: null, updated_at: nowIso(), deleted_at: null,
   });
 

@@ -55,9 +55,12 @@ enum DhtResult { DHT_OK, DHT_NO_RESPONSE, DHT_BITS_TIMEOUT, DHT_BAD_CHECKSUM };
 #error "Copy secrets.example.h to secrets.h in this folder and fill it in before uploading."
 #endif
 
-// How often a full reading is sent. 20 s suits a demo; use 5UL * 60 * 1000
-// (every 5 minutes) for a long trial.
-const unsigned long REPORT_INTERVAL_MS = 20UL * 1000;
+// How often a full reading is sent: once a minute. Use 20UL * 1000 for a
+// quick demo, or 5UL * 60 * 1000 (every 5 minutes) for a long trial.
+// Once NTP has set the clock, readings line up with it: every minute on the
+// :00 second (12:12:00, 12:13:00...), every 5 minutes at :00, :05, :10...
+// Pick an interval that divides evenly into an hour (20 s, 1, 2, 5, 10 min).
+const unsigned long REPORT_INTERVAL_MS = 60UL * 1000;
 
 // ===== 2. MQTT and the FloraScan backend ===============================
 const char *MQTT_HOST = "l11c8d1d.ala.asia-southeast1.emqxsl.com";
@@ -123,10 +126,20 @@ const int PINGS_PER_READING = 3;
 const float CM_PER_US = 0.0343f;              // speed of sound at about 20 C
 
 // Safe ranges for the Serial Monitor summary only. The backend does the real
-// check against the limits stored for the sensor in sensor_devices.
+// check against the limits stored for the sensor in sensor_devices, so keep
+// these the same as that row (see alert-test-limits.sql).
+// TEST_LIMITS 1 = tight ranges that normal room conditions break, for testing
+// alerts. Set it back to 0 (and restore the database limits) after testing.
+#define TEST_LIMITS 1
+#if TEST_LIMITS
+const float SOIL_MIN = 95, SOIL_MAX = 99;  // %   (any normal soil reads too dry)
+const float TEMP_MIN = 10, TEMP_MAX = 20;  // C   (a normal room reads too hot)
+const float HUM_MIN = 10, HUM_MAX = 30;    // %RH (normal air reads too humid)
+#else
 const float SOIL_MIN = 30, SOIL_MAX = 80;  // %
 const float TEMP_MIN = 18, TEMP_MAX = 35;  // degrees C
 const float HUM_MIN = 40, HUM_MAX = 90;    // % RH
+#endif
 
 // The HC-SR501 gives false triggers for up to a minute after power-up,
 // so motion isn't counted until then.
@@ -153,6 +166,7 @@ bool raining = false;
 int loudestP2P = 0;                 // biggest sound swing since the last reading
 unsigned long lastLoudEventMs = 0;
 unsigned long lastReportMs = 0;
+time_t lastReportSlot = 0;          // which clock-aligned interval the last reading went out in
 uint32_t readingNumber = 0;
 
 String hex32(uint32_t value) {
@@ -624,7 +638,18 @@ void loop() {
   }
 
   // ---- Full reading every REPORT_INTERVAL_MS (and once at start-up) ----
-  if (readingNumber == 0 || millis() - lastReportMs >= REPORT_INTERVAL_MS) {
+  // With the clock set by NTP, send when the clock enters a new interval, so a
+  // 60 s interval fires at hh:mm:00. Until then, fall back to the millis() timer.
+  bool due;
+  time_t nowS = time(nullptr);
+  if (nowS > 1700000000) {  // clock is set (any real date after Nov 2023)
+    time_t slot = nowS / (time_t)(REPORT_INTERVAL_MS / 1000);
+    due = (slot != lastReportSlot);
+    if (due) lastReportSlot = slot;
+  } else {
+    due = (readingNumber == 0 || millis() - lastReportMs >= REPORT_INTERVAL_MS);
+  }
+  if (due) {
     lastReportMs = millis();
     sendReading();
   }
