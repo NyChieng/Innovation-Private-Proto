@@ -1090,7 +1090,11 @@ section('19. Photographs and their credits');
     const credited = detail.plant.photos.find((ph) => ph.credit);
 
     await go(page, '/plant/' + withPhoto.id);
-    await sleep(700);
+    // Wait for the credit itself, not a fixed pause: on a busy machine the
+    // gallery rendered after 700 ms and all three checks below failed although
+    // the page was right (local full run, 25 Nov 2026).
+    const want = credited?.credit?.slice(0, 40);
+    if (want) await waitFor(async () => (await bodyText(page)).includes(want));
     const text = await bodyText(page);
 
     // Compare against what the API actually returned. Licences vary - a CC0
