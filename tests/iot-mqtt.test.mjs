@@ -354,17 +354,23 @@ const rangerT = await login('edmundguoqianyu@gmail.com');
     eq('...with the reading', Number(a.reading_value), 10);
     eq('...and the limit', Number(a.limit_value), Number(lim.soil_moisture_min));
     check('...linked to the reading that caused it', !!a.reading_id);
-    // Only roles that can resolve an alert (rangers) are told about it. The
-    // server writes them one by one after the alert row, so wait for them all.
-    const [rc] = await rows("SELECT COUNT(*) n FROM users u JOIN roles r ON r.id = u.role_id WHERE r.name = 'ranger' AND u.is_active = 1 AND u.deleted_at IS NULL");
+    // Only people whose role can resolve an alert are told about it: the
+    // rangers, and the super admin, who holds every permission. The server
+    // writes them one by one after the alert row, so wait for them all.
+    const [rc] = await rows(
+      `SELECT COUNT(*) n FROM users u
+         JOIN role_permissions rp ON rp.role_id = u.role_id JOIN permissions p ON p.id = rp.permission_id
+        WHERE p.code = 'alert.resolve' AND u.is_active = 1 AND u.deleted_at IS NULL`);
+    const [rr] = await rows("SELECT COUNT(*) n FROM users u JOIN roles r ON r.id = u.role_id WHERE r.name = 'ranger' AND u.is_active = 1 AND u.deleted_at IS NULL");
     const toldNow = () => rows(
       `SELECT r.name AS role FROM notifications n JOIN users u ON u.id = n.user_id JOIN roles r ON r.id = u.role_id
         WHERE n.type = 'sensor.alert' AND n.related_type = 'sensor_alert' AND n.related_id = ?`, [a.id]);
     let told = [];
     const end = Date.now() + 8000;
     while (Date.now() < end && (told = await toldNow()).length < Number(rc.n)) await sleep(50);
-    check('...every ranger gets a notification', told.length > 0 && told.every((x) => x.role === 'ranger'), JSON.stringify(told));
-    eq('...one per active ranger, and nobody else', told.length, Number(rc.n));
+    eq('...every ranger gets a notification', told.filter((x) => x.role === 'ranger').length, Number(rr.n));
+    check('...and nobody who cannot resolve alerts', told.every((x) => x.role === 'ranger' || x.role === 'superadmin'), JSON.stringify(told));
+    eq('...one per person who can resolve alerts', told.length, Number(rc.n));
   }
   await send({ soil_moisture_pct: 12 });
   await sleep(300);
