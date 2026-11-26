@@ -60,15 +60,23 @@ flowchart LR
 ```
 
 Visitors can browse tagged plants and species in **Explore**. Staff sign in at
-`/login`. These fictional accounts are seeded for the local demo. The password
+`/login`. These staff accounts are seeded for the local demo. The password
 is the part of the email before `@`, followed by `123`.
 
 | Role | Demo email | Try this |
 | --- | --- | --- |
-| Botanist | `grace.lim@florascan.test` | Register plants (and correct returned ones), print QR tags |
-| Senior Botanist | `aisyah.rahman@florascan.test` | Review, correct, approve or return records; archive |
-| Ranger | `ahmad.rosli@florascan.test` | View and resolve alerts |
-| Administrator | `farah.hamid@florascan.test` | Manage staff and audit logs |
+| Botanist | `drsuehanlee@gmail.com` | Register plants (and correct returned ones), print QR tags |
+| Senior Botanist | `drmeilingwong@gmail.com` | Review, correct, approve or return records; archive |
+| Ranger | `edmundguoqianyu@gmail.com` | View and resolve alerts |
+| Administrator | `nengyichieng@gmail.com` | Manage staff and audit logs |
+| Super Admin | `superadmin@gmail.com` | Open everything, including administrator accounts |
+
+Only a super admin can reset, change or deactivate a super admin, or give
+someone the role, so a breached administrator cannot lock it out. Any
+administrator can still unlock one after too many wrong passwords. To
+create or promote one on an existing database, run this on the server:
+`npm run superadmin -- <email> ["Full Name"]`. Run `npm run db:setup` first
+if the database predates the role.
 
 The demo uses real species and credited reference photos with fictional
 individual plant records. The API withholds sensitive locations from visitors

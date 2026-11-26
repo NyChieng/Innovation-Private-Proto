@@ -751,6 +751,7 @@
 .avatar-botanist{ background: var(--accent-soft);color: var(--accent-text);border-color: var(--accent-border); }
 .avatar-ranger  { background: var(--warn-bg);    color: var(--warn-fg);    border-color: var(--warn-br); }
 .avatar-senior_botanist{ background: var(--surface-3);  color: var(--text);       border-color: var(--border-strong, var(--border)); }
+.avatar-superadmin { background: var(--danger-bg); color: var(--danger-fg); border-color: var(--danger-br); }
 
 /* ==================================================================
    List picker rows (species and tag pickers)

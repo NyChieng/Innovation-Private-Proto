@@ -103,18 +103,18 @@ const patch = (p, body, t) => call('PATCH', p, { token: t, body });
 
 // Seeded accounts use the email's local part + 123 (Server/seed.js); an
 // account an admin creates or resets uses the temporary password it was issued.
-const passwordFor = (email) => (email.endsWith('@florascan.test') ? email.split('@')[0] + '123' : TEMP.get(email.toLowerCase()));
+const passwordFor = (email) => (email.endsWith('@gmail.com') ? email.split('@')[0] + '123' : TEMP.get(email.toLowerCase()));
 
 async function login(email, password = passwordFor(email)) {
   const r = await post('/auth/login', { email, password });
   return r.body?.token;
 }
 
-const ADMIN = 'farah.hamid@florascan.test';
-const BOTANIST = 'grace.lim@florascan.test';
-const BOTANIST_2 = 'daniel.jugah@florascan.test';
-const RANGER = 'ahmad.rosli@florascan.test';
-const REVIEWER = 'aisyah.rahman@florascan.test';
+const ADMIN = 'nengyichieng@gmail.com';
+const BOTANIST = 'drsuehanlee@gmail.com';
+const BOTANIST_2 = 'hansjiasynyee@gmail.com';
+const RANGER = 'edmundguoqianyu@gmail.com';
+const REVIEWER = 'drmeilingwong@gmail.com';
 
 /* ================================================================== */
 
@@ -278,7 +278,7 @@ section('5b. Access control - the senior botanist reviews records, and nothing e
   const queue = await get('/submissions', revT);
   eq('the reviewer reads the whole queue', queue.status, 200);
   check('...which holds the seeded botanist submissions', queue.body.results.length >= 6, 'got ' + queue.body.results.length);
-  check('...all from botanists', queue.body.results.every((x) => ['Dr Grace Lim', 'Daniel Jugah'].includes(x.submitted_by_name)));
+  check('...all from botanists', queue.body.results.every((x) => ['Dr Sue Han Lee', 'Hans Jia Syn Yee'].includes(x.submitted_by_name)));
   const notes = (await get('/notifications', revT)).body.results;
   check('the reviewer was notified of the waiting submissions', notes.some((n) => n.type === 'submission.new'));
 }
@@ -290,7 +290,7 @@ section('6. Data scoping');
   const botList = (await get('/plants', botT)).body.results;
   const mine = (await get('/plants?mine=1', botT)).body.results;
   check('a botanist sees only their own records', botList.length > 0 && botList.length === mine.length
-    && botList.every((p) => p.registered_by_name === 'Dr Grace Lim'), `${botList.length} listed, ${mine.length} own`);
+    && botList.every((p) => p.registered_by_name === 'Dr Sue Han Lee'), `${botList.length} listed, ${mine.length} own`);
   check('a senior botanist sees the whole register', revList.length > botList.length,
     `senior ${revList.length} vs botanist ${botList.length}`);
 }
@@ -474,7 +474,7 @@ section('11. The verification workflow end to end');
   eq('approval succeeds', approved.status, 200);
   eq('...the status becomes approved', approved.body.plant.status, 'approved');
   check('...a QR tag is issued automatically', !!approved.body.plant.qr_token);
-  check('...the verifier is recorded', approved.body.plant.verified_by_name === 'Dr Aisyah Rahman',
+  check('...the verifier is recorded', approved.body.plant.verified_by_name === 'Dr Mei Ling Wong',
     approved.body.plant.verified_by_name);
 
   const again = await post(`/plants/${id}/approve`, {}, revT);
@@ -651,7 +651,7 @@ section('16. Audit completeness');
   check('the field change was recorded', !!rev);
   eq('...with the old value', rev?.old_value, 'Audit test plot');
   eq('...with the new value', rev?.new_value, 'Audit test plot (renamed)');
-  check('...with the actor', rev?.changed_by_name === 'Dr Aisyah Rahman', rev?.changed_by_name);
+  check('...with the actor', rev?.changed_by_name === 'Dr Mei Ling Wong', rev?.changed_by_name);
   check('...with a timestamp', !!rev?.created_at);
 
   const audits = await get('/audit', adminT);
@@ -1001,7 +1001,7 @@ section('18. QR codes');
   const sheetAll = (await get('/plants?status=approved', revT)).body.results;
   eq('the tag sheet lists every published plant for a botanist', sheetBot.length, sheetAll.length);
   const othersPending = (await get('/plants?status=pending', revT)).body.results
-    .find((p) => p.registered_by_name !== 'Dr Grace Lim');
+    .find((p) => p.registered_by_name !== 'Dr Sue Han Lee');
   if (othersPending) {
     eq("...but a botanist cannot fetch the tag of someone else's unpublished record",
       (await get(`/qr/${othersPending.id}`, botT)).status, 403);
@@ -1631,6 +1631,43 @@ section('33. Locking an account after five wrong passwords');
   const audits = (await get('/audit', adminT)).body.results;
   check('the lock reached the audit trail',
     audits.some((a) => a.action === 'account_locked' && a.entity_id === id));
+
+  // The warning names the lock that is nearest.
+  eq('a wrong password says the account lock is the nearest', (await wrong()).body.attempts_scope, 'account');
+
+  // A lock stops new sign-ins but does not throw out a session already open -
+  // otherwise anyone who knows an email address could sign its owner out at will.
+  await post(`/users/${id}/unlock`, {}, adminT);
+  const open = (await post('/auth/login', { email, password: passwordFor(email) })).body.token;
+  for (let i = 0; i < 5; i++) await wrong();
+  eq('locking the account...', (await wrong()).status, 423);
+  eq('...leaves a session already open signed in', (await get('/auth/me', open)).body?.user?.email, email);
+
+  // Switching account locking off releases a locked account, as switching off
+  // IP or device locking already did for theirs.
+  await patch('/settings/lockout_account', { value: false }, adminT);
+  eq('with account locking off, a locked account can sign in', (await post('/auth/login', { email, password: passwordFor(email) })).status, 200);
+  await patch('/settings/lockout_account', { value: true }, adminT);
+  await post(`/users/${id}/unlock`, {}, adminT);
+
+  // Device locking counts a client that sends no device id too (this suite
+  // sends none); before, such a script was never counted at all.
+  await patch('/settings/lockout_device', { value: true }, adminT);
+  const stranger = () => post('/auth/login', { email: `nobody.${Date.now()}@example.com`, password: 'x' });
+  await stranger();
+  await stranger();
+  const nearer = await wrong();
+  check('the warning names the device lock when it is nearer',
+    nearer.body.attempts_scope === 'device' && nearer.body.attempts_left === 2, JSON.stringify(nearer.body));
+  await stranger();
+  const paused = await stranger();
+  check('a client with no device id is locked as a device', paused.status === 423 && paused.body.scope === 'device', JSON.stringify(paused.body));
+  // Lift it, or every later sign-in from this suite would be refused.
+  for (const l of (await get('/security/lockouts', adminT)).body.results.filter((r) => r.scope === 'device')) {
+    await call('DELETE', `/security/lockouts/${l.id}`, { token: adminT });
+  }
+  await patch('/settings/lockout_device', { value: false }, adminT);
+  eq('...and once lifted, sign-in works again', (await post('/auth/login', { email, password: passwordFor(email) })).status, 200);
 
   await patch(`/users/${id}`, { is_active: false }, adminT);
 }

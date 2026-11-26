@@ -83,10 +83,10 @@ const eq = (label, a, b) => check(label, a === b, `expected ${JSON.stringify(b)}
 /* ------------------------------------------------------------------ */
 
 const ACCOUNTS = {
-  admin: 'farah.hamid@florascan.test',
-  botanist: 'grace.lim@florascan.test',
-  reviewer: 'aisyah.rahman@florascan.test',
-  ranger: 'ahmad.rosli@florascan.test',
+  admin: 'nengyichieng@gmail.com',
+  botanist: 'drsuehanlee@gmail.com',
+  reviewer: 'drmeilingwong@gmail.com',
+  ranger: 'edmundguoqianyu@gmail.com',
 };
 
 // Seeded accounts use the email's local part + 123 (Server/seed.js).
@@ -1599,7 +1599,7 @@ section('28c. A reviewer corrects a record without returning it (#6)');
     headers: { Authorization: 'Bearer ' + botToken },
   })).json();
   const rev = hist.revisions.find((r) => r.field_name === 'site_name');
-  check('the history records it against the reviewer', rev?.changed_by_name === 'Dr Aisyah Rahman', rev?.changed_by_name);
+  check('the history records it against the reviewer', rev?.changed_by_name === 'Dr Mei Ling Wong', rev?.changed_by_name);
   eq('...with the review reason', rev?.change_reason, 'Corrected at review');
   check('...and the record is still waiting for a decision',
     (await bodyText(page)).includes(plant.plant_code));

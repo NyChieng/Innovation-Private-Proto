@@ -30,8 +30,22 @@ import { plantPhoto, realPhoto } from '../lib/photo.js';
  */
 function describe(err) {
   const b = err.body || {};
+  if (err.status === 423 && b.scope === 'ip') {
+    return t('Too many failed sign-ins from this network. Sign-in from here is paused for {minutes} min.', { minutes: b.minutes ?? 15 });
+  }
+  if (err.status === 423 && b.scope === 'device') {
+    return t('Too many failed sign-ins from this device. Sign-in from it is paused for {minutes} min.', { minutes: b.minutes ?? 15 });
+  }
   if (err.status === 423) {
     return t('Too many wrong passwords. This account is locked for {minutes} min. Try again later, or ask an administrator to unlock it.', { minutes: b.minutes ?? 15 });
+  }
+  // attempts_scope says which lock is nearest - the account, this network or
+  // this device - so the warning names the one that will actually close.
+  if (err.status === 401 && b.attempts_left && b.attempts_scope === 'ip') {
+    return t('Incorrect password. {count} attempts left before sign-in from this network is paused.', { count: b.attempts_left });
+  }
+  if (err.status === 401 && b.attempts_left && b.attempts_scope === 'device') {
+    return t('Incorrect password. {count} attempts left before sign-in from this device is paused.', { count: b.attempts_left });
   }
   if (err.status === 401 && b.attempts_left === 1) {
     return t('Incorrect password. 1 attempt left before the account is locked.');
@@ -206,8 +220,9 @@ export default function Login() {
                     <span className="signin-control">
                       <I.Mail />
                       <input
-                        // "webauthn" lets the browser offer a saved fingerprint / face sign-in here.
-                        ref={emailRef} type="email" inputMode="email" autoComplete="username webauthn"
+                        // No "webauthn" token: Face ID / fingerprint follows the email typed
+                        // here, rather than the browser offering a list of saved passkeys.
+                        ref={emailRef} type="email" inputMode="email" autoComplete="username"
                         value={email} onChange={(e) => setEmail(e.target.value)}
                         placeholder="name@florascan.test" required aria-invalid={!!error}
                       />
@@ -245,6 +260,7 @@ export default function Login() {
               </form>
 
               <PasskeySignIn
+                email={email}
                 onError={setError}
                 onSignedIn={(u) => { toast(t('Signed in as {name}', { name: u.full_name })); land(u); }}
               />

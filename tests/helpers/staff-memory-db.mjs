@@ -14,9 +14,11 @@ const grants = {
   3: ['plant.create', 'qr.print', 'sensor.view'],
   4: ['plant.view_all', 'plant.edit', 'plant.approve', 'plant.history', 'plant.archive'],
 };
+// The super admin holds every permission the other roles do, and more.
+grants[5] = [...new Set([...Object.values(grants).flat(), 'plant.approve', 'qr.manage', 'sensor.manage'])];
 export const permissionsForRole = (id) => grants[id] || [];
 export const userCan = (user, code) => !!user && permissionsForRole(user.role_id).includes(code);
-export const roles = () => Object.keys(grants).map((id) => ({ id: Number(id), name: `role${id}` }));
+export const roles = () => Object.keys(grants).map((id) => ({ id: Number(id), name: Number(id) === 5 ? 'superadmin' : `role${id}` }));
 export const roleById = (id) => roles().find((r) => r.id === Number(id));
 export const getSetting = (key) => ({ require_approval: true, protect_locations: 'off' })[key] ?? null;
 export const setSetting = async () => { throw new Error('Settings writes are outside this fixture'); };
@@ -29,7 +31,7 @@ export const recordRevisions = async () => {};
 
 export function reset(plant = {}) {
   Object.assign(state, {
-    users: [1, 2, 3, 4].map((id) => ({ id, role_id: id, full_name: `Staff ${id}`, is_active: 1 })),
+    users: [1, 2, 3, 4, 5].map((id) => ({ id, role_id: id, full_name: `Staff ${id}`, is_active: 1 })),
     species: [{ id: 1, scientific_name: 'Shorea test' }],
     plants: [{ id: 10, plant_code: 'PLT-2026-0010', registered_by: 3, status: 'pending',
       species_id: 1, site_name: 'Test trail', latitude: 4, longitude: 113,

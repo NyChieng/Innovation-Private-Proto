@@ -33,6 +33,9 @@ function remember(key, entry) {
   challenges.set(key, { ...entry, expires: now + CHALLENGE_MS });
 }
 
+/** The page sat open past CHALLENGE_MS, or the server restarted: fetch a new one. */
+export class ChallengeExpiredError extends Error {}
+
 /** Each challenge answers exactly one attempt, right or wrong. */
 function take(key) {
   const entry = challenges.get(key);
@@ -82,6 +85,23 @@ const toB64 = (bytes) => Buffer.from(bytes).toString('base64url');
 const fromB64 = (s) => new Uint8Array(Buffer.from(String(s), 'base64url'));
 const transportsOf = (row) => (row.transports ? String(row.transports).split(',') : undefined);
 
+/*
+ * Only the device's own Face ID / fingerprint sensor counts. A phone linked by
+ * QR code, or a USB / NFC security key, reports itself as "cross-platform" -
+ * the hints below only steer the browser's prompt, so the answer is checked
+ * here too. A browser that leaves the field out is let through: refusing it
+ * would lock out older phones that do use their own sensor.
+ */
+const EXTERNAL_TRANSPORTS = new Set(['hybrid', 'usb', 'nfc', 'ble', 'smart-card']);
+export class ExternalAuthenticatorError extends Error {}
+function requireBuiltIn(response) {
+  if (response?.authenticatorAttachment === 'cross-platform') throw new ExternalAuthenticatorError('external');
+  const transports = response?.response?.transports || [];
+  if (transports.length && transports.every((tr) => EXTERNAL_TRANSPORTS.has(tr))) {
+    throw new ExternalAuthenticatorError('external');
+  }
+}
+
 /* ------------------------------------------------------------------ */
 /* Adding a passkey to a signed-in account                             */
 /* ------------------------------------------------------------------ */
@@ -116,7 +136,8 @@ export async function registrationOptions(user, existing, rp) {
 /** Returns the row to store, or throws when the response does not check out. */
 export async function verifyRegistration(user, response) {
   const pending = take('reg:' + user.id);
-  if (!pending) throw new Error('expired');
+  if (!pending) throw new ChallengeExpiredError('expired');
+  requireBuiltIn(response);
   const result = await verifyRegistrationResponse({
     response,
     expectedChallenge: pending.challenge,
@@ -139,23 +160,51 @@ export async function verifyRegistration(user, response) {
 /* Signing in                                                          */
 /* ------------------------------------------------------------------ */
 
-/** No email asked: the phone offers whichever FloraScan passkeys it holds. */
-export async function authenticationOptions(rp) {
+/*
+ * Email first: the device is asked only for the passkeys of the account typed
+ * in, so Face ID / the fingerprint goes straight to that account instead of a
+ * list of saved passkeys to choose from.
+ *
+ * An email with no account, or no passkey on this address, gets a made-up
+ * credential instead of an empty list - the same shape of answer either way,
+ * so this cannot be used to find out who works here or who set biometrics up.
+ * The device then simply finds nothing to unlock.
+ */
+const DECOY_SECRET = crypto.randomBytes(32);
+const decoyCredential = (email, rpID) => ({
+  id: crypto.createHmac('sha256', DECOY_SECRET).update(rpID + '\n' + email).digest().subarray(0, 32).toString('base64url'),
+  transports: ['internal'],
+});
+
+/**
+ * `owner` is the user id the typed email belongs to (null when it has no
+ * account); `rows` are that user's passkeys on this address.
+ */
+export async function authenticationOptions(rp, { email, owner, rows }) {
+  const allowCredentials = rows.length
+    ? rows.map((row) => ({ id: row.credential_id, transports: transportsOf(row) }))
+    : [decoyCredential(email, rp.rpID)];
   const options = await generateAuthenticationOptions({
     rpID: rp.rpID,
     userVerification: 'required',
-    allowCredentials: [],
+    allowCredentials,
   });
+  // Ask for this device's own sensor first, not "use a phone" or a security key.
+  options.hints = ['client-device'];
   const flow = crypto.randomBytes(16).toString('hex');
-  remember('auth:' + flow, { challenge: options.challenge, ...rp });
+  // -1 for an email with no account: no passkey row can ever match it.
+  remember('auth:' + flow, { challenge: options.challenge, ...rp, owner: owner ?? -1 });
   return { flow, options };
 }
 
 /** Returns the new signature counter, or throws. */
 export async function verifyAuthentication(flow, response, row) {
   const pending = take('auth:' + flow);
-  if (!pending) throw new Error('expired');
+  if (!pending) throw new ChallengeExpiredError('expired');
+  requireBuiltIn(response);
   if (row.rp_id !== pending.rpID) throw new Error('wrong address');
+  // The passkey must belong to the email that was typed, not just any account.
+  if (Number(row.user_id) !== Number(pending.owner)) throw new Error('wrong account');
   const result = await verifyAuthenticationResponse({
     response,
     expectedChallenge: pending.challenge,

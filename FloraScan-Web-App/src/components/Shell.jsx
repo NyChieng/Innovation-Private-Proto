@@ -18,8 +18,10 @@ const allowed = (can, item) =>
   && (!item.needAny || item.needAny.some((c) => can(c)))
   && (!item.hideIf || !can(item.hideIf));
 
-export function staffNav(can, counts) {
+export function staffNav(can, counts, user) {
   const groups = [];
+  // The audit trail is for administrators by role, not just by permission.
+  const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
 
   const plants = [
     { to: '/staff/plants', label: t('Plant register'), icon: I.Leaf, count: counts?.all, needAny: ['plant.view_all', 'plant.create'] },
@@ -40,9 +42,9 @@ export function staffNav(can, counts) {
   const admin = [
     { to: '/staff/users', label: t('Staff accounts'), icon: I.Users, need: 'user.view' },
     { to: '/staff/activity', label: t('Activity log'), icon: I.Activity, need: 'system.audit' },
-    { to: '/staff/audit', label: t('Audit trail'), icon: I.Shield, need: 'system.audit' },
+    { to: '/staff/audit', label: t('Audit trail'), icon: I.Shield, need: 'system.audit', adminOnly: true },
     { to: '/staff/settings', label: t('System settings'), icon: I.Settings, need: 'system.settings' },
-  ].filter((i) => !i.need || can(i.need));
+  ].filter((i) => (!i.need || can(i.need)) && (!i.adminOnly || isAdmin));
   if (admin.length) groups.push({ title: t('Administration'), items: admin });
 
   return groups;
@@ -218,7 +220,7 @@ function OfflineBanner() {
 export function WebShell({ children, sidebar = false }) {
   const inSpecies = useLocation().pathname.startsWith('/species');
   const { user, can, counts } = useApp();
-  const groups = sidebar ? staffNav(can, counts) : [];
+  const groups = sidebar ? staffNav(can, counts, user) : [];
 
   return (
     <div className="app">

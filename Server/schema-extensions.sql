@@ -21,7 +21,7 @@
 -- 1. Staff job titles
 -- ---------------------------------------------------------------------
 -- Shown beside a name wherever the app credits someone - "verified by
--- Dr Grace Lim, Senior Botanist" reads better than the name alone.
+-- Dr Sue Han Lee, Senior Botanist" reads better than the name alone.
 
 ALTER TABLE users
   ADD COLUMN title VARCHAR(120) NULL AFTER full_name;
@@ -269,7 +269,8 @@ ALTER TABLE sensor_readings
 -- Without this, sign in could be tried as fast as the server answers. After
 -- five wrong passwords in a row the account is locked for fifteen minutes;
 -- a correct sign in resets the count, and an administrator can unlock early.
--- The limits live in Server/api.js (MAX_FAILED_LOGINS, LOCK_MINUTES).
+-- Those are the defaults: administrators can change the limits, and lock the
+-- IP address or device as well as or instead of the account (section 16).
 
 ALTER TABLE users
   ADD COLUMN failed_login_count TINYINT UNSIGNED NOT NULL DEFAULT 0 AFTER last_login_at,
@@ -484,3 +485,81 @@ UPDATE sensor_devices
    SET distance_min = 10, distance_max = 500, sound_min = 0, sound_max = 60
  WHERE distance_min IS NULL AND distance_max IS NULL
    AND sound_min IS NULL AND sound_max IS NULL;
+
+
+-- ---------------------------------------------------------------------
+-- 17. Brute-force lockout: account, IP address and device
+-- ---------------------------------------------------------------------
+-- An administrator chooses what a run of wrong guesses locks - the account,
+-- the IP address it came from, the device (a random id the app keeps in the
+-- browser), or any combination - and how many guesses and for how long.
+-- Administrator accounts are locked like any other; the lock length is capped
+-- at a day so nobody is shut out for long, and another administrator can lift
+-- it early. Server/lockout.js reads these.
+
+INSERT INTO settings (setting_key, setting_value, value_type, description) VALUES
+  ('lockout_account', 'true', 'bool',
+   'Lock an account after too many wrong passwords or codes, whoever is guessing. Administrator accounts included'),
+  ('lockout_ip', 'false', 'bool',
+   'Lock the IP address the wrong guesses come from, for every account it tries'),
+  ('lockout_device', 'false', 'bool',
+   'Lock the device (browser) the wrong guesses come from, for every account it tries'),
+  ('lockout_max_attempts', '5', 'int',
+   'Wrong attempts in a row before a lock (3 to 20)'),
+  ('lockout_minutes', '15', 'int',
+   'How long a lock lasts, in minutes (1 to 1440)')
+ON DUPLICATE KEY UPDATE description = VALUES(description);
+
+-- IP and device counts. The account's own count stays on users. Only a hash
+-- of the IP or device id is the key; label is what administrators see.
+CREATE TABLE login_lockouts (
+  id             INT UNSIGNED     NOT NULL AUTO_INCREMENT,
+  scope          VARCHAR(10)      NOT NULL,          -- 'ip' or 'device'
+  subject_hash   CHAR(64)         NOT NULL,          -- SHA-256 of the IP or device id
+  label          VARCHAR(190)     NULL,              -- the IP, or "Chrome on Android"
+  failed_count   SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+  last_failed_at DATETIME         NULL,
+  locked_until   DATETIME         NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_lockout_subject (scope, subject_hash),
+  KEY idx_lockout_until (locked_until),
+  CONSTRAINT chk_lockout_scope CHECK (scope IN ('ip', 'device'))
+);
+
+
+-- ---------------------------------------------------------------------
+-- 18. Super admin
+-- ---------------------------------------------------------------------
+-- One more role, holding every permission: it can open, check and change
+-- anything, including the audit trail. Ordinary administrators cannot
+-- edit, reset, approve a reset for or deactivate a super admin, so
+-- a breached administrator account cannot lock the super admin out. Only a
+-- super admin - or "npm run superadmin" on the server itself - can give
+-- this role. Any administrator may still unlock one after wrong passwords.
+--
+-- Safe to re-run: the grants are rebuilt from the full permission list, so
+-- a permission added later reaches the super admin on the next db:setup.
+
+INSERT INTO roles (id, name, label, description) VALUES
+  (5, 'superadmin', 'Super Admin',
+   'Holds every permission: can open, check and change anything, including administrator accounts and the audit trail')
+ON DUPLICATE KEY UPDATE label = VALUES(label), description = VALUES(description);
+
+DELETE rp FROM role_permissions rp
+  JOIN roles r ON r.id = rp.role_id
+ WHERE r.name = 'superadmin';
+
+INSERT INTO role_permissions (role_id, permission_id)
+SELECT r.id, p.id FROM roles r JOIN permissions p WHERE r.name = 'superadmin';
+
+
+-- ---------------------------------------------------------------------
+-- 19. Account lockout count runs out like the IP and device counts
+-- ---------------------------------------------------------------------
+-- failed_login_count used to count for ever: a typo a week added up until
+-- the account locked months later. When the last wrong guess is older than
+-- the lock length (lockout_minutes), the next one counts from 1 again -
+-- the same window login_lockouts uses for IP addresses and devices.
+
+ALTER TABLE users
+  ADD COLUMN last_failed_login_at DATETIME NULL AFTER failed_login_count;

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  WebAuthnAbortService, browserSupportsWebAuthn, browserSupportsWebAuthnAutofill,
+  browserSupportsWebAuthn,
   platformAuthenticatorIsAvailable, startAuthentication, startRegistration,
 } from '@simplewebauthn/browser';
 import { api } from '../lib/api.js';
@@ -59,55 +59,50 @@ const markDevice = (on = true) => {
 /* Sign-in button                                                      */
 /* ------------------------------------------------------------------ */
 
-export function PasskeySignIn({ onSignedIn, onError }) {
+const looksLikeEmail = (s) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(s || '').trim());
+
+/**
+ * Email first, then Face ID / fingerprint for that account. The device is
+ * asked only for the passkey of the email typed above - no list of saved
+ * passkeys to pick from, and no suggestion popping out of the email box.
+ *
+ * Options are fetched while the email is typed, not on the tap: iOS only lets
+ * a page ask for Face ID straight out of a tap.
+ */
+export function PasskeySignIn({ email, onSignedIn, onError }) {
   const { applySession } = useApp();
-  const [prepared, setPrepared] = useState(null);
+  const [prepared, setPrepared] = useState(null); // { flow, options, email }
   const [namedUrl, setNamedUrl] = useState(null);
   const [busy, setBusy] = useState(false);
   const [linked, setLinked] = useState(deviceLinked);
+  // The "set up here" flag lives in this browser's storage, which a home-screen
+  // app does not share with the browser and clearing site data wipes - while
+  // the passkey itself is still on the device. Where the device's own sensor is
+  // ready, the button is offered anyway.
+  const [sensor, setSensor] = useState(false);
 
-  const prepare = useCallback(() => {
-    api.passkeyLoginOptions()
-      .then((r) => { setPrepared(r); setNamedUrl(null); })
+  const typed = String(email || '').trim().toLowerCase();
+  const ready = looksLikeEmail(typed);
+
+  useEffect(() => {
+    if (!supported()) return;
+    platformAuthenticatorIsAvailable().then(setSensor).catch(() => setSensor(false));
+  }, []);
+
+  const prepare = useCallback((forEmail) => {
+    api.passkeyLoginOptions(forEmail)
+      .then((r) => { setPrepared({ ...r, email: forEmail }); setNamedUrl(null); })
       .catch((err) => { setPrepared(null); setNamedUrl(err.body?.named_url || null); });
   }, []);
 
-  useEffect(() => { if (supported()) prepare(); }, [prepare]);
-
-  /*
-   * Autofill: tapping the email box offers the saved fingerprint / face
-   * sign-in as a suggestion, so nothing is typed at all. It waits quietly in
-   * the background; the button below cancels it when tapped instead, and
-   * leaving the page cancels it too.
-   */
+  // Follows the email as it is typed (briefly debounced). The server forgets a
+  // challenge after five minutes, so it is also refreshed every four.
   useEffect(() => {
-    if (!supported()) return undefined;
-    let live = true;
-    (async () => {
-      let r;
-      let response;
-      try {
-        if (!(await browserSupportsWebAuthnAutofill())) return;
-        // Refused on an IP address; the notice in place of the button says why.
-        r = await api.passkeyLoginOptions();
-        response = await startAuthentication({ optionsJSON: r.options, useBrowserAutofill: true });
-      } catch {
-        // Cancelled, superseded by the button, or the page was left - all quiet.
-        return;
-      }
-      if (!live) return;
-      try {
-        const u = await applySession(await api.passkeyLogin(r.flow, response));
-        markDevice();
-        onSignedIn(u);
-      } catch (err) {
-        if (live) onError?.(err.message || t('Something went wrong.'));
-      }
-    })();
-    return () => { live = false; WebAuthnAbortService.cancelCeremony(); };
-    // Once per visit to the page; the callbacks are not expected to change meaning.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (!supported() || !ready) { setPrepared(null); return undefined; }
+    const soon = setTimeout(() => prepare(typed), 350);
+    const every = setInterval(() => prepare(typed), 4 * 60 * 1000);
+    return () => { clearTimeout(soon); clearInterval(every); };
+  }, [typed, ready, prepare]);
 
   if (!supported()) return null;
 
@@ -119,32 +114,8 @@ export function PasskeySignIn({ onSignedIn, onError }) {
     );
   }
 
-  const go = async () => {
-    if (!prepared || busy) return;
-    setBusy(true); onError?.(null);
-    try {
-      const response = await startAuthentication({ optionsJSON: prepared.options });
-      const res = await api.passkeyLogin(prepared.flow, response);
-      const u = await applySession(res);
-      markDevice();
-      onSignedIn(u);
-      return;
-    } catch (err) {
-      if (!cancelled(err)) onError?.(err.message || t('Something went wrong.'));
-      // The server no longer knows this device's passkey (turned off, or an
-      // administrator reset): stop offering the button until it is set up again.
-      if (err?.status === 400) { markDevice(false); setLinked(false); }
-    }
-    // Each challenge answers one attempt, so fetch a fresh one for the next tap.
-    prepare();
-    setBusy(false);
-  };
-
-  const wrap = { whiteSpace: 'normal', height: 'auto', minHeight: 48, lineHeight: 1.3 };
-
-  // Not set up on this device yet: each device uses only its own fingerprint
-  // or face, so a button here would only open an empty list.
-  if (!linked) {
+  // Not set up on this device, and no sensor to use: say how to turn it on.
+  if (!linked && !sensor) {
     return (
       <p className="signin-help" style={{ marginTop: 14, paddingTop: 0, borderTop: 0 }}>
         <I.Shield style={{ width: 14, height: 14, verticalAlign: '-2px', display: 'inline-block' }} />{' '}
@@ -153,15 +124,54 @@ export function PasskeySignIn({ onSignedIn, onError }) {
     );
   }
 
+  const current = prepared && prepared.email === typed ? prepared : null;
+
+  const go = async () => {
+    if (!current || busy) return;
+    setBusy(true); onError?.(null);
+    try {
+      const response = await startAuthentication({ optionsJSON: current.options });
+      const res = await api.passkeyLogin(current.flow, response);
+      const u = await applySession(res);
+      markDevice();
+      onSignedIn(u);
+      return;
+    } catch (err) {
+      if (cancelled(err)) {
+        // Closed by the person, or the device holds nothing for this email -
+        // the browser does not say which, so say both, gently.
+        onError?.(t('Face ID / fingerprint was cancelled, or is not set up for this email on this device.'));
+      } else {
+        onError?.(err.message || t('Something went wrong.'));
+      }
+      // Only when the server no longer knows this device's passkey (turned off,
+      // or an administrator reset) is it forgotten here. Any 400 used to do it -
+      // including a challenge that expired while the page sat open.
+      if (err?.body?.code === 'PASSKEY_UNKNOWN') { markDevice(false); setLinked(false); }
+    }
+    // Each challenge answers one attempt, so fetch a fresh one for the next tap.
+    prepare(typed);
+    setBusy(false);
+  };
+
+  const wrap = { whiteSpace: 'normal', height: 'auto', minHeight: 48, lineHeight: 1.3 };
+
   return (
-    // Allowed to wrap: in Malay the label is too long for one line on a small phone.
-    <button
-      type="button" className="btn btn-lg btn-block signin-secondary"
-      style={wrap}
-      onClick={go} disabled={!prepared || busy}
-    >
-      {busy ? <span className="spinner" /> : <I.Shield />} {t('Sign in with Face ID or fingerprint')}
-    </button>
+    <>
+      {/* Allowed to wrap: in Malay the label is too long for one line on a small phone. */}
+      <button
+        type="button" className="btn btn-lg btn-block signin-secondary"
+        style={wrap}
+        onClick={go} disabled={!current || busy}
+      >
+        {busy ? <span className="spinner" /> : <I.Shield />} {t('Sign in with Face ID or fingerprint')}
+      </button>
+      {!ready && (
+        <p className="signin-help" style={{ marginTop: 8, paddingTop: 0, borderTop: 0 }}>
+          {t('Enter your email address first, then use Face ID or your fingerprint.')}
+        </p>
+      )}
+    </>
   );
 }
 

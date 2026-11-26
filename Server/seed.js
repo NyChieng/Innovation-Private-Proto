@@ -48,6 +48,7 @@ export function seed() {
     { id: 2, name: 'ranger', label: 'Ranger', description: 'Sets up the IoT sensors and responds to their alerts in the field. Does not register or edit plant records' },
     { id: 3, name: 'botanist', label: 'Botanist / Officer', description: 'Registers plants in the field and corrects their own returned records; looks after the species list, QR tags and visitor reports' },
     { id: 4, name: 'senior_botanist', label: 'Senior Botanist', description: 'Reviews every plant a botanist registers: corrects it, approves it for publication or returns it with a note; archives and restores records' },
+    { id: 5, name: 'superadmin', label: 'Super Admin', description: 'Holds every permission: can open, check and change anything, including administrator accounts and the audit trail' },
   ];
   roles.forEach((r) => db.roles.push({ ...r, created_at: nowIso() }));
 
@@ -96,6 +97,9 @@ export function seed() {
   grant(3, ['plant.create', 'species.manage', 'qr.print', 'qr.manage',
     'report.view', 'report.resolve', 'sensor.view']);
   grant(4, ['plant.view_all', 'plant.edit', 'plant.approve', 'plant.history', 'plant.archive']);
+  // The super admin holds every permission there is - section 18 of
+  // Server/schema-extensions.sql does the same for MySQL.
+  grant(5, PERMS.map(([code]) => code));
 
   /* ---------------------------------------------------------------- */
   /* Conservation statuses                                             */
@@ -112,17 +116,18 @@ export function seed() {
   /* Each account has its own password: the email's local part + 123. */
   /* ---------------------------------------------------------------- */
   const USERS = [
-    { role: 1, full_name: 'Farah Hamid', email: 'farah.hamid@florascan.test', password: 'farah.hamid123', title: 'System Administrator' },
-    { role: 3, full_name: 'Dr Grace Lim', email: 'grace.lim@florascan.test', password: 'grace.lim123', title: 'Field Botanist' },
-    { role: 3, full_name: 'Daniel Jugah', email: 'daniel.jugah@florascan.test', password: 'daniel.jugah123', title: 'Botanist' },
-    { role: 2, full_name: 'Ahmad Rosli', email: 'ahmad.rosli@florascan.test', password: 'ahmad.rosli123', title: 'Park Ranger' },
-    { role: 2, full_name: 'Nurul Aini', email: 'nurul.aini@florascan.test', password: 'nurul.aini123', title: 'Park Ranger' },
-    { role: 2, full_name: 'Jonathan Ngau', email: 'jonathan.ngau@florascan.test', password: 'jonathan.ngau123', title: 'Field Ranger' },
-    { role: 2, full_name: 'Mary Liew', email: 'mary.liew@florascan.test', password: 'mary.liew123', title: 'Field Ranger' },
-    { role: 1, full_name: 'Kevin Tan', email: 'kevin.tan@florascan.test', password: 'kevin.tan123', title: 'Administrator' },
+    { role: 1, full_name: 'Neng Yi Chieng', email: 'nengyichieng@gmail.com', password: 'nengyichieng123', title: 'System Administrator' },
+    { role: 3, full_name: 'Dr Sue Han Lee', email: 'drsuehanlee@gmail.com', password: 'drsuehanlee123', title: 'Field Botanist' },
+    { role: 3, full_name: 'Hans Jia Syn Yee', email: 'hansjiasynyee@gmail.com', password: 'hansjiasynyee123', title: 'Botanist' },
+    { role: 2, full_name: 'Edmund Guo Qian Yu', email: 'edmundguoqianyu@gmail.com', password: 'edmundguoqianyu123', title: 'Park Ranger' },
+    { role: 2, full_name: 'Lim Yon', email: 'limyon@gmail.com', password: 'limyon123', title: 'Park Ranger' },
+    { role: 2, full_name: 'Edward Ngie Jie Ling', email: 'edwardngiejieling@gmail.com', password: 'edwardngiejieling123', title: 'Field Ranger' },
+    { role: 2, full_name: 'Darren Chong Yue Yang', email: 'darrenyueyangchong@gmail.com', password: 'darrenyueyangchong123', title: 'Field Ranger' },
+    { role: 1, full_name: 'Jiaqi Hu', email: 'jiaqihu@gmail.com', password: 'jiaqihu123', title: 'Administrator' },
     // Appended rather than inserted, so the indexes used further down for the
     // audit history still point at the same people.
-    { role: 4, full_name: 'Dr Aisyah Rahman', email: 'aisyah.rahman@florascan.test', password: 'aisyah.rahman123', title: 'Senior Botanist' },
+    { role: 4, full_name: 'Dr Mei Ling Wong', email: 'drmeilingwong@gmail.com', password: 'drmeilingwong123', title: 'Senior Botanist' },
+    { role: 5, full_name: 'Super Admin', email: 'superadmin@gmail.com', password: 'superadmin123', title: 'Super Administrator' },
   ];
 
   USERS.forEach((u, i) => insert('users', {
@@ -464,6 +469,12 @@ export function seed() {
     ['allowed_image_types', '["image/jpeg","image/png","image/webp"]', 'json', 'Accepted MIME types'],
     ['sensor_offline_minutes', '15', 'int', 'A sensor with no reading for this many minutes is shown as Offline'],
     ['protect_locations', 'CR', 'string', 'Withhold exact locations from the public for species at this IUCN category or worse. One of: off, VU, EN, CR. Staff always see the real location'],
+    // Brute-force lockout (schema-extensions.sql section 17, Server/lockout.js).
+    ['lockout_account', 'true', 'bool', 'Lock an account after too many wrong passwords or codes, whoever is guessing. Administrator accounts included'],
+    ['lockout_ip', 'false', 'bool', 'Lock the IP address the wrong guesses come from, for every account it tries'],
+    ['lockout_device', 'false', 'bool', 'Lock the device (browser) the wrong guesses come from, for every account it tries'],
+    ['lockout_max_attempts', '5', 'int', 'Wrong attempts in a row before a lock (3 to 20)'],
+    ['lockout_minutes', '15', 'int', 'How long a lock lasts, in minutes (1 to 1440)'],
   ].forEach(([setting_key, setting_value, value_type, description]) =>
     insert('settings', { setting_key, setting_value, value_type, description, updated_by: null, updated_at: nowIso() }));
 
