@@ -238,7 +238,9 @@ starts it together with the FloraScan server. It opens **http://127.0.0.1:7860**
 1. Pick **Webcam** (index 0 is usually the built-in camera) or **Video file**. There are two test
    videos in `data/test_videos/`.
 2. Once per camera: open **Plant zone**, click **Grab frame**, click 6-10 points around the plant, then
-   **Save zone**.
+   **Save zone**. The tab shows the saved zone. **Clear points** starts the drawing again;
+   **Clear saved zone** removes the saved zone in one click (a running Live view then protects every
+   detected plant, and the next Start asks for a new zone).
 3. Open **Live** and click **Start**. Warnings and alerts appear on the right, with snapshots.
 
 Settings you can change in the app:
@@ -246,7 +248,7 @@ Settings you can change in the app:
 | Section | What it changes |
 | --- | --- |
 | **Thresholds** | How confident the detector must be, how long before WARNING, how many touch frames before ALERT, and the after-hours alert |
-| **Performance** | Backend (`openvino` = CPU only, `cuda` = NVIDIA GPU), number of CPU threads, and a frame rate cap |
+| **Performance** | Backend (`openvino` = CPU only, `cuda` = NVIDIA GPU), number of CPU threads, and a frame rate cap. A line under it says which backends this computer has, and why `cuda` is missing if it is |
 | **Record touch-model training data** | Saves hand crops to `data/touch_user/` while you demo, to retrain the touch model for your own camera |
 
 The plant zone and settings you save are stored in `app/config.json` (not committed, since every
@@ -286,6 +288,7 @@ logged. See `app/notifier.py` and `docs/demo-branch.md`.
 | --- | --- |
 | `No exported models: run python scripts/export_models.py` | The model files are missing or are still LFS pointers. Run `git lfs pull`. |
 | `no inference backend: pip install openvino` | Run `pip install -r requirements.txt`. |
+| `cuda` is not in the Backend list on a computer with an NVIDIA GPU | `requirements.txt` is CPU only. Install the CUDA build of PyTorch, then the training packages: `pip install torch torchvision --index-url https://download.pytorch.org/whl/cu130` and `pip install -r requirements-train.txt`. The Performance section and the console line `[backend]` say what is missing. |
 | `Could not open the video source` | Wrong webcam index, or another app is using the camera. Try index 1. |
 | Very low frame rate | Lower **CPU threads** or **Max processed FPS**, or export a smaller detector (see below). |
 
