@@ -48,6 +48,12 @@ certificate instructions.
 `npm run db:setup -- --reset` only to erase and rebuild a disposable local
 database. Keep `.env` and certificate keys out of Git.
 
+**Everyone starts from the same data.** Every copy of the database is built
+from one seed (`Server/seed.js`): the same plants, species, sensor, camera and
+staff accounts. A database set up before 27 November 2026 still has the old
+`@florascan.test` logins. Run `npm run db:setup -- --reset` once to rebuild it
+with the accounts below; this erases anything added to it by hand.
+
 ## Demo walkthrough
 
 ```mermaid
@@ -71,6 +77,11 @@ is the part of the email before `@`, followed by `123`.
 | Administrator | `nengyichieng@gmail.com` | Manage staff and audit logs |
 | Super Admin | `superadmin@gmail.com` | Open everything, including administrator accounts |
 
+The other seeded staff are `hansjiasynyee@gmail.com` (botanist),
+`limyon@gmail.com`, `edwardngiejieling@gmail.com` and
+`darrenyueyangchong@gmail.com` (rangers), and `jiaqihu@gmail.com`
+(administrator).
+
 Only a super admin can reset, change or deactivate a super admin, or give
 someone the role, so a breached administrator cannot lock it out. Any
 administrator can still unlock one after too many wrong passwords. To
@@ -82,14 +93,35 @@ The demo uses real species and credited reference photos with fictional
 individual plant records. The API withholds sensitive locations from visitors
 according to the configured conservation threshold.
 
+Email goes out only when `SMTP_USER` and `SMTP_PASS` are set in `.env`;
+otherwise reset codes and alert emails are printed in the server terminal.
+Leave SMTP empty for demos unless every seeded address belongs to the team, or
+camera alerts and reset codes will be emailed to those inboxes.
+
+## Staff account security
+
+- Two-step verification with an authenticator app, passkeys (fingerprint or
+  face), recovery codes and a recovery email. A forgotten password needs an
+  administrator's approval to reset.
+- In **System settings** an administrator chooses what too many wrong
+  passwords or codes lock (the account, the IP address, the device, or any
+  combination), after how many attempts (3 to 20) and for how long (1 to 1440
+  minutes). The default locks the account for 15 minutes after 5 attempts.
+- The audit trail is for administrators only, and can restore a plant,
+  species, staff account or setting to how it was before a change.
+
 ## AI Vision and IoT
 
 - **FloraGuard** accepts a webcam or a recorded video. Draw and save a plant
   zone once before starting the **Live** view. It finds the FloraScan server
   on the same computer by itself and sends every ALERT, with its snapshot, to
-  the rangers in `/staff/iot`, so a demo needs no set-up. `npm run demo`
-  starts the server and FloraGuard together; `npm run ai` starts FloraGuard
-  alone. [AI Vision setup and model tests](ai-vision-node/README.md)
+  the rangers in `/staff/iot`, so a demo needs no set-up. An ALERT needs a
+  hand touching the plant in 3 of the last 6 frames, backed by moving leaves
+  or green in the hand crop. `npm run demo` starts the server and FloraGuard
+  together; `npm run ai` starts FloraGuard alone. It runs on the CPU with
+  OpenVINO, and on an NVIDIA GPU once the CUDA build of PyTorch and
+  `requirements-train.txt` are installed.
+  [AI Vision setup and model tests](ai-vision-node/README.md)
 - **ESP32** publishes readings to the MQTT broker. Run the simulated sensor
   suite for a software-only demo, or follow the hardware guide to wire and
   flash the board. [ESP32 setup and wiring](iot-kit/README.md)
@@ -117,8 +149,15 @@ npm run test:iot
 ```
 
 `npm test` covers security, staff workflow, search, translations, API,
-browser and passkey checks. To run a production build, use `npm run build`
-followed by `npm run preview`.
+browser and passkey checks. FloraGuard's tests need no server: from
+`ai-vision-node/`, run `python -I scripts/test_pipeline.py` and
+`python -I scripts/test_notifier.py`. To run a production build, use
+`npm run build` followed by `npm run preview`.
+
+GitHub Actions runs every suite on each push to any branch and on pull
+requests into `main` and `demo`, one run per branch at a time. Three passkey
+checks fail now and then (the set-up screen carries on without saving when its
+request fails); re-run the job if those are the only failures.
 
 - [Demo branch and full test guide](docs/demo-branch.md)
 - [GitHub Actions workflow](.github/workflows/ci.yml)
@@ -135,4 +174,6 @@ followed by `npm run preview`.
 | `scripts/` and `tests/` | Database setup, imports and automated tests |
 
 Use `demo` for demo integration and `main` as the mainline. Branch from the
-intended target and include relevant test results in the pull request.
+intended target and include relevant test results in the pull request. `main`
+keeps a linear history, so pull requests into it are squashed or rebased, not
+merged with a merge commit.
